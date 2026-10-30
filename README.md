@@ -1,36 +1,29 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Alnyron
 
-## Getting Started
+Website for Alnyron: Next.js 15 (App Router), React 19, Tailwind CSS v4 and TypeScript, deployed to Cloudflare Workers through OpenNext.
 
-First, run the development server:
+## Getting started
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Install dependencies: `npm install`
+2. Copy `.env.example` to `.env.local` and fill in the values. `src/config/env.ts` is the environment contract.
+3. Start the dev server: `npm run dev`, then open [http://localhost:3000](http://localhost:3000).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Script | What it does |
+|---|---|
+| `npm run dev` | Next.js dev server |
+| `npm run build` | Production build (`next build`) |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Unit tests (Vitest) |
+| `npm run test:integration` | Integration tests (Vitest) |
+| `npm run test:e2e` | End-to-end tests (Playwright) |
+| `npm run cf:build` | OpenNext build for Cloudflare Workers |
+| `npm run preview` | OpenNext build + local Workers preview |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Design system
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Tokens (colour, type, spacing, radius, shadow, motion) live in `src/styles/globals.css` as a Tailwind `@theme` and mirror the project's DESIGN.md, which is the source of truth.
+- Font: Inter, self-hosted at build time by `next/font` (`src/app/layout.tsx`).
+- UI primitives are in `src/components/ui/`, the logo in `src/components/brand/`.

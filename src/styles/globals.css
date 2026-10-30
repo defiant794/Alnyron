@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/*
+ * Alnyron design tokens. DESIGN.md is the single source of truth: every value
+ * below mirrors it, and a change here must be made there first.
+ *
+ * Tailwind v4 turns each namespace into utilities:
+ *   --color-*     bg-accent, text-fg, border-border, ...
+ *   --text-*      text-body, text-h1, ... (font-size + --line-height companion)
+ *   --radius-*    rounded-card, rounded-btn, rounded-input, rounded-pill
+ *   --spacing-*   p-4, gap-6, py-control-y, px-btn-x, ...
+ *   --shadow-*    shadow-card
+ *   --container-* max-w-content
+ *   --tracking-*  tracking-wordmark
+ *   --ease-*      ease-out
+ * Durations have no Tailwind namespace; they feed the default transition
+ * timing below and are used directly as duration-(--duration-base).
+ */
+@theme {
+  /* Color (light only; a dark theme is deferred per DESIGN.md) */
+  --color-bg: #ffffff;
+  --color-surface: #f6f8fb;
+  --color-fg: #0b1d33;
+  --color-muted: #5a6778;
+  --color-border: #e5e9f0;
+  /* Form-control edge: 3.64:1 on bg, 3.42:1 on surface (WCAG 1.4.11 >= 3:1). */
+  --color-border-input: #7c8797;
+  --color-accent: #3346e8;
+  --color-accent-hover: #2a39c7;
+  --color-accent-ink: #ffffff;
+  --color-focus: #2563eb;
+  --color-success: #167c53;
+  --color-error: #c02626;
+  --color-brand-navy: #141b2e;
+
+  /* Typography. --font-inter is set by next/font on <html> (src/app/layout.tsx). */
+  --font-sans: var(--font-inter), "Segoe UI", system-ui, sans-serif;
+
+  --text-display: 48px;
+  --text-display--line-height: 56px;
+  --text-h1: 36px;
+  --text-h1--line-height: 44px;
+  --text-h2: 28px;
+  --text-h2--line-height: 36px;
+  --text-h3: 20px;
+  --text-h3--line-height: 28px;
+  --text-body: 16px;
+  --text-body--line-height: 26px;
+  --text-small: 14px;
+  --text-small--line-height: 22px;
+
+  --tracking-wordmark: 0.28em;
+
+  /* Layout */
+  --container-content: 1120px;
+
+  /*
+   * Spacing scale 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 · 96 on a 4px base unit,
+   * so p-4 = 16px. Padding, margin and gap stay on these steps; the bare base
+   * unit remains for sizing (min-h-11 = 44px touch target, size-4 spinner).
+   */
+  --spacing: 4px;
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+  --spacing-24: 96px;
+
+  /*
+   * Control padding, the only off-scale spacing (DESIGN.md): 26px body line +
+   * 2 x 10px padding + 2 x 1px border = 48px buttons and inputs.
+   */
+  --spacing-control-y: 10px;
+  --spacing-btn-x: 20px;
+  --spacing-pill-y: 2px;
+  --spacing-pill-x: 10px;
+
+  /* Radius and shadow */
+  --radius-card: 14px;
+  --radius-btn: 10px;
+  --radius-input: 10px;
+  --radius-pill: 999px;
+  --shadow-card: 0 1px 2px rgb(11 29 51 / 0.04), 0 8px 24px rgb(11 29 51 / 0.06);
+
+  /* Motion: 150-200ms ease-out on hover/focus */
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-out);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* One focus ring for every focusable element: 2px, offset 2px (DESIGN.md). */
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  /*
+   * Honour reduced motion everywhere. Declared inside the base layer so its
+   * !important wins over any later layer, including important utilities.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

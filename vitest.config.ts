@@ -9,6 +9,11 @@ export default defineConfig({
     projects: [
       {
         plugins: [react(), tsconfigPaths()],
+        // css.postcss inline object: passing an object bypasses the
+        // postcss.config.mjs file lookup entirely (Vite only skips it when an
+        // inline object is given).  Empty plugins[] = no PostCSS transforms,
+        // so Tailwind v4's @import "tailwindcss" does not crash unit tests.
+        css: { postcss: { plugins: [] } },
         test: {
           name: "unit",
           environment: "node",
