@@ -1,0 +1,18 @@
+{
+  // Cloudflare Workers config (OpenNext). ISR cache = KV (no payment card).
+  // NOTE: the OpenNext bindings for the build (open-next.config.ts override,
+  // DOQueue, D1 tag cache, rate-limit binding) and the real KV namespace id are
+  // added in the cf:build spike (architecture.md S-2/S-3) on WSL/CI. This file
+  // already satisfies the F0.1 wrangler contract (AC-16..AC-19).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "alnyron-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-23",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "observability": { "enabled": true },
+  "kv_namespaces": [
+    { "binding": "NEXT_INC_CACHE_KV", "id": "PLACEHOLDER_SET_AT_DEPLOY" }
+  ],
+  "vars": { "MAIL_FROM": "Alnyron <noreply@send.alnyron.dk>" }
+}
