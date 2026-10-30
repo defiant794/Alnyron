@@ -18,6 +18,11 @@ export default defineConfig({
           name: "unit",
           environment: "node",
           include: ["tests/unit/**/*.test.{ts,tsx}"],
+          // next-intl's ESM imports `next/navigation` without an extension,
+          // which native Node cannot resolve (next has no exports map). Run it
+          // through Vite instead; this also lets vi.mock("next/navigation")
+          // reach next-intl's own router hooks.
+          server: { deps: { inline: ["next-intl"] } },
         },
       },
       {

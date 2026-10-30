@@ -1,0 +1,24 @@
+{
+  "Metadata": {
+    "siteName": "Alnyron",
+    "description": "Moderne apps, hjemmesider og digitale ydelser."
+  },
+  "SkipLink": {
+    "label": "Spring til indhold"
+  },
+  "Nav": {
+    "home": "Forside",
+    "contact": "Kontakt",
+    "privacy": "Privatliv"
+  },
+  "LanguageSwitcher": {
+    "label": "Sprog",
+    "da": "Dansk",
+    "en": "English"
+  },
+  "NotFound": {
+    "title": "Siden findes ikke",
+    "body": "Siden er flyttet eller findes ikke længere.",
+    "home": "Gå til forsiden"
+  }
+}

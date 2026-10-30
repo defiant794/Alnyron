@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// Points next-intl's server APIs at the per-request config (locale + messages).
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 // Security headers. CSP uses 'unsafe-inline' for scripts/styles because a nonce
 // CSP forces dynamic rendering and would break ISR (architecture.md §1).
@@ -53,4 +57,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

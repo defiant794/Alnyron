@@ -1,0 +1,22 @@
+{
+  "Metadata": {
+    "siteName": "Alnyron",
+    "description": "Modern apps, websites and digital services."
+  },
+  "SkipLink": {
+    "label": "Skip to content"
+  },
+  "Nav": {
+    "home": "Home",
+    "contact": "Contact",
+    "privacy": "Privacy"
+  },
+  "LanguageSwitcher": {
+    "label": "Language"
+  },
+  "NotFound": {
+    "title": "Page not found",
+    "body": "The page has moved or no longer exists.",
+    "home": "Go to the home page"
+  }
+}

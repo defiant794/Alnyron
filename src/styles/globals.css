@@ -33,7 +33,7 @@
   --color-error: #c02626;
   --color-brand-navy: #141b2e;
 
-  /* Typography. --font-inter is set by next/font on <html> (src/app/layout.tsx). */
+  /* Typography. --font-inter is set by next/font on <html> (src/styles/fonts.ts). */
   --font-sans: var(--font-inter), "Segoe UI", system-ui, sans-serif;
 
   --text-display: 48px;
