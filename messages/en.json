@@ -7,12 +7,19 @@
     "label": "Skip to content"
   },
   "Nav": {
+    "label": "Main navigation",
+    "menu": "Menu",
     "home": "Home",
     "contact": "Contact",
     "privacy": "Privacy"
   },
   "LanguageSwitcher": {
     "label": "Language"
+  },
+  "Home": {
+    "contactCta": "Get in touch",
+    "servicesCta": "See services",
+    "ctaBandButton": "Contact us"
   },
   "NotFound": {
     "title": "Page not found",

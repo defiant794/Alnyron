@@ -1,11 +1,9 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import { useLocale, type Locale } from "next-intl";
-import { getPathname, usePathname } from "@/i18n/navigation";
+import { useCurrentRoute } from "@/i18n/current-route";
+import { getPathname } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
-
-type Href = Parameters<typeof getPathname>[0]["href"];
 
 export type LanguageSwitcherProps = {
   /** Accessible name of the switcher landmark ("Sprog" / "Language"). */
@@ -22,9 +20,7 @@ export type LanguageSwitcherProps = {
  */
 export default function LanguageSwitcher({ label, localeNames }: LanguageSwitcherProps) {
   const currentLocale = useLocale();
-  // Internal pathname template (`/contact`, `/[slug]`) plus the route params
-  // that fill it; both always describe the current route, so they match.
-  const href = { pathname: usePathname(), params: useParams() } as Href;
+  const href = useCurrentRoute();
 
   return (
     <nav aria-label={label}>

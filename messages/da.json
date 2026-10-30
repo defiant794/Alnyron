@@ -7,6 +7,8 @@
     "label": "Spring til indhold"
   },
   "Nav": {
+    "label": "Hovednavigation",
+    "menu": "Menu",
     "home": "Forside",
     "contact": "Kontakt",
     "privacy": "Privatliv"
@@ -15,6 +17,11 @@
     "label": "Sprog",
     "da": "Dansk",
     "en": "English"
+  },
+  "Home": {
+    "contactCta": "Kom i kontakt",
+    "servicesCta": "Se ydelser",
+    "ctaBandButton": "Kontakt os"
   },
   "NotFound": {
     "title": "Siden findes ikke",

@@ -20,6 +20,7 @@
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "next": "^15.5.28",
     "next-intl": "^4.14.9",
     "react": "19.1.0",

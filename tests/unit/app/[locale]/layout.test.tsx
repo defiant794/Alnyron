@@ -30,16 +30,23 @@ vi.mock("next-intl", async (importOriginal) => ({
     children,
 }));
 
-// ── Mock LanguageSwitcher ────────────────────────────────────────────────────
-// Client island that reads the Next router (pathname/params), which does not
-// exist outside Next. Covered on its own by
-// tests/unit/components/site/LanguageSwitcher.test.tsx and, in a real
-// browser, by tests/e2e/i18n-routing.spec.ts.
-vi.mock("@/components/site/LanguageSwitcher", () => ({ default: () => null }));
+// ── Mock SiteHeader / SiteFooter ─────────────────────────────────────────────
+// Async server components that read the DB through the public Supabase client
+// (renderToStaticMarkup cannot render them). Stand-ins mark their slots so the
+// frame order is still asserted here. Their data comes from the content
+// services (tests/unit/services/content/*), their client islands have their
+// own tests (SiteMenu, NavLink, LanguageSwitcher in tests/unit/components/site/),
+// and the rendered header and footer are covered by tests/e2e/home-page.spec.ts.
+vi.mock("@/components/site/SiteHeader", () => ({
+  default: ({ locale }: { locale: string }) => <header data-testid="site-header" data-locale={locale} />,
+}));
+vi.mock("@/components/site/SiteFooter", () => ({
+  default: ({ locale }: { locale: string }) => <footer data-testid="site-footer" data-locale={locale} />,
+}));
 
 import { Inter } from "next/font/google";
 import { setRequestLocale } from "next-intl/server";
-import LocaleLayout from "@/app/[locale]/layout";
+import LocaleLayout, { dynamic, revalidate } from "@/app/[locale]/layout";
 
 // Capture Inter call args before clearMocks can wipe them.
 const interCallOptions: Record<string, unknown> =
@@ -166,12 +173,38 @@ describe("AC-DS-10: SkipLink is present and correctly configured in locale layou
   });
 });
 
+// ── F0.5 home-page: header and footer frame every page ───────────────────────
+
+describe("AC-HOME-04/09: [locale]/layout frames the page with SiteHeader and SiteFooter", () => {
+  it("renders SiteHeader before #main and SiteFooter after it, both for the route locale", () => {
+    const header = docDa.querySelector('[data-testid="site-header"]');
+    const main = docDa.getElementById("main");
+    const footer = docDa.querySelector('[data-testid="site-footer"]');
+    expect(header?.getAttribute("data-locale")).toBe("da");
+    expect(footer?.getAttribute("data-locale")).toBe("da");
+    expect(header!.compareDocumentPosition(main!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(main!.compareDocumentPosition(footer!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("passes the EN locale to SiteHeader and SiteFooter on /en", () => {
+    expect(docEn.querySelector('[data-testid="site-header"]')?.getAttribute("data-locale")).toBe("en");
+    expect(docEn.querySelector('[data-testid="site-footer"]')?.getAttribute("data-locale")).toBe("en");
+  });
+
+  it("exports revalidate = 3600 (DB-driven nav and footer refresh hourly)", () => {
+    expect(revalidate).toBe(3600);
+  });
+
+  it('exports dynamic = "error" (a request-time API fails the build instead of making a route dynamic, AC-HOME-12)', () => {
+    expect(dynamic).toBe("error");
+  });
+});
+
 // ── generateStaticParams produces both locales ────────────────────────────────
 
 describe("AC-I18N-01/04: generateStaticParams returns da and en", () => {
   it("exports generateStaticParams that includes both locales", async () => {
     // Static import resolves the named export on the same module.
-    // If the module does not exist, this test fails at collection (Red).
     const mod = await import("@/app/[locale]/layout");
     expect(typeof mod.generateStaticParams).toBe("function");
     const params = await (mod.generateStaticParams as () => Promise<{ locale: string }[]>)();

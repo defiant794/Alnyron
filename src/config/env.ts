@@ -20,7 +20,15 @@ const serverSchema = z.object({
   MAIL_FROM: z.string().min(1),
 });
 
+// The Supabase subset of the public contract, for code that needs only the
+// database (the public client), not the site URL.
+const supabasePublicSchema = publicSchema.pick({
+  NEXT_PUBLIC_SUPABASE_URL: true,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: true,
+});
+
 export type PublicEnv = z.infer<typeof publicSchema>;
+export type SupabasePublicEnv = z.infer<typeof supabasePublicSchema>;
 export type ServerEnv = z.infer<typeof serverSchema>;
 
 function parseWith<T>(
@@ -49,6 +57,16 @@ export function parsePublicEnv(
   },
 ): PublicEnv {
   return parseWith(publicSchema, source, "public");
+}
+
+/** Supabase URL + publishable key only; same literal-reference rule as above. */
+export function parseSupabasePublicEnv(
+  source: Record<string, string | undefined> = {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  },
+): SupabasePublicEnv {
+  return parseWith(supabasePublicSchema, source, "Supabase public");
 }
 
 export function parseServerEnv(

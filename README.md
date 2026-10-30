@@ -18,7 +18,7 @@ Website for Alnyron: Next.js 15 (App Router), React 19, Tailwind CSS v4 and Type
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Unit tests (Vitest) |
 | `npm run test:integration` | Integration tests (Vitest) against the Supabase project, each in a rolled-back transaction; needs `SUPABASE_DB_PASSWORD` (environment or `.env.local`), TLS verified against `supabase/prod-ca-2021.crt` |
-| `npm run test:e2e` | End-to-end tests (Playwright) |
+| `npm run test:e2e` | End-to-end tests (Playwright) against a running `npm run dev`. The home-page category scenarios add and remove marked `e2e-home-*` items in the Supabase project (committed rows, cleaned up before and after; needs `SUPABASE_DB_PASSWORD`), so never run them at the same time as `npm run test:integration` or while a production site is served from the same project |
 | `npm run cf:build` | OpenNext build for Cloudflare Workers |
 | `npm run preview` | OpenNext build + local Workers preview |
 

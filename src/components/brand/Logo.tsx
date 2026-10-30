@@ -10,13 +10,15 @@ export type LogoProps = {
   wordmark?: boolean;
   /** Wrap the logo in a link to the home page. */
   asLink?: boolean;
+  /** Home URL of the page's locale (`/` or `/en`) used by `asLink`. Defaults to `/`. */
+  href?: string;
   /** Preload the mark, for the above-the-fold header instance. */
   priority?: boolean;
   className?: string;
 };
 
 /**
- * Alnyron logo: the A-mark, optionally with the wordmark, optionally linked to "/".
+ * Alnyron logo: the A-mark, optionally with the wordmark, optionally linked to the home page.
  * Either way it is announced once as "Alnyron": the mark alone carries the alt
  * text; with the wordmark the lockup is one labelled image and the mark itself
  * is decorative.
@@ -24,6 +26,7 @@ export type LogoProps = {
 export default function Logo({
   wordmark = false,
   asLink = false,
+  href = "/",
   priority,
   className,
 }: LogoProps) {
@@ -34,14 +37,15 @@ export default function Logo({
       height={MARK.height}
       alt={wordmark ? "" : "Alnyron"}
       priority={priority}
-      className="h-auto w-15 shrink-0"
+      className="h-auto w-12 shrink-0 sm:w-15"
     />
   );
 
+  // Compact below 640px so the header (logo + menu toggle) fits a 320px viewport.
   const logo = wordmark ? (
     <span role="img" aria-label="Alnyron" className="inline-flex items-center gap-3">
       {mark}
-      <span className="text-h3 font-semibold tracking-wordmark text-brand-navy">ALNYRON</span>
+      <span className="text-body font-semibold tracking-wordmark text-brand-navy sm:text-h3">ALNYRON</span>
     </span>
   ) : (
     mark
@@ -49,7 +53,7 @@ export default function Logo({
 
   if (asLink) {
     return (
-      <NextLink href="/" className={cx("inline-flex items-center rounded-btn", className)}>
+      <NextLink href={href} className={cx("inline-flex items-center rounded-btn", className)}>
         {logo}
       </NextLink>
     );

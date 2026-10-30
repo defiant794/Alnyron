@@ -2,11 +2,28 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import LanguageSwitcher from "@/components/site/LanguageSwitcher";
+import SiteFooter from "@/components/site/SiteFooter";
+import SiteHeader from "@/components/site/SiteHeader";
 import SkipLink from "@/components/ui/SkipLink";
 import { routing } from "@/i18n/routing";
 import { inter } from "@/styles/fonts";
 import "@/styles/globals.css";
+
+/**
+ * Header nav and footer come from the DB, so every public page under this
+ * layout refreshes at least hourly; publishing revalidates on demand.
+ */
+export const revalidate = 3600;
+
+/**
+ * Every public page is prerendered and served from the ISR cache (AC-HOME-12):
+ * a request-time API (`headers()`, `cookies()`, `searchParams`, ...) anywhere
+ * under this layout fails `next build` instead of silently turning the route
+ * into a per-request render. A child segment's own `dynamic` or `revalidate`
+ * export can still override this, so the build's route table (●, not ƒ) is
+ * the proof.
+ */
+export const dynamic = "error";
 
 type LocaleLayoutProps = Readonly<{
   children: React.ReactNode;
@@ -33,7 +50,8 @@ export async function generateMetadata({
 
 /**
  * Document root for the public site: `<html lang>` follows the route locale,
- * Inter is applied, and the skip link is the first focusable element.
+ * Inter is applied, the skip link is the first focusable element, and the
+ * DB-driven header and footer frame every page.
  */
 export default async function LocaleLayout({ children, params }: LocaleLayoutProps) {
   const { locale } = await params;
@@ -41,23 +59,17 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
 
   // Static rendering: hand the locale to next-intl before any translation call.
   setRequestLocale(locale);
-  const t = await getTranslations({ locale });
+  const t = await getTranslations({ locale, namespace: "SkipLink" });
 
   return (
     <html lang={locale} className={inter.variable}>
-      <body>
-        <SkipLink label={t("SkipLink.label")} />
+      <body className="flex min-h-dvh flex-col">
+        <SkipLink label={t("label")} />
         {/* Client islands only need the locale; messages stay on the server. */}
         <NextIntlClientProvider messages={null}>
-          <header className="border-b border-border">
-            <div className="mx-auto flex max-w-content justify-end px-6 py-3">
-              <LanguageSwitcher
-                label={t("LanguageSwitcher.label")}
-                localeNames={{ da: t("LanguageSwitcher.da"), en: t("LanguageSwitcher.en") }}
-              />
-            </div>
-          </header>
-          {children}
+          <SiteHeader locale={locale} />
+          <div className="flex flex-1 flex-col pb-16">{children}</div>
+          <SiteFooter locale={locale} />
         </NextIntlClientProvider>
       </body>
     </html>

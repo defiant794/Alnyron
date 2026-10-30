@@ -13,10 +13,11 @@
  *                 Certificate verification is never disabled: this connection is the
  *                 project superuser on the production database.
  *
- * Environment (a value already in process.env wins; vitest.config.ts also loads the
- * SUPABASE_DB_* keys from the git-ignored .env.local):
+ * Environment (a value already in process.env wins; vitest.config.ts and playwright.config.ts
+ * also load the SUPABASE_DB_* keys from the git-ignored .env.local):
  *   SUPABASE_DB_PASSWORD  project DB password (required)
- *   SUPABASE_DB_CA_CERT   path to the CA certificate; default supabase/prod-ca-2021.crt —
+ *   SUPABASE_DB_CA_CERT   path to the CA certificate; default supabase/prod-ca-2021.crt, resolved
+ *                         from the repo root (the runners' cwd) —
  *                         Supabase's prod-ca-2021.crt (Dashboard → Database Settings → SSL
  *                         Configuration; https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt),
  *                         SHA-256 80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA,
@@ -27,7 +28,7 @@
  */
 
 import fs from "node:fs";
-import { fileURLToPath } from "node:url";
+import path from "node:path";
 import pg from "pg";
 
 const { Pool } = pg;
@@ -37,7 +38,8 @@ const SUPABASE_REF = "xmgpixhxecamtryohgmk";
 // Verified 2026-10-30: Management API returns aws-1 for this project's region
 const POOLER_HOST = "aws-1-eu-west-3.pooler.supabase.com";
 const POOLER_USER = `postgres.${SUPABASE_REF}`;
-const DEFAULT_CA_PATH = fileURLToPath(new URL("../../../../supabase/prod-ca-2021.crt", import.meta.url));
+// cwd-relative, not import.meta.url: Playwright (the e2e DB fixture) loads this file as CommonJS.
+const DEFAULT_CA_PATH = path.resolve("supabase/prod-ca-2021.crt");
 
 export const DB_PASSWORD = process.env.SUPABASE_DB_PASSWORD || undefined;
 
@@ -73,11 +75,23 @@ function buildPool(port: 5432 | 6543): pg.Pool {
 /**
  * Acquire a pooled client.
  * The caller MUST call client.release() in a finally block.
- * Every test MUST wrap its work in BEGIN / ROLLBACK — no data persists to the cloud DB.
+ *
+ * Two uses, with different persistence:
+ *   - RLS integration tests wrap their work in BEGIN / ROLLBACK, so nothing they do persists.
+ *   - The e2e DB fixture (tests/e2e/fixtures/db-state.ts) COMMITS marked `e2e-home-*` rows,
+ *     because the dev server reads them through its own connection; it removes them again
+ *     before and after each block (the cleanup before also covers an aborted run).
  */
 export async function getClient(): Promise<pg.PoolClient> {
   if (!_pool) _pool = buildPool(5432);
   return _pool.connect();
+}
+
+/** Closes the shared pool (long-lived runners, e.g. Playwright workers, must not leave it open). */
+export async function endPool(): Promise<void> {
+  const pool = _pool;
+  _pool = undefined;
+  await pool?.end();
 }
 
 /**
