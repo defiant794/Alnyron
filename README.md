@@ -17,7 +17,7 @@ Website for Alnyron: Next.js 15 (App Router), React 19, Tailwind CSS v4 and Type
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Unit tests (Vitest) |
-| `npm run test:integration` | Integration tests (Vitest) |
+| `npm run test:integration` | Integration tests (Vitest) against the Supabase project, each in a rolled-back transaction; needs `SUPABASE_DB_PASSWORD` (environment or `.env.local`), TLS verified against `supabase/prod-ca-2021.crt` |
 | `npm run test:e2e` | End-to-end tests (Playwright) |
 | `npm run cf:build` | OpenNext build for Cloudflare Workers |
 | `npm run preview` | OpenNext build + local Workers preview |
