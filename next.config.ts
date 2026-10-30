@@ -1,8 +1,13 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 // Points next-intl's server APIs at the per-request config (locale + messages).
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
+
+// Populates getCloudflareContext() (KV + other bindings) during `next dev` via
+// the wrangler platform proxy. No-op in production/build.
+void initOpenNextCloudflareForDev();
 
 // Security headers. CSP uses 'unsafe-inline' for scripts/styles because a nonce
 // CSP forces dynamic rendering and would break ISR (architecture.md §1).
