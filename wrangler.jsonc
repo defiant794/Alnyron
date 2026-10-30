@@ -1,10 +1,10 @@
 {
   // Cloudflare Workers config (OpenNext). ISR cache = KV (no payment card).
   // open-next.config.ts wires the KV incremental cache (binding NEXT_INC_CACHE_KV).
-  // Replace the KV "id" below with the real namespace id once it is created
-  // (Cloudflare dashboard -> Storage & Databases -> KV -> "alnyron-next-inc-cache",
-  // or `wrangler kv namespace create NEXT_INC_CACHE_KV`). Deploy = Cloudflare
-  // Workers Builds connected to the GitHub repo (runs `cf:build` on Linux).
+  // KV namespace "NEXT_INC_CACHE_KV" was created with
+  // `wrangler kv namespace create NEXT_INC_CACHE_KV` (the id is not a secret).
+  // Deploy = Cloudflare Workers Builds connected to the GitHub repo
+  // (runs `cf:build` on Linux).
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "alnyron-web",
   "main": ".open-next/worker.js",
@@ -13,7 +13,7 @@
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "observability": { "enabled": true },
   "kv_namespaces": [
-    { "binding": "NEXT_INC_CACHE_KV", "id": "PLACEHOLDER_SET_AT_DEPLOY" }
+    { "binding": "NEXT_INC_CACHE_KV", "id": "4a4c256304c143dc89b8685b5a835c3a" }
   ],
   "vars": { "MAIL_FROM": "Alnyron <noreply@send.alnyron.dk>" }
 }
