@@ -41,7 +41,7 @@ test("AC-I18N-02: GET /da/kontakt redirects to /kontakt (no DA prefix)", async (
 test("AC-I18N-02b: GET /da/kontakt (no redirect follow) is a permanent 308 to /kontakt with no Set-Cookie", async ({
   request,
 }) => {
-  // Stop at the redirect response itself — this catches a cookie set on the
+  // Stop at the redirect response itself: this catches a cookie set on the
   // redirect leg (next-intl may write NEXT_LOCALE here if localeCookie is on).
   const response = await request.get("/da/kontakt", { maxRedirects: 0 });
 
@@ -129,3 +129,25 @@ test(
     expect(pathname).toBe("/kontakt");
   },
 );
+
+// ── AC-I18N-05/06 without JavaScript: the prerendered HTML ────────────────
+// The switcher is a client island, but its links must already be right in
+// the static HTML: a click before hydration, or with JavaScript off, is a
+// plain document load (the prerendered /kontakt once linked to /en/[slug]
+// until hydration).
+
+test.describe("Language switcher without JavaScript (prerendered HTML)", () => {
+  test.use({ javaScriptEnabled: false });
+
+  for (const [from, hreflang, to] of [
+    ["/kontakt", "en", "/en/contact"],
+    ["/en/contact", "da", "/kontakt"],
+    ["/", "en", "/en"],
+    ["/en", "da", "/"],
+  ] as const) {
+    test(`AC-I18N-05/06: ${from} links ${hreflang.toUpperCase()} to ${to}`, async ({ page }) => {
+      await page.goto(from);
+      await expect(page.locator(`a[hreflang="${hreflang}"]`).first()).toHaveAttribute("href", to);
+    });
+  }
+});

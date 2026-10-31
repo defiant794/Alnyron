@@ -17,16 +17,17 @@ import "@testing-library/jest-dom/vitest";
 import { NextIntlClientProvider } from "next-intl";
 
 // ── Mock the Next router hooks ───────────────────────────────────────────────
-// As in LanguageSwitcher.test.tsx: `usePathname` returns the browser path and
-// `useParams` the route params; everything above them is real.
+// As in LanguageSwitcher.test.tsx: `useSelectedLayoutSegments` returns the
+// internal segments below the `[locale]` layout and `useParams` the route
+// params; everything above them is real.
 const route = vi.hoisted(() => ({
-  pathname: "/",
+  segments: [] as string[],
   params: { locale: "da" } as Record<string, string>,
 }));
 
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
-  usePathname: () => route.pathname,
+  useSelectedLayoutSegments: () => route.segments,
   useParams: () => route.params,
 }));
 
@@ -35,12 +36,13 @@ import SiteMenu from "@/components/site/SiteMenu";
 afterEach(cleanup);
 
 /**
- * Renders the menu around header-like contents on the DA page `pathname`.
- * `navigate` re-renders on another path, as a client-side navigation does
- * (the header layout, and so the menu state, survives it).
+ * Renders the menu around header-like contents on the DA page with the
+ * internal `segments` (`[]` is the home page). `navigate` re-renders on
+ * another page, as a client-side navigation does (the header layout, and so
+ * the menu state, survives it).
  */
-function renderMenu(pathname = "/") {
-  route.pathname = pathname;
+function renderMenu(segments: string[] = []) {
+  route.segments = segments;
   route.params = { locale: "da" };
   // A fresh element per render: React skips re-rendering an identical element.
   const ui = () => (
@@ -62,8 +64,8 @@ function renderMenu(pathname = "/") {
     user: userEvent.setup(),
     toggle,
     panel,
-    navigate(path: string) {
-      route.pathname = path;
+    navigate(nextSegments: string[]) {
+      route.segments = nextSegments;
       rerender(ui());
     },
   };
@@ -71,7 +73,7 @@ function renderMenu(pathname = "/") {
 
 // ── Disclosure button ────────────────────────────────────────────────────────
 
-describe("SiteMenu — disclosure button controls the header panel", () => {
+describe("SiteMenu: disclosure button controls the header panel", () => {
   it("toggle is named by its label, starts collapsed and aria-controls the panel with the header contents", () => {
     const { toggle, panel } = renderMenu();
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -94,7 +96,7 @@ describe("SiteMenu — disclosure button controls the header panel", () => {
 
 // ── Escape ───────────────────────────────────────────────────────────────────
 
-describe("SiteMenu — Escape closes the panel", () => {
+describe("SiteMenu: Escape closes the panel", () => {
   it("Escape inside the open panel closes it and returns focus to the toggle", async () => {
     const { user, toggle, panel } = renderMenu();
     await user.click(toggle);
@@ -119,7 +121,7 @@ describe("SiteMenu — Escape closes the panel", () => {
 
 // ── Link click and navigation ────────────────────────────────────────────────
 
-describe("SiteMenu — closes on a link click and on navigation", () => {
+describe("SiteMenu: closes on a link click and on navigation", () => {
   it("a click on a link in the panel closes it, also when it lands on an element inside the link", async () => {
     const { user, toggle, panel } = renderMenu();
     await user.click(toggle);
@@ -138,11 +140,11 @@ describe("SiteMenu — closes on a link click and on navigation", () => {
   });
 
   it("navigating to another page closes the open panel", async () => {
-    const { user, toggle, panel, navigate } = renderMenu("/");
+    const { user, toggle, panel, navigate } = renderMenu([]);
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
-    navigate("/kontakt");
+    navigate(["contact"]);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(panel).toHaveClass("hidden");
   });

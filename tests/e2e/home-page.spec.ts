@@ -1,9 +1,11 @@
 // E2E tests for F0.5 home-page
 // Acceptance IDs: AC-HOME-01 through AC-HOME-15
 // Run with: npm run test:e2e
-// Requires: the dev server (`npm run dev`) at PLAYWRIGHT_BASE_URL (default
-//           http://localhost:3000), reading the linked Supabase project, and
-//           SUPABASE_DB_PASSWORD (environment or tests/.env.e2e) for the DB fixture.
+// Requires: the app at PLAYWRIGHT_BASE_URL (default http://localhost:3000),
+//           reading the linked Supabase project, and SUPABASE_DB_PASSWORD
+//           (environment or tests/.env.e2e) for the DB fixture. Against a
+//           production build also E2E_REVALIDATE_SECRET, the same value in
+//           the server's environment and the test run.
 //
 // ── Category visibility (DB fixture) ──────────────────────────────────────────
 // Which catalog categories are public depends on DB state: a category shows
@@ -12,12 +14,14 @@
 // the one that needs none (AC-HOME-10b) run in one serial block that adds and
 // removes marked test items through tests/e2e/fixtures/db-state.ts. Tests
 // outside that block never depend on category state, so they run in parallel.
-// The dev server renders every request from the DB (no ISR cache), so a
-// fixture change shows on the next page load.
+// A production build serves the pages from the ISR cache, so every fixture
+// change is followed by `revalidateSite()` (tests/e2e/fixtures/revalidate.ts);
+// the dev server renders every request from the DB and needs none.
 //
 import { test, expect } from "@playwright/test";
 import { endPool } from "../integration/rls/helpers/db";
 import { addTestItem, hasRealPublicCategory, removeTestItems } from "./fixtures/db-state";
+import { revalidateSite } from "./fixtures/revalidate";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -39,7 +43,7 @@ test("AC-HOME-01b: GET / renders the DA lead text from DB content", async ({ pag
   await expect(page.getByText(DA_LEAD.substring(0, 50))).toBeVisible();
 });
 
-// ── AC-HOME-02/03: EN home — DA fallback with lang="da" ──────────────────────
+// ── AC-HOME-02/03: EN home, DA fallback with lang="da" ───────────────────────
 
 test("AC-HOME-02: GET /en renders the DA title with lang='da' (blank EN title falls back)", async ({
   page,
@@ -56,7 +60,7 @@ test("AC-HOME-03: GET /en DA-fallback lead text carries lang='da'", async ({ pag
   await expect(leadEl).toBeVisible();
 });
 
-// ── AC-HOME-04: Nav — Forside pinned first, active on / ──────────────────────
+// ── AC-HOME-04: Nav, Forside pinned first, active on / ───────────────────────
 
 test("AC-HOME-04: Header nav on / contains 'Forside' as first link and marks it active", async ({
   page,
@@ -114,7 +118,7 @@ test("AC-HOME-09b: Footer on /en shows Privacy link to /en/privacy", async ({ pa
   ).toHaveAttribute("href", "/en/privacy");
 });
 
-// ── AC-HOME-12: ISR — locked by the build, not by an HTTP check ──────────────
+// ── AC-HOME-12: ISR, locked by the build, not by an HTTP check ───────────────
 // GET 200 on / and /en already passes on the F0.3 placeholder; removed.
 // src/app/[locale]/layout.tsx exports `dynamic = "error"` (plus
 // `revalidate = 3600` and generateStaticParams), so a request-time API under
@@ -125,7 +129,7 @@ test("AC-HOME-09b: Footer on /en shows Privacy link to /en/privacy", async ({ pa
 // ── AC-HOME-14/15: Keyboard + SkipLink ───────────────────────────────────────
 // SkipLink ships with F0.2; these verify the F0.5 page does not break it.
 
-test("AC-HOME-14: Home page — first Tab focus lands on the SkipLink (href='#main')", async ({
+test("AC-HOME-14: Home page, first Tab focus lands on the SkipLink (href='#main')", async ({
   page,
 }) => {
   await page.goto("/");
@@ -144,10 +148,16 @@ test("Mobile nav: below 768px the header nav opens from a Menu button and closes
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 800 });
-  // The toggle is a client island: wait for hydration before clicking it.
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   const toggle = page.getByRole("button", { name: "Menu" });
   const nav = page.getByRole("navigation", { name: /navigat/i });
+  // The toggle is a client island: a click before hydration hits the static
+  // HTML and does nothing. React stores the props on each element it hydrates
+  // (`__reactProps$<id>`), so the toggle has its click handler once it has them.
+  await expect(toggle).toBeVisible();
+  await expect
+    .poll(() => toggle.evaluate((el) => Object.keys(el).some((key) => key.startsWith("__reactProps$"))))
+    .toBe(true);
 
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await expect(nav).toBeHidden();
@@ -182,10 +192,12 @@ test.describe("Category visibility (DB fixture)", () => {
   // Also clears rows left behind by an aborted earlier run.
   test.beforeAll(async () => {
     await removeTestItems();
+    await revalidateSite();
   });
 
   test.afterAll(async () => {
     await removeTestItems();
+    await revalidateSite();
     await endPool();
   });
 
@@ -208,10 +220,12 @@ test.describe("Category visibility (DB fixture)", () => {
     test.beforeAll(async () => {
       await addTestItem("apps", "published");
       await addTestItem("websites", "draft");
+      await revalidateSite();
     });
 
     test.afterAll(async () => {
       await removeTestItems();
+      await revalidateSite();
     });
 
     test("AC-HOME-06: Header nav includes the 'apps' category (has a published item)", async ({
@@ -273,10 +287,12 @@ test.describe("Category visibility (DB fixture)", () => {
   test.describe("services public (published item)", () => {
     test.beforeAll(async () => {
       await addTestItem("services", "published");
+      await revalidateSite();
     });
 
     test.afterAll(async () => {
       await removeTestItems();
+      await revalidateSite();
     });
 
     test("AC-HOME-11b: 'Se ydelser' button visible when services category has a published item", async ({

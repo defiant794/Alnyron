@@ -4,7 +4,8 @@
 // server in the locale-aware form ("/", "/kontakt", "/en/apps"); NavLink
 // compares it with the current page in the same form, so these pin:
 // - exactly the link to the current page is marked, on fixed routes, the
-//   DB-slug route and both home pages ("/" must not match "/apps");
+//   DB-slug route and both home pages ("/" must not match "/apps"), in the
+//   prerendered HTML too;
 // - a link into the other locale is never current;
 // - `lang` (set on labels shown from Danish) and other props pass through.
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -13,18 +14,22 @@ import "@testing-library/jest-dom/vitest";
 import { NextIntlClientProvider, type Locale } from "next-intl";
 
 // ── Mock the Next router hooks ───────────────────────────────────────────────
-// As in LanguageSwitcher.test.tsx: `usePathname` returns the browser path and
-// `useParams` the route params; next-intl maps them through the real routing
-// table in src/i18n/routing.ts.
+// As in LanguageSwitcher.test.tsx: `useSelectedLayoutSegments` returns the
+// internal segments below the `[locale]` layout and `useParams` the route
+// params; `getPathname` maps them through the real routing table in
+// src/i18n/routing.ts. `usePathname` is the browser path unless a case sets
+// the prerender value (the rewrite target).
 const route = vi.hoisted(() => ({
-  pathname: "/",
+  segments: [] as string[],
   params: {} as Record<string, string>,
+  pathname: "/",
 }));
 
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
-  usePathname: () => route.pathname,
+  useSelectedLayoutSegments: () => route.segments,
   useParams: () => route.params,
+  usePathname: () => route.pathname,
 }));
 
 import NavLink from "@/components/site/NavLink";
@@ -47,15 +52,20 @@ const NAV: Record<Locale, Item[]> = {
   ],
 };
 
-/** Renders `items` as the header nav on `pathname` (route `params` without the locale). */
+type RenderOptions = { params?: Record<string, string>; pathname?: string; items?: Item[] };
+
+/**
+ * Renders `items` as the header nav on the page with the internal `segments`
+ * (route `params` without the locale); `pathname` is what `usePathname` reports.
+ */
 function renderNav(
   locale: Locale,
-  pathname: string,
-  params: Record<string, string> = {},
-  items: Item[] = NAV[locale],
+  segments: string[],
+  { params = {}, pathname = "/", items = NAV[locale] }: RenderOptions = {},
 ) {
-  route.pathname = pathname;
+  route.segments = segments;
   route.params = { locale, ...params };
+  route.pathname = pathname;
   render(
     <NextIntlClientProvider locale={locale}>
       <nav aria-label="Navigation">
@@ -82,27 +92,34 @@ function currentLinks() {
 
 describe('AC-HOME-04/05: NavLink marks only the current page with aria-current="page"', () => {
   it.each([
-    ["da", "/", {}, "Forside"],
-    ["da", "/kontakt", {}, "Kontakt"],
-    ["da", "/apps", { slug: "apps" }, "Apps"],
-    ["en", "/en", {}, "Home"],
-    ["en", "/en/contact", {}, "Contact"],
-    ["en", "/en/apps", { slug: "apps" }, "Apps"],
-  ] as const)('%s %s: only "%s" is current', (locale, pathname, params, label) => {
-    renderNav(locale, pathname, params);
+    ["da", [], {}, "Forside"],
+    ["da", ["contact"], {}, "Kontakt"],
+    ["da", ["apps"], { slug: "apps" }, "Apps"],
+    ["en", [], {}, "Home"],
+    ["en", ["contact"], {}, "Contact"],
+    ["en", ["apps"], { slug: "apps" }, "Apps"],
+  ] as const)('%s %j: only "%s" is current', (locale, segments, params, label) => {
+    renderNav(locale, [...segments], { params });
     const current = currentLinks();
     expect(current).toHaveLength(1);
     expect(current[0]).toHaveTextContent(label);
     expect(current[0]).toHaveAttribute("aria-current", "page");
   });
 
+  it("marks Kontakt on the prerendered /kontakt, where usePathname is the rewrite target /da/contact", () => {
+    renderNav("da", ["contact"], { pathname: "/da/contact" });
+    const current = currentLinks();
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveTextContent("Kontakt");
+  });
+
   it("marks no link on a page that is not in the nav (/privatliv)", () => {
-    renderNav("da", "/privatliv");
+    renderNav("da", ["privacy"]);
     expect(currentLinks()).toHaveLength(0);
   });
 
   it("never marks a link into the other locale (/kontakt while on /en/contact)", () => {
-    renderNav("en", "/en/contact", {}, [{ href: "/kontakt", label: "Kontakt" }]);
+    renderNav("en", ["contact"], { items: [{ href: "/kontakt", label: "Kontakt" }] });
     expect(screen.getByRole("link", { name: "Kontakt" })).not.toHaveAttribute("aria-current");
   });
 });
@@ -111,14 +128,14 @@ describe('AC-HOME-04/05: NavLink marks only the current page with aria-current="
 
 describe("NavLink passes its props through to the anchor", () => {
   it('keeps lang="da" on a label shown from Danish and adds no lang otherwise', () => {
-    renderNav("en", "/en");
+    renderNav("en", []);
     expect(screen.getByRole("link", { name: "Apps" })).toHaveAttribute("lang", "da");
     expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("lang");
     expect(screen.getByRole("link", { name: "Contact" })).not.toHaveAttribute("lang");
   });
 
   it("renders the server-built href unchanged and keeps the caller's className", () => {
-    renderNav("en", "/en");
+    renderNav("en", []);
     const link = screen.getByRole("link", { name: "Contact" });
     expect(link).toHaveAttribute("href", "/en/contact");
     expect(link).toHaveClass("text-muted");

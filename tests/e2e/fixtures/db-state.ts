@@ -11,8 +11,9 @@
  *     cleans up after an aborted run);
  *   - real content is never changed: a scenario that needs "no public
  *     category" is skipped when real published content exists;
- *   - run them against the dev server (no ISR cache) and never while a
- *     production site is served from the same project.
+ *   - run them against the dev server, or a local production build with
+ *     `revalidateSite()` (./revalidate.ts) after every change, and never
+ *     while a production site is served from the same project.
  *
  * Connection: the integration-test pool (tests/integration/rls/helpers/db.ts,
  * `SUPABASE_DB_PASSWORD`, verify-full TLS; close it with its `endPool()`);
