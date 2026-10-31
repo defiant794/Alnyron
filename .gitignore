@@ -35,6 +35,9 @@ yarn-error.log*
 .env
 .env.*
 !.env.example
+# test-only secrets (DB password, e2e service key): kept out of the root, where
+# @opennextjs/cloudflare compiles every .env* file into the Worker bundle
+tests/.env.e2e
 
 # vercel
 .vercel
@@ -42,3 +45,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# OMP planning artifacts live in the Jottacloud workspace, never the code repo
+.omp/

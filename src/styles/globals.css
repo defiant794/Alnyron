@@ -32,6 +32,8 @@
   --color-success: #167c53;
   --color-error: #c02626;
   --color-brand-navy: #141b2e;
+  /* Admin sidebar background (approved admin mock). */
+  --color-side: #edf1f7;
 
   /* Typography. --font-inter is set by next/font on <html> (src/styles/fonts.ts). */
   --font-sans: var(--font-inter), "Segoe UI", system-ui, sans-serif;

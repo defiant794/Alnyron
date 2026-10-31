@@ -1,0 +1,56 @@
+import type { Messages } from "next-intl";
+import { z } from "zod";
+
+/**
+ * Key of a validation message in `messages/da.json` (`AdminAuth.validation`).
+ * Every issue these schemas raise carries such a key as its message, so the
+ * caller shows Danish copy from the message file instead of zod's English.
+ */
+export type AuthValidationKey = keyof Messages["AdminAuth"]["validation"];
+
+/** Issue options that set the message key (zod 4 `error` param). */
+function issue(key: AuthValidationKey) {
+  return { error: key };
+}
+
+/** bcrypt, which Supabase Auth stores passwords with, reads at most 72 bytes. */
+export const MAX_PASSWORD_BYTES = 72;
+
+/** Matches `minimum_password_length` in `supabase/config.toml` and the dashboard. */
+export const MIN_PASSWORD_LENGTH = 12;
+
+// RFC 5321 caps an address at 254 characters. Surrounding whitespace is
+// trimmed first so a pasted address with a trailing space still validates.
+const email = z
+  .string(issue("emailInvalid"))
+  .trim()
+  .pipe(z.email(issue("emailInvalid")).max(254, issue("emailInvalid")));
+
+/** Sign-in form: any non-empty password (existing passwords may predate the length rule). */
+export const signInSchema = z.object({
+  email,
+  password: z.string(issue("passwordRequired")).min(1, issue("passwordRequired")),
+});
+
+/** Forgot-password form. */
+export const resetPasswordSchema = z.object({ email });
+
+/** Set-password form (invite and recovery links): length rule plus a matching repeat. */
+export const setPasswordSchema = z
+  .object({
+    password: z
+      .string(issue("passwordTooShort"))
+      .min(MIN_PASSWORD_LENGTH, issue("passwordTooShort"))
+      .refine(
+        (value) => new TextEncoder().encode(value).length <= MAX_PASSWORD_BYTES,
+        issue("passwordTooLong"),
+      ),
+    confirm: z.string(issue("passwordMismatch")),
+  })
+  .refine((data) => data.password === data.confirm, {
+    ...issue("passwordMismatch"),
+    path: ["confirm"],
+  });
+
+export type SignInInput = z.infer<typeof signInSchema>;
+export type SetPasswordInput = z.infer<typeof setPasswordSchema>;

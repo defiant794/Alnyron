@@ -50,6 +50,10 @@ const nextConfig: NextConfig = {
         source: "/admin/:path*",
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
+      {
+        source: "/auth/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
       // Keep the *.workers.dev preview out of search indexes. Uses the same
       // "noindex, nofollow" value so it never weakens the /admin rule where the
       // paths overlap (a later matching header rule wins on a shared key).

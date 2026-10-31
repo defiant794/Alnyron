@@ -16,7 +16,7 @@
  *
  * Connection: the integration-test pool (tests/integration/rls/helpers/db.ts,
  * `SUPABASE_DB_PASSWORD`, verify-full TLS; close it with its `endPool()`);
- * playwright.config.ts loads the SUPABASE_DB_* keys from .env.local.
+ * playwright.config.ts loads the SUPABASE_DB_* keys from tests/.env.e2e.
  */
 import type { QueryResultRow } from "pg";
 import { getClient } from "../../integration/rls/helpers/db";

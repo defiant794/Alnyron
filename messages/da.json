@@ -27,5 +27,78 @@
     "title": "Siden findes ikke",
     "body": "Siden er flyttet eller findes ikke længere.",
     "home": "Gå til forsiden"
+  },
+  "Admin": {
+    "metaTitle": "Alnyron administration",
+    "nav": {
+      "label": "Administration",
+      "overview": "Oversigt"
+    },
+    "account": {
+      "label": "Konto",
+      "signOut": "Log ud",
+      "roles": {
+        "owner": "Ejer",
+        "admin": "Administrator"
+      }
+    },
+    "overview": {
+      "title": "Oversigt",
+      "lead": "Velkommen til administrationen af alnyron.dk.",
+      "signedInAs": "Du er logget ind som {email} ({role})."
+    },
+    "error": {
+      "title": "Noget gik galt",
+      "body": "Siden kunne ikke indlæses. Fejlen er hos os, så prøv igen om lidt.",
+      "retry": "Prøv igen"
+    }
+  },
+  "AdminAuth": {
+    "noSignup": "Ingen offentlig tilmelding. Adgang gives af ejeren.",
+    "login": {
+      "title": "Log ind",
+      "lead": "Log ind for at redigere indholdet på alnyron.dk.",
+      "email": "E-mail",
+      "password": "Adgangskode",
+      "submit": "Log ind",
+      "forgotPassword": "Glemt adgangskode?",
+      "invalidCredentials": "Forkert e-mail eller adgangskode",
+      "rateLimited": "For mange forsøg på kort tid. Vent et par minutter, og prøv igen.",
+      "unavailable": "Login virker ikke lige nu. Prøv igen om lidt.",
+      "linkInvalid": "Linket er ugyldigt eller udløbet. Bed om et nyt link til at nulstille din adgangskode, eller bed ejeren om en ny invitation."
+    },
+    "forgotPassword": {
+      "title": "Nulstil adgangskode",
+      "lead": "Skriv din e-mail, så sender vi et link, hvor du kan vælge en ny adgangskode.",
+      "email": "E-mail",
+      "submit": "Send nulstillingslink",
+      "sent": "Tjek din e-mail. Hvis adressen hører til en konto med adgang, har vi sendt et link til at vælge en ny adgangskode.",
+      "backToLogin": "Tilbage til log ind"
+    },
+    "setPassword": {
+      "title": "Vælg ny adgangskode",
+      "lead": "Vælg den adgangskode, du vil logge ind med fremover.",
+      "password": "Ny adgangskode",
+      "passwordHint": "Mindst {min} tegn.",
+      "confirm": "Gentag adgangskode",
+      "submit": "Gem adgangskode",
+      "samePassword": "Den nye adgangskode skal være forskellig fra den nuværende.",
+      "weakPassword": "Adgangskoden er for let at gætte. Vælg en længere adgangskode.",
+      "reauthenticationNeeded": "Af sikkerhedshensyn skal du bruge et nyt link for at skifte adgangskode. Log ud, og bed om et nulstillingslink på log ind-siden.",
+      "failed": "Adgangskoden kunne ikke gemmes. Prøv igen om lidt."
+    },
+    "noAccess": {
+      "title": "Ingen adgang",
+      "body": "Kontoen {email} har ikke adgang til administrationen.",
+      "help": "Kontakt ejeren, hvis du mener, det er en fejl, eller log ud og log ind med en anden konto.",
+      "switchAccount": "Log ind med en anden konto"
+    },
+    "validation": {
+      "emailInvalid": "Skriv en gyldig e-mailadresse.",
+      "passwordRequired": "Skriv din adgangskode.",
+      "passwordTooShort": "Adgangskoden skal være på mindst {min} tegn.",
+      "passwordTooLong": "Adgangskoden er for lang. Den må højst være på {max} tegn, og færre hvis den indeholder æ, ø, å eller lignende tegn.",
+      "passwordMismatch": "De to adgangskoder er ikke ens."
+    }
   }
 }

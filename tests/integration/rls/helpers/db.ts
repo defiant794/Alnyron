@@ -14,7 +14,7 @@
  *                 project superuser on the production database.
  *
  * Environment (a value already in process.env wins; vitest.config.ts and playwright.config.ts
- * also load the SUPABASE_DB_* keys from the git-ignored .env.local):
+ * also load the SUPABASE_DB_* keys from the git-ignored tests/.env.e2e, never .env.local):
  *   SUPABASE_DB_PASSWORD  project DB password (required)
  *   SUPABASE_DB_CA_CERT   path to the CA certificate; default supabase/prod-ca-2021.crt, resolved
  *                         from the repo root (the runners' cwd) —
@@ -58,7 +58,7 @@ let _pool: pg.Pool | undefined;
 
 /** Port 5432 = session mode (SET LOCAL kept for the connection), 6543 = transaction mode. */
 function buildPool(port: 5432 | 6543): pg.Pool {
-  if (!DB_PASSWORD) throw new Error("No DB credentials — set SUPABASE_DB_PASSWORD (environment or .env.local)");
+  if (!DB_PASSWORD) throw new Error("No DB credentials — set SUPABASE_DB_PASSWORD (environment or tests/.env.e2e)");
   return new Pool({
     host: POOLER_HOST,
     port,

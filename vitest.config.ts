@@ -38,6 +38,8 @@ export default defineConfig({
           // email in auth.users and user_allowlist, risking 40P01 deadlocks once
           // the schema is applied. Sequential file execution prevents this.
           fileParallelism: false,
+          // SUPABASE_DB_* from the environment or the git-ignored tests/.env.e2e
+          // (never .env.local: OpenNext compiles it into the Worker bundle).
           env: supabaseDbEnv(fileURLToPath(new URL(".", import.meta.url))),
         },
       },

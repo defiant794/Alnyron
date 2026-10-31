@@ -3,7 +3,7 @@
 // Run with: npm run test:e2e
 // Requires: the dev server (`npm run dev`) at PLAYWRIGHT_BASE_URL (default
 //           http://localhost:3000), reading the linked Supabase project, and
-//           SUPABASE_DB_PASSWORD (environment or .env.local) for the DB fixture.
+//           SUPABASE_DB_PASSWORD (environment or tests/.env.e2e) for the DB fixture.
 //
 // ── Category visibility (DB fixture) ──────────────────────────────────────────
 // Which catalog categories are public depends on DB state: a category shows
