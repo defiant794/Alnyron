@@ -1,23 +1,22 @@
 import { createTranslator } from "next-intl";
 import { z } from "zod";
-import { ADMIN_LOCALE } from "@/config/admin";
+import { AUTH_LOCALE } from "@/config/auth-areas";
 import { loadMessages } from "@/i18n/messages";
-import {
-  MAX_PASSWORD_BYTES,
-  MIN_PASSWORD_LENGTH,
-  type AuthValidationKey,
-} from "@/lib/validation/auth";
+import { MAX_PASSWORD_BYTES, MIN_PASSWORD_LENGTH, type AuthValidationKey } from "@/lib/validation/auth";
 
-const messages = loadMessages(ADMIN_LOCALE);
+const messages = loadMessages(AUTH_LOCALE);
 
-/** Danish auth copy (`AdminAuth` in `messages/da.json`) for the auth Server Actions. */
-export const authT = createTranslator({ locale: ADMIN_LOCALE, messages, namespace: "AdminAuth" });
+/**
+ * Danish auth copy (`Auth` in `messages/da.json`) for the auth Server Actions
+ * of both areas (admin and MyLife): validation and Supabase errors.
+ */
+export const authT = createTranslator({ locale: AUTH_LOCALE, messages, namespace: "Auth" });
 
 /** Danish message per invalid form field (first problem only). */
 export type FieldErrors<Input> = { [Field in keyof Input]?: string };
 
 const isValidationKey = (key: string): key is AuthValidationKey =>
-  Object.hasOwn(messages.AdminAuth.validation, key);
+  Object.hasOwn(messages.Auth.validation, key);
 
 /**
  * Turn a failed `lib/validation/auth` parse into Danish field messages. The

@@ -2,11 +2,11 @@ import type { Messages } from "next-intl";
 import { z } from "zod";
 
 /**
- * Key of a validation message in `messages/da.json` (`AdminAuth.validation`).
+ * Key of a validation message in `messages/da.json` (`Auth.validation`).
  * Every issue these schemas raise carries such a key as its message, so the
  * caller shows Danish copy from the message file instead of zod's English.
  */
-export type AuthValidationKey = keyof Messages["AdminAuth"]["validation"];
+export type AuthValidationKey = keyof Messages["Auth"]["validation"];
 
 /** Issue options that set the message key (zod 4 `error` param). */
 function issue(key: AuthValidationKey) {

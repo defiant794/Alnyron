@@ -225,20 +225,22 @@ export async function generateAuthLink(
   type: GenerateLinkType,
   email: string,
   confirmUrl: string,
+  role: "admin" | "mylife_user" = "admin",
 ): Promise<string> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SECRET_KEY!;
 
   if (type === "invite") {
     // Seed allowlist before generating the invite so the before_user_created
-    // hook allows the new account.
+    // hook allows the new account. The role determines which area the user
+    // enters; callers default to 'admin' so existing usages are unchanged.
     const client = await getClient();
     try {
       await client.query(
         `INSERT INTO public.user_allowlist (email, role)
-         VALUES ($1, 'admin')
-         ON CONFLICT (email) DO UPDATE SET role = 'admin'`,
-        [email],
+         VALUES ($1, $2)
+         ON CONFLICT (email) DO UPDATE SET role = $2`,
+        [email, role],
       );
     } finally {
       client.release();

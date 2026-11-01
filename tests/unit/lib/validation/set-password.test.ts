@@ -50,7 +50,7 @@ describe("auth schemas: AC-ADMINAUTH-01 messages and input cleanup", () => {
     expect(result.success && result.data.email).toBe("admin@alnyron.dk");
   });
 
-  it("AC-ADMINAUTH-01o: every issue message is a key of AdminAuth.validation in da.json", () => {
+  it("AC-ADMINAUTH-01o: every issue message is a key of Auth.validation in da.json", () => {
     const keys = [
       ...issuesOf(signInSchema.safeParse({ email: "nope", password: "" })),
       ...issuesOf(resetPasswordSchema.safeParse({})),
@@ -58,6 +58,6 @@ describe("auth schemas: AC-ADMINAUTH-01 messages and input cleanup", () => {
     ].map((issue) => issue.key);
 
     expect(keys.length).toBeGreaterThan(0);
-    for (const key of keys) expect(Object.keys(da.AdminAuth.validation)).toContain(key);
+    for (const key of keys) expect(Object.keys(da.Auth.validation)).toContain(key);
   });
 });

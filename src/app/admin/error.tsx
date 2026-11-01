@@ -16,7 +16,7 @@ type AdminErrorProps = {
  * retry re-requests the server components, then re-renders the segment.
  */
 export default function AdminError({ reset }: AdminErrorProps) {
-  const t = useTranslations("Admin.error");
+  const t = useTranslations("Auth.error");
   const router = useRouter();
   const [retrying, startRetry] = useTransition();
 

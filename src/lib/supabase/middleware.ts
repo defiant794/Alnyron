@@ -1,29 +1,36 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { ADMIN_LOGIN_PATH, ADMIN_PUBLIC_PATHS } from "@/config/admin";
+import { AREA_CONFIG, type AuthArea } from "@/config/auth-areas";
 import { parseSupabasePublicEnv } from "@/config/env";
-import { safeNext } from "@/lib/safe-next";
+import { areaOfPath, safeNext } from "@/lib/safe-next";
 import { AUTH_COOKIE_OPTIONS } from "./cookie-options";
 
 /** Headers `@supabase/ssr` sets with refreshed auth cookies so no cache stores them. */
 const CACHE_HEADERS = ["cache-control", "expires", "pragma"] as const;
 
-function isProtectedAdminPath(pathname: string): boolean {
-  const isAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
-  return isAdmin && !ADMIN_PUBLIC_PATHS.has(pathname);
+/** The area whose login guards `pathname`, or null when it is served without a session. */
+function protectedArea(pathname: string): AuthArea | null {
+  const area = areaOfPath(pathname);
+  return area && !AREA_CONFIG[area].publicPaths.has(pathname) ? area : null;
 }
 
 /**
- * Redirect to the login page, carrying everything the session refresh put on
- * `refreshed`: new or cleared auth cookies and the no-cache headers. Dropping
- * them would leave the browser with a stale session (or let a cache keep it).
- * The original admin path goes along as `next` when the guard accepts it.
+ * Redirect to the area's login page on the same host, carrying everything the
+ * session refresh put on `refreshed`: new or cleared auth cookies and the
+ * no-cache headers. Dropping them would leave the browser with a stale
+ * session (or let a cache keep it). The requested path goes along as `next`
+ * when the guard accepts it for that area.
  */
-function redirectToLogin(request: NextRequest, refreshed: NextResponse): NextResponse {
+function redirectToLogin(
+  request: NextRequest,
+  refreshed: NextResponse,
+  area: AuthArea,
+  pathname: string,
+): NextResponse {
   const url = request.nextUrl.clone();
-  url.pathname = ADMIN_LOGIN_PATH;
+  url.pathname = AREA_CONFIG[area].login;
   url.search = "";
-  const next = safeNext(`${request.nextUrl.pathname}${request.nextUrl.search}`);
+  const next = safeNext(`${pathname}${request.nextUrl.search}`, area);
   if (next) url.searchParams.set("next", next);
 
   const redirect = NextResponse.redirect(url);
@@ -35,20 +42,38 @@ function redirectToLogin(request: NextRequest, refreshed: NextResponse): NextRes
   return redirect;
 }
 
+/** The request URL (same host, same query) with another path. */
+function withPathname(request: NextRequest, pathname: string): URL {
+  const url = new URL(request.nextUrl.href);
+  url.pathname = pathname;
+  return url;
+}
+
 /**
- * Supabase SSR session handling for `/admin/*` and `/auth/*` (architecture §6,
- * route protection layer 1). Public `[locale]` routes never reach this, so
- * they stay cookie-free and cacheable.
+ * Supabase SSR session handling for `/admin/*`, `/mylife/*`, `/auth/*` and
+ * every request on the MyLife host (architecture §6, route protection layer
+ * 1). Public `[locale]` routes never reach this, so they stay cookie-free and
+ * cacheable.
+ *
+ * `rewritePath` (MyLife host) serves the request from that path instead
+ * (`mylife.alnyron.dk/login` -> `/mylife/login`); the browser keeps its URL.
  *
  * `getClaims()` verifies the access token and refreshes an expired session;
  * refreshed cookies go onto the request (for Server Components rendering
- * this request) and onto the response (for the browser). Without claims,
- * every admin route except login and forgot-password redirects (307) to the
- * login page. The role check is not done here: `requireAdmin()` does it.
+ * this request) and onto the response (for the browser), rewrite or not.
+ * Without claims, every admin or MyLife route except its login and forgot
+ * password pages redirects (307) to that area's login page. The role check is
+ * not done here: `requireAdmin()` / `requireMyLife()` do it.
  */
-export async function updateSession(request: NextRequest): Promise<NextResponse> {
+export async function updateSession(
+  request: NextRequest,
+  rewritePath?: string,
+): Promise<NextResponse> {
   const env = parseSupabasePublicEnv();
-  let response = NextResponse.next({ request });
+  const rewriteUrl = rewritePath === undefined ? null : withPathname(request, rewritePath);
+  const pass = (): NextResponse =>
+    rewriteUrl ? NextResponse.rewrite(rewriteUrl, { request }) : NextResponse.next({ request });
+  let response = pass();
 
   const supabase = createServerClient(
     env.NEXT_PUBLIC_SUPABASE_URL,
@@ -59,7 +84,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
         getAll: () => request.cookies.getAll(),
         setAll(cookiesToSet, headers) {
           for (const { name, value } of cookiesToSet) request.cookies.set(name, value);
-          response = NextResponse.next({ request });
+          response = pass();
           for (const { name, value, options } of cookiesToSet) {
             response.cookies.set(name, value, options);
           }
@@ -73,8 +98,8 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   // has to land before any response is built from `response`.
   const { data } = await supabase.auth.getClaims();
 
-  if (!data?.claims && isProtectedAdminPath(request.nextUrl.pathname)) {
-    return redirectToLogin(request, response);
-  }
+  const pathname = rewritePath ?? request.nextUrl.pathname;
+  const area = data?.claims ? null : protectedArea(pathname);
+  if (area) return redirectToLogin(request, response, area, pathname);
   return response;
 }

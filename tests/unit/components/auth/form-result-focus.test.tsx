@@ -1,40 +1,41 @@
 // @vitest-environment jsdom
-// Design review F1.1 F-8: after an admin form is submitted, focus moves to the
-// result instead of dropping to <body> (the submit button is disabled while
-// the Server Action runs, which takes the focus away from it).
+// Design review F1.1 F-8: after an auth form (admin or MyLife) is submitted,
+// focus moves to the result instead of dropping to <body> (the submit button
+// is disabled while the Server Action runs, which takes the focus away from
+// it).
 // - a form-level message (error alert, reset confirmation) takes the focus;
 // - with field errors only, the first invalid field takes it;
 // - the first render (nothing submitted) leaves focus alone.
-// The Server Actions are mocked; useActionState, useFormStatus and the form
-// action dispatch are the real React 19 ones.
+// The pages pass each area's Server Action as the `action` prop; here it is a
+// mock. useActionState, useFormStatus and the form action dispatch are the
+// real React 19 ones.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
-
-const actions = vi.hoisted(() => ({
-  signIn: vi.fn(),
-  requestPasswordReset: vi.fn(),
-  signOut: vi.fn(),
-  updatePassword: vi.fn(),
-}));
-
-vi.mock("@/app/admin/(auth)/actions", () => ({
-  signIn: actions.signIn,
-  requestPasswordReset: actions.requestPasswordReset,
-  signOut: actions.signOut,
-}));
-vi.mock("@/app/admin/(panel)/set-password/actions", () => ({
-  updatePassword: actions.updatePassword,
-}));
-
-import ForgotPasswordForm from "@/components/admin/ForgotPasswordForm";
-import LoginForm from "@/components/admin/LoginForm";
-import SetPasswordForm from "@/components/admin/SetPasswordForm";
+import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
+import LoginForm from "@/components/auth/LoginForm";
+import SetPasswordForm from "@/components/auth/SetPasswordForm";
 
 afterEach(cleanup);
 
-const LOGIN_LABELS = { email: "E-mail", password: "Adgangskode", submit: "Log ind" };
+const signIn = vi.fn();
+const requestPasswordReset = vi.fn();
+const updatePassword = vi.fn();
+
+const LOGIN_LABELS = {
+  email: "E-mail",
+  password: "Adgangskode",
+  submit: "Log ind",
+  resetPassword: "Nulstil adgangskode",
+};
+const FORGOT_PASSWORD_PATH = "/mylife/forgot-password";
+
+function renderLoginForm(next: string | null = null) {
+  render(
+    <LoginForm action={signIn} next={next} forgotPasswordHref={FORGOT_PASSWORD_PATH} labels={LOGIN_LABELS} />,
+  );
+}
 
 async function submitLogin() {
   const user = userEvent.setup();
@@ -46,16 +47,16 @@ async function submitLogin() {
 
 describe("F-8: LoginForm moves focus to the result of a sign-in attempt", () => {
   it("leaves focus alone on the first render", () => {
-    render(<LoginForm next={null} labels={LOGIN_LABELS} />);
+    renderLoginForm();
     expect(document.activeElement).toBe(document.body);
   });
 
   it("focuses the error alert after a failed sign-in", async () => {
-    actions.signIn.mockResolvedValue({
+    signIn.mockResolvedValue({
       email: "nobody@example.com",
       error: "Forkert e-mail eller adgangskode",
     });
-    render(<LoginForm next={null} labels={LOGIN_LABELS} />);
+    renderLoginForm();
     await submitLogin();
 
     const alert = await screen.findByRole("alert");
@@ -65,11 +66,11 @@ describe("F-8: LoginForm moves focus to the result of a sign-in attempt", () => 
   });
 
   it("focuses the alert again after a second identical failure", async () => {
-    actions.signIn.mockImplementation(async () => ({
+    signIn.mockImplementation(async () => ({
       email: "nobody@example.com",
       error: "Forkert e-mail eller adgangskode",
     }));
-    render(<LoginForm next={null} labels={LOGIN_LABELS} />);
+    renderLoginForm();
     const user = await submitLogin();
     const alert = await screen.findByRole("alert");
     await waitFor(() => expect(alert).toHaveFocus());
@@ -78,28 +79,39 @@ describe("F-8: LoginForm moves focus to the result of a sign-in attempt", () => 
     expect(alert).not.toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Log ind" }));
 
-    await waitFor(() => expect(actions.signIn).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(signIn).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
   });
 
   it("focuses the first invalid field when there are only field errors", async () => {
-    actions.signIn.mockResolvedValue({
+    signIn.mockResolvedValue({
       email: "nobody@example.com",
       fieldErrors: { password: "Skriv din adgangskode." },
     });
-    render(<LoginForm next={null} labels={LOGIN_LABELS} />);
+    renderLoginForm();
     await submitLogin();
 
     await waitFor(() => expect(screen.getByLabelText("Adgangskode")).toHaveFocus());
     expect(screen.getByLabelText("Adgangskode")).toHaveAttribute("aria-invalid", "true");
   });
+
+  it("posts the accepted next target to the area's action", async () => {
+    signIn.mockResolvedValue({ email: "nobody@example.com", error: "Forkert e-mail eller adgangskode" });
+    renderLoginForm("/mylife/set-password");
+    await submitLogin();
+
+    await waitFor(() => expect(signIn).toHaveBeenCalledTimes(1));
+    const formData = signIn.mock.calls[0]?.[1] as FormData;
+    expect(formData.get("next")).toBe("/mylife/set-password");
+  });
 });
 
 describe("F-8: ForgotPasswordForm moves focus to the confirmation", () => {
   it("focuses the confirmation inside the status region after sending", async () => {
-    actions.requestPasswordReset.mockResolvedValue({ sent: true, email: "nobody@nowhere.test" });
+    requestPasswordReset.mockResolvedValue({ sent: true, email: "nobody@nowhere.test" });
     render(
       <ForgotPasswordForm
+        action={requestPasswordReset}
         labels={{ email: "E-mail", submit: "Send nulstillingslink", sent: "Tjek din e-mail." }}
       />,
     );
@@ -117,11 +129,12 @@ describe("F-8: ForgotPasswordForm moves focus to the confirmation", () => {
 
 describe("F-8: SetPasswordForm moves focus to the error", () => {
   it("focuses the error alert when the password cannot be saved", async () => {
-    actions.updatePassword.mockResolvedValue({
+    updatePassword.mockResolvedValue({
       error: "Den nye adgangskode skal være forskellig fra den nuværende.",
     });
     render(
       <SetPasswordForm
+        action={updatePassword}
         email="admin@example.com"
         minLength={12}
         labels={{

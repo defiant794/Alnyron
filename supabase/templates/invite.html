@@ -1,6 +1,10 @@
 <h2>Du er inviteret til Alnyron</h2>
-<p>Du er blevet inviteret til at redigere indholdet på alnyron.dk.</p>
+<p>Du er blevet inviteret til at oprette din konto på alnyron.dk.</p>
 <p>
+  {{ if or (eq .RedirectTo "https://mylife.alnyron.dk") (eq .RedirectTo "http://mylife.localhost:3000") }}
+  <a href="{{ .RedirectTo }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=invite&amp;next=/mylife/set-password">Tag imod invitationen og vælg en adgangskode</a>
+  {{ else }}
   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=invite&amp;next=/admin/set-password">Tag imod invitationen og vælg en adgangskode</a>
+  {{ end }}
 </p>
 <p>Linket virker kun én gang og udløber efter kort tid. Har du ikke ventet en invitation, kan du se bort fra denne e-mail.</p>

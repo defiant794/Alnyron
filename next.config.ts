@@ -51,12 +51,27 @@ const nextConfig: NextConfig = {
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
       {
+        source: "/mylife/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
         source: "/auth/:path*",
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
-      // Keep the *.workers.dev preview out of search indexes. Uses the same
-      // "noindex, nofollow" value so it never weakens the /admin rule where the
-      // paths overlap (a later matching header rule wins on a shared key).
+      // The MyLife host serves only the private MyLife area. Header rules match
+      // the requested path, before the middleware rewrites it into /mylife
+      // (mylife.alnyron.dk/login is /login here), so the host is matched
+      // instead: production and the local dev/e2e host, with or without the
+      // trailing FQDN dot, like `isMyLifeHost` (`config/mylife.ts`). Next
+      // matches `^value$` against the lowercased Host header without its port.
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "mylife\\.(?:alnyron\\.dk|localhost)\\.?" }],
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      // Keep the *.workers.dev preview out of search indexes. Every X-Robots-Tag
+      // rule uses the same "noindex, nofollow" value, so none weakens another
+      // where they overlap (a later matching header rule wins on a shared key).
       {
         source: "/:path*",
         has: [{ type: "host", value: ".*\\.workers\\.dev" }],

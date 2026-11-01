@@ -1,7 +1,9 @@
 /**
  * Unit tests: updatePassword Server Action (/admin/set-password, the end of
  * the invite and reset links).
- * Journey: admin-auth  AC-ADMINAUTH-01 / 05 / 06 (requireAdmin on every admin action).
+ * Journey: admin-auth  AC-ADMINAUTH-01 / 05 / 06 (requireAdmin on every admin action);
+ * mylife-login  ML-AC29 (the admin action keeps its own gate and home after the
+ * set-password core was shared with MyLife).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,19 +38,21 @@ beforeEach(() => {
   updateUser.mockResolvedValue({ data: { user: {} }, error: null });
 });
 
-describe("updatePassword", () => {
-  it("AC-ADMINAUTH-05f: runs requireAdmin first; a redirect there stops the action", async () => {
+describe("updatePassword (admin): ML-AC29 admin gate and home unchanged", () => {
+  it("AC-ADMINAUTH-05f / ML-AC29: runs requireAdmin first; a redirect there stops the action", async () => {
     mockRequireAdmin.mockRejectedValue(new Error("NEXT_REDIRECT:/admin/no-access"));
 
     await expect(updatePassword(null, form(PASSWORD, PASSWORD))).rejects.toThrow(
       "NEXT_REDIRECT:/admin/no-access",
     );
+    expect(mockRequireAdmin).toHaveBeenCalledTimes(1);
     expect(updateUser).not.toHaveBeenCalled();
   });
 
-  it("AC-ADMINAUTH-06c: saves the password and redirects to /admin", async () => {
+  it("AC-ADMINAUTH-06c / ML-AC29: saves the password and redirects to exactly /admin", async () => {
     await expect(updatePassword(null, form(PASSWORD, PASSWORD))).rejects.toThrow("NEXT_REDIRECT:/admin");
     expect(updateUser).toHaveBeenCalledWith({ password: PASSWORD });
+    expect(mockRedirect.mock.calls).toEqual([["/admin"]]);
   });
 
   it("AC-ADMINAUTH-01q: a short or mismatched password gets Danish field errors before Supabase", async () => {

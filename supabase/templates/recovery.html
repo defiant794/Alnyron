@@ -1,6 +1,10 @@
 <h2>Nulstil din adgangskode</h2>
 <p>Vi har fået en anmodning om at nulstille adgangskoden til din konto på alnyron.dk.</p>
 <p>
+  {{ if or (eq .RedirectTo "https://mylife.alnyron.dk") (eq .RedirectTo "http://mylife.localhost:3000") }}
+  <a href="{{ .RedirectTo }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery&amp;next=/mylife/set-password">Vælg en ny adgangskode</a>
+  {{ else }}
   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery&amp;next=/admin/set-password">Vælg en ny adgangskode</a>
+  {{ end }}
 </p>
 <p>Linket virker kun én gang og udløber efter kort tid. Har du ikke bedt om at nulstille adgangskoden, kan du se bort fra denne e-mail. Din nuværende adgangskode virker stadig.</p>

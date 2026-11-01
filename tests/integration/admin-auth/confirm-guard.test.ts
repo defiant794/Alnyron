@@ -22,9 +22,16 @@ const { mockVerifyOtp } = vi.hoisted(() => ({
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
+// The route reads the user's role after verifyOtp (role-aware landing, mylife-login).
+// No claims = role unknown, so `next` is followed as before: these assertions
+// cover the admin guard only.
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(() => ({
-    auth: { verifyOtp: mockVerifyOtp },
+    auth: {
+      verifyOtp: mockVerifyOtp,
+      getClaims: vi.fn().mockResolvedValue({ data: { claims: null }, error: null }),
+    },
+    from: vi.fn(() => ({ select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })) })),
   })),
 }));
 

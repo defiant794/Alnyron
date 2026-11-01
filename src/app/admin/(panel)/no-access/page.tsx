@@ -4,11 +4,12 @@ import { redirect } from "next/navigation";
 import { signOut } from "@/app/admin/(auth)/actions";
 import Link from "@/components/ui/Link";
 import SubmitButton from "@/components/ui/SubmitButton";
-import { ADMIN_HOME_PATH, ADMIN_LOCALE, ADMIN_LOGIN_PATH } from "@/config/admin";
+import { ADMIN_HOME_PATH, ADMIN_LOGIN_PATH } from "@/config/admin";
+import { AUTH_LOCALE } from "@/config/auth-areas";
 import { getAdminAccess } from "@/services/auth/require-admin";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations({ locale: ADMIN_LOCALE, namespace: "AdminAuth.noAccess" });
+  const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Auth.noAccess" });
   return { title: t("title") };
 }
 
@@ -25,18 +26,18 @@ export default async function NoAccessPage() {
   if (access.status === "anonymous") redirect(ADMIN_LOGIN_PATH);
   if (access.status === "admin") redirect(ADMIN_HOME_PATH);
 
-  const t = await getTranslations({ locale: ADMIN_LOCALE, namespace: "AdminAuth" });
-  const tAccount = await getTranslations({ locale: ADMIN_LOCALE, namespace: "Admin.account" });
+  const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Auth" });
+  const tAdmin = await getTranslations({ locale: AUTH_LOCALE, namespace: "AdminAuth" });
 
   return (
     <>
       <header className="flex flex-col gap-2 text-center">
         <h1 className="text-h1 font-semibold">{t("noAccess.title")}</h1>
-        <p>{t("noAccess.body", { email: access.email })}</p>
+        <p>{tAdmin("noAccess.body", { email: access.email })}</p>
         <p className="text-muted">{t("noAccess.help")}</p>
       </header>
       <form action={signOut}>
-        <SubmitButton className="w-full">{tAccount("signOut")}</SubmitButton>
+        <SubmitButton className="w-full">{t("signOut")}</SubmitButton>
       </form>
       <div className="flex justify-center">
         <Link href={ADMIN_LOGIN_PATH} className="inline-flex min-h-11 items-center">

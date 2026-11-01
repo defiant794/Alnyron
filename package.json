@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "db:push": "supabase db push --linked",
     "db:types": "supabase gen types typescript --project-id xmgpixhxecamtryohgmk --schema public > src/types/database.ts",
-    "cf:build": "opennextjs-cloudflare build && node scripts/guard-no-e2e-secret.mjs",
+    "cf:build": "opennextjs-cloudflare build && node scripts/guard-no-bundled-secrets.mjs",
     "preview": "npm run cf:build && opennextjs-cloudflare preview",
     "deploy": "npm run cf:build && opennextjs-cloudflare deploy",
     "upload": "npm run cf:build && opennextjs-cloudflare upload",

@@ -1,13 +1,15 @@
 "use client";
 
 import { useActionState } from "react";
-import { updatePassword } from "@/app/admin/(panel)/set-password/actions";
 import Field from "@/components/ui/Field";
 import Notice from "@/components/ui/Notice";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { useFormResultFocus } from "@/hooks/use-form-result-focus";
+import type { SetPasswordState } from "@/services/auth/set-password";
 
 export type SetPasswordFormProps = {
+  /** The area's `updatePassword` Server Action (admin or MyLife). */
+  action: (previous: SetPasswordState, formData: FormData) => Promise<SetPasswordState>;
   /** The account's email, offered to password managers alongside the new password. */
   email: string;
   /** Minimum password length, also enforced by the server schema. */
@@ -16,11 +18,11 @@ export type SetPasswordFormProps = {
 };
 
 /**
- * New password + repeat, posting to the `updatePassword` Server Action.
+ * New password + repeat, posting to an `updatePassword` Server Action.
  * Errors take the focus; the full-width submit matches the login forms.
  */
-export default function SetPasswordForm({ email, minLength, labels }: SetPasswordFormProps) {
-  const [state, formAction] = useActionState(updatePassword, {});
+export default function SetPasswordForm({ action, email, minLength, labels }: SetPasswordFormProps) {
+  const [state, formAction] = useActionState(action, {});
   const formRef = useFormResultFocus(state);
 
   return (

@@ -161,8 +161,10 @@ site_url = "http://localhost:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-# Empty: the app passes no redirectTo; the DA email templates build their links from site_url.
-additional_redirect_urls = []
+# The MyLife password-reset action passes its own origin as redirectTo (never user input); the DA
+# templates build the link from {{ .RedirectTo }} only when it is exactly https://mylife.alnyron.dk or
+# http://mylife.localhost:3000. Production: add https://mylife.alnyron.dk.
+additional_redirect_urls = ["http://mylife.localhost:3000"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -246,8 +248,13 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# DA templates (F1.1). Links go to {{ .SiteURL }}/auth/confirm with the token hash (verifyOtp),
-# never to {{ .ConfirmationURL }} or {{ .RedirectTo }}: dashboard invites carry no redirectTo.
+# DA templates (F1.1, MyLife). Links go to <origin>/auth/confirm with the token hash (verifyOtp),
+# never to {{ .ConfirmationURL }}. The MyLife branch is pinned to the two exact MyLife origins:
+# a MyLife reset (redirectTo = https://mylife.alnyron.dk or http://mylife.localhost:3000, allowlisted
+# above) links {{ .RedirectTo }}/...&next=/mylife/set-password. Every other {{ .RedirectTo }} (the
+# Site URL GoTrue fills in when no redirectTo is sent, as for admin resets and dashboard invites, or
+# any other allowlisted URL) gets {{ .SiteURL }}/...&next=/admin/set-password, so no other origin
+# ever receives a token link. /auth/confirm redirects by role either way.
 # Production: paste the same subject + HTML into the dashboard and set Site URL to the public
 # origin (F1.7).
 [auth.email.template.invite]

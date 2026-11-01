@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import AdminAccount from "@/components/admin/AdminAccount";
 import AdminNav from "@/components/admin/AdminNav";
 import Logo from "@/components/brand/Logo";
-import { ADMIN_HOME_PATH, ADMIN_LOCALE } from "@/config/admin";
+import { ADMIN_HOME_PATH } from "@/config/admin";
+import { AUTH_LOCALE } from "@/config/auth-areas";
 import type { AdminUser } from "@/services/auth/require-admin";
 
 export type AdminShellProps = {
@@ -22,11 +23,12 @@ export type AdminShellProps = {
  * (in reading and in tab order).
  */
 export default async function AdminShell({ user, children }: AdminShellProps) {
-  const t = await getTranslations({ locale: ADMIN_LOCALE, namespace: "Admin" });
+  const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Admin" });
+  const tAuth = await getTranslations({ locale: AUTH_LOCALE, namespace: "Auth" });
   const accountLabels = {
     region: t("account.label"),
     role: t(`account.roles.${user.role}`),
-    signOut: t("account.signOut"),
+    signOut: tAuth("signOut"),
   };
 
   return (

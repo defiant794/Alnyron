@@ -36,7 +36,6 @@
     },
     "account": {
       "label": "Konto",
-      "signOut": "Log ud",
       "roles": {
         "owner": "Ejer",
         "admin": "Administrator"
@@ -46,22 +45,23 @@
       "title": "Oversigt",
       "lead": "Velkommen til administrationen af alnyron.dk.",
       "signedInAs": "Du er logget ind som {email} ({role})."
-    },
+    }
+  },
+  "Auth": {
+    "signOut": "Log ud",
     "error": {
       "title": "Noget gik galt",
       "body": "Siden kunne ikke indlæses. Fejlen er hos os, så prøv igen om lidt.",
       "retry": "Prøv igen"
-    }
-  },
-  "AdminAuth": {
-    "noSignup": "Ingen offentlig tilmelding. Adgang gives af ejeren.",
+    },
     "login": {
       "title": "Log ind",
-      "lead": "Log ind for at redigere indholdet på alnyron.dk.",
+      "errorTitle": "Fejl: {title}",
       "email": "E-mail",
       "password": "Adgangskode",
       "submit": "Log ind",
       "forgotPassword": "Glemt adgangskode?",
+      "resetPassword": "Nulstil adgangskode",
       "invalidCredentials": "Forkert e-mail eller adgangskode",
       "rateLimited": "For mange forsøg på kort tid. Vent et par minutter, og prøv igen.",
       "unavailable": "Login virker ikke lige nu. Prøv igen om lidt.",
@@ -89,7 +89,6 @@
     },
     "noAccess": {
       "title": "Ingen adgang",
-      "body": "Kontoen {email} har ikke adgang til administrationen.",
       "help": "Kontakt ejeren, hvis du mener, det er en fejl, eller log ud og log ind med en anden konto.",
       "switchAccount": "Log ind med en anden konto"
     },
@@ -99,6 +98,35 @@
       "passwordTooShort": "Adgangskoden skal være på mindst {min} tegn.",
       "passwordTooLong": "Adgangskoden er for lang. Den må højst være på {max} tegn, og færre hvis den indeholder æ, ø, å eller lignende tegn.",
       "passwordMismatch": "De to adgangskoder er ikke ens."
+    }
+  },
+  "AdminAuth": {
+    "noSignup": "Ingen offentlig tilmelding. Adgang gives af ejeren.",
+    "login": {
+      "lead": "Log ind for at redigere indholdet på alnyron.dk."
+    },
+    "noAccess": {
+      "body": "Kontoen {email} har ikke adgang til administrationen."
+    }
+  },
+  "MyLife": {
+    "name": "MyLife",
+    "login": {
+      "tagline": "Din private sundhedsapp",
+      "badge": "Kun for godkendte brugere",
+      "forgotLink": "Nulstil",
+      "noSignup": "Ingen offentlig tilmelding · adgang gives af ejeren",
+      "emailPlaceholder": "dig@eksempel.dk",
+      "passwordPlaceholder": "••••••••"
+    },
+    "noAccess": {
+      "body": "Kontoen {email} har ikke adgang til MyLife."
+    },
+    "home": {
+      "title": "MyLife kommer snart",
+      "metaTitle": "Kommer snart",
+      "lead": "Appen er under udvikling og åbner her, når den er klar.",
+      "signedInAs": "Du er logget ind som {email}."
     }
   }
 }
