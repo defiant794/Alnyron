@@ -210,8 +210,8 @@ describe.skipIf(!DB_AVAILABLE)("System pages are permanent", () => {
         [[homeId, contactId]],
       );
       expect(rows).toEqual([
-        { system_key: "contact", show_in_nav: false, nav_order: 10 },
-        { system_key: "home", show_in_nav: true, nav_order: 20 },
+        { system_key: "contact", show_in_nav: false, nav_order: 1010 },
+        { system_key: "home", show_in_nav: true, nav_order: 1020 },
       ]);
     });
   }, 12_000);

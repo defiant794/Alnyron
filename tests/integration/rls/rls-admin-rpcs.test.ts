@@ -9,7 +9,7 @@
  *   - admin_save_page with a slug already used by a category (same locale) raises 23505
  *   - admin_set_page_status publishes a custom page with two route slugs and stamps
  *     published_at; raises P0001 when fewer than 2 locale routes exist
- *   - admin_reorder_nav sets nav_order from the array position (10, 20, …)
+ *   - admin_reorder_nav sets nav_order from the array position (1000+10, 1000+20, …)
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -293,7 +293,7 @@ describe.skipIf(!DB_AVAILABLE)("RLS — admin RPCs", () => {
         [[first, second, third]],
       );
       const order = Object.fromEntries(rows.map((r) => [r.id, r.nav_order]));
-      expect(order).toEqual({ [third]: 10, [first]: 20, [second]: 30 });
+      expect(order).toEqual({ [third]: 1010, [first]: 1020, [second]: 1030 });
     });
   }, 12_000);
 });

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import AdminAccount from "@/components/admin/AdminAccount";
 import AdminNav from "@/components/admin/AdminNav";
 import Logo from "@/components/brand/Logo";
-import { ADMIN_HOME_PATH } from "@/config/admin";
+import { ADMIN_HOME_PATH, ADMIN_PAGES_PATH } from "@/config/admin";
 import { AUTH_LOCALE } from "@/config/auth-areas";
 import type { AdminUser } from "@/services/auth/require-admin";
 
@@ -16,8 +16,8 @@ export type AdminShellProps = {
  * Admin panel frame (approved admin mock): sidebar with the lockup, the
  * sections that exist so far and the signed-in account with "Log ud"; page
  * content on the right. A section joins the navigation together with its
- * page, so no link leads to a 404 (pages and settings arrive with F1.2 and
- * F1.5, catalogs and newsletter in P2). Below 768px the sidebar becomes a
+ * page, so no link leads to a 404 (settings arrive with F1.5, catalogs and
+ * newsletter in P2). Below 768px the sidebar becomes a
  * top bar: logo and a compact account in one row, the navigation under it,
  * then the content, so nothing comes between the navigation and the page
  * (in reading and in tab order).
@@ -40,7 +40,10 @@ export default async function AdminShell({ user, children }: AdminShellProps) {
         </div>
         <AdminNav
           label={t("nav.label")}
-          items={[{ href: ADMIN_HOME_PATH, label: t("nav.overview"), exact: true }]}
+          items={[
+            { href: ADMIN_HOME_PATH, label: t("nav.overview"), exact: true },
+            { href: ADMIN_PAGES_PATH, label: t("nav.pages") },
+          ]}
         />
         <AdminAccount user={user} variant="sidebar" labels={accountLabels} />
       </aside>

@@ -25,5 +25,9 @@
     "title": "Page not found",
     "body": "The page has moved or no longer exists.",
     "home": "Go to the home page"
+  },
+  "Contact": {
+    "responseTime": "Response time",
+    "languages": "Languages"
   }
 }

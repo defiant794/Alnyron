@@ -28,11 +28,16 @@
     "body": "Siden er flyttet eller findes ikke længere.",
     "home": "Gå til forsiden"
   },
+  "Contact": {
+    "responseTime": "Svartid",
+    "languages": "Sprog"
+  },
   "Admin": {
     "metaTitle": "Alnyron administration",
     "nav": {
       "label": "Administration",
-      "overview": "Oversigt"
+      "overview": "Oversigt",
+      "pages": "Sider"
     },
     "account": {
       "label": "Konto",
@@ -45,6 +50,99 @@
       "title": "Oversigt",
       "lead": "Velkommen til administrationen af alnyron.dk.",
       "signedInAs": "Du er logget ind som {email} ({role})."
+    },
+    "pages": {
+      "title": "Sider",
+      "lead": "Rediger forsiden, kontaktsiden og privatlivspolitikken på dansk og engelsk, og vælg hvilke sider der står i menuen.",
+      "table": {
+        "caption": "Alle sider",
+        "page": "Side",
+        "status": "Status",
+        "actions": "Handlinger"
+      },
+      "status": {
+        "published": "Offentlig",
+        "draft": "Kladde"
+      },
+      "menu": {
+        "shown": "Vises i menuen",
+        "hidden": "Ikke i menuen"
+      },
+      "edit": "Rediger",
+      "moveUp": "Flyt op",
+      "moveDown": "Flyt ned",
+      "orderHint": "Her bestemmer du sidernes indbyrdes rækkefølge i menuen. Forsiden står altid først, og de andre sider står efter områderne.",
+      "errors": {
+        "invalid": "Ændringen kunne ikke gemmes, fordi nogle felter er ugyldige. Genindlæs siden, og prøv igen.",
+        "da-title-required": "Skriv en titel på dansk. Den danske titel skal altid være udfyldt.",
+        "slug-taken": "Adressen bruges allerede af en anden side. Vælg en anden adresse.",
+        "system-slug": "Siden har en fast adresse, som ikke kan ændres.",
+        "missing-slugs": "Siden skal have en adresse på både dansk og engelsk, før den kan offentliggøres.",
+        "system-always-published": "Siden er altid offentlig og kan ikke gøres til en kladde.",
+        "not-found": "Siden findes ikke længere. Gå tilbage til listen over sider.",
+        "forbidden": "Du har ikke adgang til at ændre sider.",
+        "failed": "Ændringen kunne ikke gemmes. Prøv igen om lidt."
+      },
+      "editor": {
+        "metaTitle": "Rediger side",
+        "title": "Rediger side: {name}",
+        "lead": "Tomme engelske felter viser den danske tekst på den engelske side.",
+        "back": "Alle sider",
+        "preview": "Forhåndsvis",
+        "newTab": "(åbner i en ny fane)",
+        "languages": "Sprog",
+        "locales": {
+          "da": "Dansk",
+          "en": "Engelsk"
+        },
+        "fields": {
+          "title": "Titel",
+          "lead": "Lead",
+          "leadHint": "Kort tekst under titlen. Kan være tom.",
+          "body": "Indhold",
+          "bodyHint": "Markdown: ## Overskrift, **fed**, - punkt og [tekst](https://…). '{email}' bliver til kontaktadressen. HTML vises som almindelig tekst.",
+          "seo": "SEO",
+          "seoTitle": "SEO-titel",
+          "seoTitleHint": "Vises i søgeresultater og i browserfanen. Tom: sidens navn.",
+          "seoDescription": "SEO-beskrivelse",
+          "seoDescriptionHint": "Kort beskrivelse til søgeresultater. Tom: sitets standardbeskrivelse.",
+          "showInNav": "Vis i menuen",
+          "showInNavHint": "Siden står i topmenuen på sitet."
+        },
+        "content": {
+          "home": {
+            "whatWeDo": {
+              "legend": "Hvad vi laver",
+              "eyebrow": "Overlinje",
+              "title": "Overskrift",
+              "intro": "Intro",
+              "note": "Note"
+            },
+            "ctaBand": {
+              "legend": "Kontaktbånd",
+              "title": "Overskrift",
+              "text": "Tekst"
+            }
+          },
+          "contact": {
+            "eyebrow": "Overlinje",
+            "responseTime": "Svartid",
+            "languages": "Sprog"
+          },
+          "privacy": {
+            "eyebrow": "Overlinje"
+          }
+        },
+        "contentHints": {
+          "home": {
+            "ctaBand": {
+              "text": "{email} bliver til et link til kontaktadressen."
+            }
+          }
+        },
+        "save": "Gem",
+        "saved": "Gemt. Ændringerne vises nu på sitet."
+      }
     }
   },
   "Auth": {

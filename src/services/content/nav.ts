@@ -1,12 +1,10 @@
 import type { Locale } from "next-intl";
 import { getTranslations } from "next-intl/server";
+import { SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
 import { getPathname } from "@/i18n/navigation";
 import { resolveContent } from "@/lib/i18n/resolve-content";
 import { getPublicClient } from "@/lib/supabase/public";
-import type { Database } from "@/types/database";
 import { getPublicCategories } from "./categories";
-
-type SystemPageKey = Database["public"]["Enums"]["system_page_key"];
 
 /** One header navigation link. */
 export interface NavItem {
@@ -21,13 +19,6 @@ export interface NavItem {
   /** Set when the label's language differs from the page (Danish fallback on an English page). */
   lang?: Locale;
 }
-
-/** Internal next-intl pathname of each system page (`routing.pathnames`). */
-const SYSTEM_PATHNAMES = {
-  home: "/",
-  contact: "/contact",
-  privacy: "/privacy",
-} as const satisfies Record<SystemPageKey, string>;
 
 /**
  * Orders nav items: home first, then everything else by ascending `navOrder`
@@ -67,7 +58,7 @@ export async function getNavItems(locale: Locale): Promise<NavItem[]> {
       items.push({
         key: `system-${page.system_key}`,
         label: t(page.system_key),
-        href: getPathname({ href: SYSTEM_PATHNAMES[page.system_key], locale }),
+        href: getPathname({ href: SYSTEM_PAGE_PATHNAMES[page.system_key], locale }),
         navOrder: page.nav_order,
         isHome: page.system_key === "home",
       });

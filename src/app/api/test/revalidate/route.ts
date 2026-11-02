@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { revalidatePath } from "next/cache";
 import type { NextRequest } from "next/server";
+import { revalidatePublicContent } from "@/lib/revalidate";
 
 /** Header carrying the shared secret (tests/e2e/fixtures/revalidate.ts sends it). */
 const SECRET_HEADER = "x-revalidate-secret";
@@ -11,8 +11,8 @@ const digest = (value: string) => createHash("sha256").update(value).digest();
 /**
  * TEST ONLY: refreshes every public page's ISR cache so the e2e DB fixtures
  * see their rows on a production build (`next start`), where the pages are
- * served from the cache. Admin publishing will revalidate on demand itself
- * (F1.2); until then nothing else does.
+ * served from the cache. Admin mutations refresh it the same way on their own
+ * (`revalidatePublicContent`).
  *
  * Inert unless `E2E_REVALIDATE_SECRET` is set in the server's environment:
  * without it, or with a missing or wrong `x-revalidate-secret` header, POST
@@ -30,8 +30,6 @@ export async function POST(request: NextRequest) {
     return new Response(null, { status: 404 });
   }
 
-  // The `[locale]` layout holds the header nav and footer, so the root
-  // layout path covers every page in both locales.
-  revalidatePath("/", "layout");
+  revalidatePublicContent();
   return Response.json({ revalidated: true });
 }
