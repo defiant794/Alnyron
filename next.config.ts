@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+import { MEDIA_BUCKET } from "./src/config/catalog";
 
 // Points next-intl's server APIs at the per-request config (locale + messages).
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
@@ -17,11 +18,17 @@ const scriptSrc = isDev
   ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
   : "script-src 'self' 'unsafe-inline'";
 
+// Catalog images load from the public media bucket of the Supabase project
+// (src/lib/public-media-url.ts); only that path prefix is allowed.
+const mediaImageSrc = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ? ` ${new URL(`/storage/v1/object/public/${MEDIA_BUCKET}/`, process.env.NEXT_PUBLIC_SUPABASE_URL).toString()}`
+  : "";
+
 const csp = [
   "default-src 'self'",
   scriptSrc,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  `img-src 'self' data: blob:${mediaImageSrc}`,
   "font-src 'self'",
   "connect-src 'self'",
   "frame-ancestors 'none'",

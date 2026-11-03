@@ -14,6 +14,7 @@ import {
   PRICE_CURRENCY,
   RESERVED_ROUTE_SLUGS,
   SLUG_MAX_LENGTH,
+  SLUG_PATTERN,
   type PriceType,
 } from "@/config/catalog";
 import { DA_TITLE_REQUIRED } from "@/lib/validation/pages";
@@ -46,7 +47,6 @@ export const TOO_LARGE = "too-large";
 /** Upload type the `media` bucket does not accept. */
 export const UNSUPPORTED_TYPE = "unsupported-type";
 
-const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const EXTERNAL_LINK_PATTERN = /^https:\/\/[^\s<>"]+$/;
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 /** The object names `private.media_path_valid` accepts: `items/{item id}/{uuid}.{ext}`. */

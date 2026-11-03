@@ -5,6 +5,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import SiteFooter from "@/components/site/SiteFooter";
 import SiteHeader from "@/components/site/SiteHeader";
 import SkipLink from "@/components/ui/SkipLink";
+import { parseSiteEnv } from "@/config/env";
 import { routing } from "@/i18n/routing";
 import { inter } from "@/styles/fonts";
 import "@/styles/globals.css";
@@ -35,6 +36,10 @@ export async function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
 
+/**
+ * Site name/description defaults, and `metadataBase` (`NEXT_PUBLIC_SITE_URL`)
+ * so pages can give site-relative canonical and hreflang alternates.
+ */
 export async function generateMetadata({
   params,
 }: Pick<LocaleLayoutProps, "params">): Promise<Metadata> {
@@ -43,6 +48,7 @@ export async function generateMetadata({
 
   const t = await getTranslations({ locale, namespace: "Metadata" });
   return {
+    metadataBase: new URL(parseSiteEnv().NEXT_PUBLIC_SITE_URL),
     title: { default: t("siteName"), template: `%s | ${t("siteName")}` },
     description: t("description"),
   };

@@ -1,12 +1,14 @@
 /**
  * Unit tests — slugify utility (F2.1 catalog-model)
  * Journey: catalog-model  AC-CAT-60, AC-CAT-61, AC-CAT-62, AC-CAT-63, AC-CAT-64
+ * isValidSlug: journey catalog-public  AC-CATPUB-01, AC-CATPUB-10 (malformed route slugs 404 pre-DB)
  *
  * Module: src/lib/slugify.ts
  */
 
 import { describe, it, expect } from "vitest";
-import { slugify } from "@/lib/slugify";
+import { isValidSlug, slugify } from "@/lib/slugify";
+import { MALFORMED_SLUGS } from "../../helpers/catalog-fixtures";
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -189,5 +191,21 @@ describe("AC-CAT-64: slugify output matches slug regex or is empty", () => {
   it("a non-empty valid word never returns empty", () => {
     const result = slugify("hello");
     expect(result).toMatch(SLUG_RE);
+  });
+});
+
+describe("AC-CATPUB-01/AC-CATPUB-10: isValidSlug accepts exactly the stored slug format", () => {
+  it.each(["ydelser", "web-development", "app2024", "a", "a".repeat(80)])("accepts %s", (slug) => {
+    expect(isValidSlug(slug)).toBe(true);
+  });
+
+  it.each(MALFORMED_SLUGS)("rejects a slug with %s", (_problem, slug) => {
+    expect(isValidSlug(slug)).toBe(false);
+  });
+
+  it("accepts every non-empty slugify output", () => {
+    for (const title of ["My New App", "Bæredygtig Løsning", "a".repeat(90), "a".repeat(79) + " b"]) {
+      expect(isValidSlug(slugify(title))).toBe(true);
+    }
   });
 });

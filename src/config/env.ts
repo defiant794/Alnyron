@@ -27,8 +27,12 @@ const supabasePublicSchema = publicSchema.pick({
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: true,
 });
 
+// The site's own origin, for absolute URLs (metadata base, sitemap).
+const siteSchema = publicSchema.pick({ NEXT_PUBLIC_SITE_URL: true });
+
 export type PublicEnv = z.infer<typeof publicSchema>;
 export type SupabasePublicEnv = z.infer<typeof supabasePublicSchema>;
+export type SiteEnv = z.infer<typeof siteSchema>;
 export type ServerEnv = z.infer<typeof serverSchema>;
 
 function parseWith<T>(
@@ -67,6 +71,15 @@ export function parseSupabasePublicEnv(
   },
 ): SupabasePublicEnv {
   return parseWith(supabasePublicSchema, source, "Supabase public");
+}
+
+/** The site URL only (absolute links, sitemap); same literal-reference rule as above. */
+export function parseSiteEnv(
+  source: Record<string, string | undefined> = {
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+  },
+): SiteEnv {
+  return parseWith(siteSchema, source, "site");
 }
 
 export function parseServerEnv(

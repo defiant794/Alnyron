@@ -1,14 +1,29 @@
 import { defineConfig, devices } from "@playwright/test";
-import { supabaseDbEnv } from "./tests/helpers/supabase-db-env";
 import { e2eEnv } from "./tests/helpers/e2e-env";
+import { WITHOUT_E2E_PROJECT, e2eProjectEnv } from "./tests/helpers/e2e-project-env";
+import { applyEnvPatch } from "./tests/helpers/env-file";
+import { supabaseDbEnv } from "./tests/helpers/supabase-db-env";
 
-// The e2e DB fixtures (tests/e2e/fixtures) connect like the integration tests:
-// SUPABASE_DB_* only, from the environment or the git-ignored tests/.env.e2e.
 // The config is evaluated in the runner and in every worker.
-Object.assign(process.env, supabaseDbEnv(__dirname));
-// The admin-auth seed fixtures also need NEXT_PUBLIC_SUPABASE_URL (.env.local)
+//
+// With the git-ignored tests/.env.e2e-project present, the whole run targets
+// the isolated e2e Supabase project, and only it: the DB fixtures
+// (tests/e2e/fixtures, via tests/integration/rls/helpers/db.ts, with
+// SUPABASE_E2E_DB_PASSWORD), the admin-auth seeds (URL + secret key) and the
+// catalog spec's project guard. The file decides every Supabase key: a value
+// of them already in the environment is replaced or removed, and the
+// production SUPABASE_DB_PASSWORD is removed. Start the app against the same
+// project (`npm run dev:e2e`).
+//
+// Without it, the linked project as before: the DB fixtures connect like the
+// integration tests (SUPABASE_DB_* from the environment or tests/.env.e2e), and
+// the admin-auth seed fixtures also need NEXT_PUBLIC_SUPABASE_URL (.env.local)
 // and SUPABASE_SECRET_KEY (tests/.env.e2e only: OpenNext bundles .env.local).
-Object.assign(process.env, e2eEnv(__dirname));
+// Stale SUPABASE_E2E_* values in the environment are removed.
+applyEnvPatch(
+  process.env,
+  e2eProjectEnv(__dirname) ?? { ...WITHOUT_E2E_PROJECT, ...supabaseDbEnv(__dirname), ...e2eEnv(__dirname) },
+);
 
 // E2E specs live in tests/e2e (kept separate from Vitest unit tests).
 export default defineConfig({

@@ -1,4 +1,4 @@
-import { SLUG_MAX_LENGTH } from "@/config/catalog";
+import { SLUG_MAX_LENGTH, SLUG_PATTERN } from "@/config/catalog";
 
 /**
  * Lower-case letters that NFKD does not reduce to an ASCII base letter: no
@@ -39,4 +39,14 @@ export function slugify(input: string): string {
     .toLowerCase(); // NFKD can yield capitals from letters without a lower-case form (`ℂ` → `C`)
   const slug = ascii.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return slug.slice(0, SLUG_MAX_LENGTH).replace(/-+$/, "");
+}
+
+/**
+ * Whether `value` is in the slug format the `routes_slug_format` and
+ * `item_translations` slug CHECKs accept (at most 80 characters of
+ * lower-case `a-z0-9` words joined by single dashes). No stored slug fails
+ * it, so a route may answer 404 for one that does without reading the DB.
+ */
+export function isValidSlug(value: string): boolean {
+  return value.length <= SLUG_MAX_LENGTH && SLUG_PATTERN.test(value);
 }

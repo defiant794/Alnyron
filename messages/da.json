@@ -37,6 +37,26 @@
       "from": "fra",
       "vatIncluded": "inkl. moms",
       "contact": "Kontakt"
+    },
+    "featured": "Udvalgt",
+    "itemsHeading": "Oversigt",
+    "breadcrumb": "Brødkrummesti",
+    "gallery": {
+      "label": "Billeder",
+      "show": "Vis billede {index} af {count}"
+    },
+    "links": {
+      "label": "Links",
+      "website": "Hjemmeside",
+      "demo": "Se demo",
+      "app_store": "App Store",
+      "google_play": "Google Play",
+      "download": "Download"
+    },
+    "cta": {
+      "title": "Interesseret?",
+      "text": "Skriv til os, så vender vi tilbage med et uforpligtende bud.",
+      "button": "Kontakt os"
     }
   },
   "Admin": {

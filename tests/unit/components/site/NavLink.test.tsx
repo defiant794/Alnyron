@@ -7,6 +7,8 @@
 //   DB-slug route and both home pages ("/" must not match "/apps"), in the
 //   prerendered HTML too;
 // - a link into the other locale is never current;
+// - on a catalog item page its section link is marked "true", never "page"
+//   (the item, in the breadcrumb, is the current page);
 // - `lang` (set on labels shown from Danish) and other props pass through.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
@@ -106,6 +108,17 @@ describe('AC-HOME-04/05: NavLink marks only the current page with aria-current="
     expect(current[0]).toHaveAttribute("aria-current", "page");
   });
 
+  it.each([
+    ["da", "ydelser", { href: "/ydelser", label: "Ydelser" }],
+    ["en", "services", { href: "/en/services", label: "Services" }],
+  ] as const)('%s section page /%s: the section link is the current page (aria-current="page")', (locale, slug, link) => {
+    renderNav(locale, [slug], { params: { slug }, items: [...NAV[locale], link] });
+    const current = currentLinks();
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveTextContent(link.label);
+    expect(current[0]).toHaveAttribute("aria-current", "page");
+  });
+
   it("marks Kontakt on the prerendered /kontakt, where usePathname is the rewrite target /da/contact", () => {
     renderNav("da", ["contact"], { pathname: "/da/contact" });
     const current = currentLinks();
@@ -121,6 +134,40 @@ describe('AC-HOME-04/05: NavLink marks only the current page with aria-current="
   it("never marks a link into the other locale (/kontakt while on /en/contact)", () => {
     renderNav("en", ["contact"], { items: [{ href: "/kontakt", label: "Kontakt" }] });
     expect(screen.getByRole("link", { name: "Kontakt" })).not.toHaveAttribute("aria-current");
+  });
+});
+
+// ── Catalog item pages mark their section (approved item detail mock) ────────
+
+describe('NavLink marks the section of a catalog item page with aria-current="true"', () => {
+  it.each([
+    ["da", "som-app", "Apps"],
+    ["en", "some-app", "Apps"],
+  ] as const)("%s item %s: only the section link %s is marked, and as the section", (locale, item, label) => {
+    renderNav(locale, ["apps", item], { params: { slug: "apps", item } });
+    const current = currentLinks();
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveTextContent(label);
+    expect(current[0]).toHaveAttribute("aria-current", "true");
+  });
+
+  it('never marks a nav link "page" on an item page: the item itself is the current page (breadcrumb)', () => {
+    renderNav("da", ["ydelser", "webudvikling"], {
+      params: { slug: "ydelser", item: "webudvikling" },
+      items: [...NAV.da, { href: "/ydelser", label: "Ydelser" }],
+    });
+    expect(screen.getByRole("link", { name: "Ydelser" })).toHaveAttribute("aria-current", "true");
+    expect(currentLinks().filter((link) => link.getAttribute("aria-current") === "page")).toHaveLength(0);
+  });
+
+  it("never marks the home link as a section (every EN path lies below /en)", () => {
+    renderNav("en", ["apps", "some-app"], { params: { slug: "apps", item: "some-app" } });
+    expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("does not mark a link whose path is only a prefix of the segment (/apps vs /apps-pro)", () => {
+    renderNav("da", ["apps-pro"], { params: { slug: "apps-pro" } });
+    expect(currentLinks()).toHaveLength(0);
   });
 });
 

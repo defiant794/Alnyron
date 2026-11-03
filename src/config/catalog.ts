@@ -44,6 +44,9 @@ export const EXTERNAL_LINK_MAX_LENGTH = 2048;
 /** Images per item (the `media_limit_per_item` trigger rejects the 9th: `too_many_media`). */
 export const MEDIA_MAX_PER_ITEM = 8;
 
+/** The Storage bucket of catalog images: public reads, writes only under the admin policies. */
+export const MEDIA_BUCKET = "media";
+
 /** Max length of an image's alt text in each locale (the `media_alt_da_length` / `media_alt_en_length` CHECKs). */
 export const MEDIA_ALT_MAX = 300;
 
@@ -68,6 +71,12 @@ export const PRICE_CURRENCY = "DKK";
 
 /** Max length of a route or item slug (`routes_slug_format`, `item_translations` slug CHECK). */
 export const SLUG_MAX_LENGTH = 80;
+
+/**
+ * Format of a route or item slug (`routes_slug_format`, `item_translations`
+ * slug CHECK): lower-case `a-z0-9` words joined by single dashes.
+ */
+export const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
  * Slugs no route may take (the `routes_slug_reserved` CHECK): app paths and

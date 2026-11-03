@@ -9,7 +9,7 @@
 /playwright-report
 
 # next.js
-/.next/
+/.next*/
 /out/
 
 # production
@@ -38,6 +38,8 @@ yarn-error.log*
 # test-only secrets (DB password, e2e service key): kept out of the root, where
 # @opennextjs/cloudflare compiles every .env* file into the Worker bundle
 tests/.env.e2e
+# catalog-public E2E isolated project credentials (never the prod project)
+tests/.env.e2e-project
 
 # vercel
 .vercel

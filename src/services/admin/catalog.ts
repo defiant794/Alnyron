@@ -1,5 +1,6 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import type { z } from "zod";
+import { MEDIA_BUCKET } from "@/config/catalog";
 import { createServerClient } from "@/lib/supabase/server";
 import {
   ALT_REQUIRED,
@@ -18,9 +19,6 @@ import {
   uuidSchema,
 } from "@/lib/validation/catalog";
 import type { Database } from "@/types/database";
-
-/** The Storage bucket of catalog images (public; written only under the admin policies). */
-export const MEDIA_BUCKET = "media";
 
 /**
  * Why a catalog mutation failed (the admin UI maps each to copy):

@@ -1,11 +1,10 @@
 import type { PostgrestError } from "@supabase/supabase-js";
-import { MEDIA_EXTENSION } from "@/config/catalog";
+import { MEDIA_BUCKET, MEDIA_EXTENSION } from "@/config/catalog";
 import { createServerClient } from "@/lib/supabase/server";
 import { attachMediaSchema, mediaUploadSchema, uuidSchema } from "@/lib/validation/catalog";
 import {
   failure,
   invalidInput,
-  MEDIA_BUCKET,
   removeMediaObjects,
   type CatalogActionResult,
   type CatalogFailure,

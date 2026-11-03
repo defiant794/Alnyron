@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { MARKDOWN_BODY_CLASSES } from "@/components/site/markdown-body";
 import { routing } from "@/i18n/routing";
 import { sanitizeMarkdown } from "@/lib/sanitize-markdown";
 import { getPageMetadata, getPrivacyPage } from "@/services/content/pages";
@@ -17,22 +18,6 @@ export async function generateMetadata({ params }: PrivacyProps): Promise<Metada
   ]);
   return { title: seo.title || t("privacy"), ...(seo.description && { description: seo.description }) };
 }
-
-/**
- * Markdown body styles (no typography plugin): DESIGN.md heading sizes and
- * link treatment for the elements `sanitizeMarkdown` can emit.
- */
-const BODY_CLASSES = [
-  "flex flex-col gap-4",
-  "[&_h1]:mt-8 [&_h1]:text-h2 [&_h1]:font-bold",
-  "[&_h2]:mt-8 [&_h2]:text-h3 [&_h2]:font-bold",
-  "[&_h3]:mt-4 [&_h3]:font-semibold",
-  "[&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li+li]:mt-1",
-  "[&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-muted",
-  "[&_code]:rounded-input [&_code]:bg-surface [&_code]:px-1",
-  "[&_pre]:overflow-x-auto [&_pre]:rounded-input [&_pre]:bg-surface [&_pre]:p-4",
-  "[&_a]:text-accent [&_a]:underline [&_a]:decoration-accent/40 [&_a]:underline-offset-4 [&_a]:transition-[text-decoration-color] [&_a:focus-visible]:decoration-current [&_a:hover]:decoration-current",
-].join(" ");
 
 /**
  * Privacy policy (`/privatliv`, `/en/privacy`; approved privacy mock):
@@ -78,7 +63,7 @@ export default async function Privacy({ params }: PrivacyProps) {
       {body.trim() !== "" && (
         <div
           lang={langOf("body_md")}
-          className={BODY_CLASSES}
+          className={MARKDOWN_BODY_CLASSES}
           dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(body) }}
         />
       )}

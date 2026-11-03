@@ -35,6 +35,26 @@
       "from": "from",
       "vatIncluded": "incl. VAT",
       "contact": "Contact"
+    },
+    "featured": "Featured",
+    "itemsHeading": "Overview",
+    "breadcrumb": "Breadcrumb",
+    "gallery": {
+      "label": "Images",
+      "show": "Show image {index} of {count}"
+    },
+    "links": {
+      "label": "Links",
+      "website": "Website",
+      "demo": "See demo",
+      "app_store": "App Store",
+      "google_play": "Google Play",
+      "download": "Download"
+    },
+    "cta": {
+      "title": "Interested?",
+      "text": "Write to us, and we will get back to you with a no-obligation quote.",
+      "button": "Contact us"
     }
   }
 }
