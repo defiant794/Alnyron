@@ -431,8 +431,49 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_attach_media: {
+        Args: {
+          p_alt_da: string
+          p_alt_en: string
+          p_height: number
+          p_item_id: string
+          p_path: string
+          p_width: number
+        }
+        Returns: string
+      }
+      admin_check_media_slot: {
+        Args: { p_item_id: string }
+        Returns: undefined
+      }
+      admin_delete_item: { Args: { p_item_id: string }; Returns: string[] }
+      admin_detach_media: { Args: { p_media_id: string }; Returns: string }
+      admin_list_orphan_media: {
+        Args: { p_older_than?: string }
+        Returns: string[]
+      }
+      admin_reorder_items: {
+        Args: { p_category_id: string; p_item_ids: string[] }
+        Returns: undefined
+      }
       admin_reorder_nav: { Args: { p_page_ids: string[] }; Returns: undefined }
+      admin_save_category: { Args: { payload: Json }; Returns: string }
+      admin_save_item: { Args: { payload: Json }; Returns: string }
       admin_save_page: { Args: { payload: Json }; Returns: string }
+      admin_set_category_status: {
+        Args: {
+          p_category_id: string
+          p_status: Database["public"]["Enums"]["content_status"]
+        }
+        Returns: undefined
+      }
+      admin_set_item_status: {
+        Args: {
+          p_item_id: string
+          p_status: Database["public"]["Enums"]["content_status"]
+        }
+        Returns: undefined
+      }
       admin_set_page_status: {
         Args: {
           p_page_id: string

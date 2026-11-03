@@ -1,11 +1,9 @@
 import type { Locale } from "next-intl";
 import { cache } from "react";
+import type { CatalogKind } from "@/config/catalog";
 import { getPathname } from "@/i18n/navigation";
 import { resolveContent } from "@/lib/i18n/resolve-content";
 import { getPublicClient } from "@/lib/supabase/public";
-import type { Database } from "@/types/database";
-
-export type CatalogKind = Database["public"]["Enums"]["catalog_kind"];
 
 /** A catalog category visible to the public, resolved for one locale. */
 export interface PublicCategory {

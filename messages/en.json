@@ -29,5 +29,12 @@
   "Contact": {
     "responseTime": "Response time",
     "languages": "Languages"
+  },
+  "Catalog": {
+    "price": {
+      "from": "from",
+      "vatIncluded": "incl. VAT",
+      "contact": "Contact"
+    }
   }
 }

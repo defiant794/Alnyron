@@ -20,6 +20,7 @@
  * - withTx always issues ROLLBACK — no data persists to the cloud DB.
  */
 
+import { randomUUID } from "node:crypto";
 import type pg from "pg";
 
 // ---------------------------------------------------------------------------
@@ -330,15 +331,39 @@ export async function seedRoute(
 
 /**
  * Insert a media row for an item as postgres. Returns the media UUID.
+ * The path is a fresh `items/{itemId}/{uuid}.webp` (the `media_storage_path_valid`
+ * CHECK), so repeated calls for one item never collide on `media_storage_path_key`.
  */
 export async function seedMedia(client: pg.PoolClient, itemId: string): Promise<string> {
   const { rows } = await client.query<{ id: string }>(
     `INSERT INTO public.media (item_id, storage_path, alt_da, width, height, mime_type)
      VALUES ($1, $2, 'Testbillede', 100, 100, 'image/webp')
      RETURNING id`,
-    [itemId, `items/${itemId}/test.webp`],
+    [itemId, `items/${itemId}/${randomUUID()}.webp`],
   );
   return rows[0]!.id;
+}
+
+/**
+ * Insert a row into storage.objects for the 'media' bucket as postgres
+ * (bypasses RLS). Returns the object name (path). Used by catalog RLS tests
+ * that need a storage object to exist before calling admin_attach_media.
+ *
+ * Minimal columns only; Supabase storage won't need file content for RLS tests.
+ * `metadata` is what the Storage API would record (e.g. `{ mimetype: 'image/png' }`
+ * for the upload's declared type); the default records no type.
+ */
+export async function seedStorageObject(
+  client: pg.PoolClient,
+  path: string,
+  metadata: Record<string, unknown> | null = { size: 1024 },
+): Promise<string> {
+  await client.query(
+    `INSERT INTO storage.objects (bucket_id, name, owner_id, metadata)
+     VALUES ('media', $1, NULL, $2::jsonb)`,
+    [path, metadata === null ? null : JSON.stringify(metadata)],
+  );
+  return path;
 }
 
 /**

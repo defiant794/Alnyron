@@ -4,9 +4,10 @@ import { Fragment, useId, type ReactNode } from "react";
 import Card from "@/components/ui/Card";
 import Link from "@/components/ui/Link";
 import LinkButton from "@/components/ui/LinkButton";
+import { KIND_MONOGRAM } from "@/config/catalog";
 import { loadMessages } from "@/i18n/messages";
 import { getPathname } from "@/i18n/navigation";
-import type { CatalogKind, PublicCategory } from "@/services/content/categories";
+import type { PublicCategory } from "@/services/content/categories";
 import type { HomeContent } from "@/services/content/pages";
 
 export interface HomeViewProps {
@@ -21,14 +22,6 @@ export interface HomeViewProps {
   /** `site_settings.contact_email`, linked wherever the content says `{email}`. */
   contactEmail: string;
 }
-
-/** Decorative card glyph per catalog kind (approved home mock). */
-const KIND_GLYPH: Record<CatalogKind, string> = {
-  apps: "A",
-  websites: "W",
-  services: "S",
-  models3d: "3D",
-};
 
 const EMAIL_TOKEN = "{email}";
 
@@ -163,8 +156,8 @@ export default function HomeView({
 }
 
 /**
- * One public category: glyph, title linked to the category page (the link
- * covers the whole card) and the short description.
+ * One public category: letter mark ({@link KIND_MONOGRAM}), title linked to
+ * the category page (the link covers the whole card) and the short description.
  */
 function CategoryCard({ category }: { category: PublicCategory }) {
   const langOf = (key: string) => (category.fallbackKeys.includes(key) ? "da" : undefined);
@@ -175,7 +168,7 @@ function CategoryCard({ category }: { category: PublicCategory }) {
         aria-hidden="true"
         className="flex size-10 items-center justify-center rounded-btn bg-surface font-bold text-accent"
       >
-        {KIND_GLYPH[category.kind]}
+        {KIND_MONOGRAM[category.kind]}
       </span>
       <div className="flex flex-col gap-2">
         <h3 className="text-h3 font-semibold">

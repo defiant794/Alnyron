@@ -64,10 +64,12 @@ const NON_ADMIN_INSERTS: ReadonlyArray<{
     sql: "INSERT INTO public.item_translations (item_id, locale, slug, title) VALUES ($1, 'da', 'test-slug', 'Test')",
   },
   {
+    // A row valid in every other respect (path in the item's folder), so only RLS refuses it.
     table: "media",
     seed: async (c) => [await seedItem(c, await seedCategory(c), "published")],
     sql: `INSERT INTO public.media (item_id, storage_path, alt_da, width, height, mime_type)
-          VALUES ($1, 'media/test.jpg', 'Test billede', 100, 100, 'image/jpeg')`,
+          VALUES ($1::uuid, 'items/' || $1::uuid || '/11111111-2222-4333-8444-555555555555.jpg',
+                  'Test billede', 100, 100, 'image/jpeg')`,
   },
 ];
 

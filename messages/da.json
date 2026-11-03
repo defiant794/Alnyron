@@ -32,6 +32,13 @@
     "responseTime": "Svartid",
     "languages": "Sprog"
   },
+  "Catalog": {
+    "price": {
+      "from": "fra",
+      "vatIncluded": "inkl. moms",
+      "contact": "Kontakt"
+    }
+  },
   "Admin": {
     "metaTitle": "Alnyron administration",
     "nav": {

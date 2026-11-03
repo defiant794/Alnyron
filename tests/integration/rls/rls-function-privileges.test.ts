@@ -1,13 +1,18 @@
 /**
  * Integration tests — EXECUTE privileges on functions.
  *
- * Covers F0.4 hardening (migration 20261101000400_hardening.sql):
+ * Covers F0.4 hardening (migration 20261101000400_hardening.sql), the F2.1 catalog
+ * grants (migration 20261103000100_catalog_admin.sql) and the F2.1 catalog hardening
+ * (migration 20261103000300_catalog_hardening.sql):
  *   - a function newly created by postgres in `private` is not executable by PUBLIC,
  *     anon or authenticated (anon/authenticated hold USAGE on `private`, so a PUBLIC
  *     EXECUTE default would expose every future security-definer helper)
  *   - existing private functions: no PUBLIC EXECUTE; anon may run only the RLS visibility
- *     helpers, authenticated additionally is_owner()
- *   - admin RPCs are executable by authenticated, never by anon / PUBLIC
+ *     helpers, authenticated additionally is_owner() and the CHECK / storage-policy
+ *     helpers external_links_valid(), media_mime_type() and media_path_valid() (evaluated
+ *     as the writer); the trigger functions media_limit_per_item() / stamp_updated_by()
+ *     need no grant (triggers are not EXECUTE-checked when they fire)
+ *   - admin RPCs (pages + catalog) are executable by authenticated, never by anon / PUBLIC
  *
  * Connection: postgres. The probe function is created inside a rolled-back transaction.
  */
@@ -60,7 +65,7 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
     });
   }, 12_000);
 
-  it("existing private functions: no PUBLIC EXECUTE; anon only the visibility helpers; authenticated also is_owner", async () => {
+  it("existing private functions: no PUBLIC EXECUTE; anon only the visibility helpers; authenticated also is_owner and the CHECK/policy helpers", async () => {
     await withTx(client, async (c) => {
       const rows = await execPrivileges(c, "n.nspname = 'private'");
       const exposed = (key: "public_exec" | "anon_exec" | "authenticated_exec") =>
@@ -76,10 +81,18 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
       ]);
       expect(exposed("authenticated_exec")).toEqual([
         "category_is_public(p_id uuid)",
+        "external_links_valid(p_links jsonb)",
         "is_admin()",
         "is_owner()",
         "item_is_public(p_id uuid)",
+        "media_mime_type(p_path text)",
+        "media_path_valid(p_path text)",
         "page_is_public(p_id uuid)",
+      ]);
+      // The hardening trigger functions exist and nobody but their owner may call them.
+      expect(rows.filter((r) => ["media_limit_per_item()", "stamp_updated_by()"].includes(r.fn))).toEqual([
+        { fn: "media_limit_per_item()", public_exec: false, anon_exec: false, authenticated_exec: false },
+        { fn: "stamp_updated_by()", public_exec: false, anon_exec: false, authenticated_exec: false },
       ]);
     });
   }, 12_000);
@@ -87,8 +100,43 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
   it("admin RPCs are executable by authenticated only", async () => {
     await withTx(client, async (c) => {
       expect(await execPrivileges(c, "n.nspname = 'public' AND p.proname LIKE 'admin\\_%'")).toEqual([
+        {
+          fn: "admin_attach_media(p_item_id uuid, p_path text, p_alt_da text, p_alt_en text, p_width integer, p_height integer)",
+          public_exec: false,
+          anon_exec: false,
+          authenticated_exec: true,
+        },
+        { fn: "admin_check_media_slot(p_item_id uuid)", public_exec: false, anon_exec: false, authenticated_exec: true },
+        { fn: "admin_delete_item(p_item_id uuid)", public_exec: false, anon_exec: false, authenticated_exec: true },
+        { fn: "admin_detach_media(p_media_id uuid)", public_exec: false, anon_exec: false, authenticated_exec: true },
+        {
+          fn: "admin_list_orphan_media(p_older_than interval)",
+          public_exec: false,
+          anon_exec: false,
+          authenticated_exec: true,
+        },
+        {
+          fn: "admin_reorder_items(p_category_id uuid, p_item_ids uuid[])",
+          public_exec: false,
+          anon_exec: false,
+          authenticated_exec: true,
+        },
         { fn: "admin_reorder_nav(p_page_ids uuid[])", public_exec: false, anon_exec: false, authenticated_exec: true },
+        { fn: "admin_save_category(payload jsonb)", public_exec: false, anon_exec: false, authenticated_exec: true },
+        { fn: "admin_save_item(payload jsonb)", public_exec: false, anon_exec: false, authenticated_exec: true },
         { fn: "admin_save_page(payload jsonb)", public_exec: false, anon_exec: false, authenticated_exec: true },
+        {
+          fn: "admin_set_category_status(p_category_id uuid, p_status content_status)",
+          public_exec: false,
+          anon_exec: false,
+          authenticated_exec: true,
+        },
+        {
+          fn: "admin_set_item_status(p_item_id uuid, p_status content_status)",
+          public_exec: false,
+          anon_exec: false,
+          authenticated_exec: true,
+        },
         {
           fn: "admin_set_page_status(p_page_id uuid, p_status content_status)",
           public_exec: false,
