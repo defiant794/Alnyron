@@ -15,10 +15,9 @@
     "test:e2e": "playwright test",
     "db:push": "supabase db push --linked",
     "db:types": "supabase gen types typescript --project-id xmgpixhxecamtryohgmk --schema public > src/types/database.ts",
-    "cf:build": "node scripts/guard-env-files.mjs && opennextjs-cloudflare build && node scripts/guard-no-bundled-secrets.mjs",
+    "cf:build": "opennextjs-cloudflare build && node scripts/guard-no-bundled-secrets.mjs",
     "preview": "npm run cf:build && opennextjs-cloudflare preview",
     "deploy": "npm run cf:build && opennextjs-cloudflare deploy",
-    "deploy:preview": "npm run cf:build && opennextjs-cloudflare deploy --env preview",
     "upload": "npm run cf:build && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
