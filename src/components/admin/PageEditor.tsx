@@ -1,15 +1,16 @@
 "use client";
 
 import type { Locale } from "next-intl";
-import { useId, useRef, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
+import { useId, useState, useTransition, type FormEvent } from "react";
+import LocaleTabs, { localePanelId, localeTabId } from "@/components/admin/LocaleTabs";
 import Button from "@/components/ui/Button";
 import Field from "@/components/ui/Field";
 import Notice from "@/components/ui/Notice";
+import { SWITCH_CLASS } from "@/components/ui/switch-styles";
 import TextAreaField from "@/components/ui/TextAreaField";
 import { PAGE_TEXT_LIMITS } from "@/config/system-pages";
 import { useFormResultFocus } from "@/hooks/use-form-result-focus";
 import { routing } from "@/i18n/routing";
-import { cx } from "@/lib/cx";
 import type { AdminPageDetail, PageActionError, PageActionResult } from "@/services/admin/pages";
 
 /** One editable `content` leaf. */
@@ -52,10 +53,6 @@ export type PageEditorProps = {
   };
 };
 
-/** Switch look for the native "Vis i menuen" checkbox (it stays a checkbox for assistive technology). */
-const SWITCH =
-  "relative h-6 w-11 shrink-0 cursor-pointer appearance-none rounded-pill border border-border-input bg-border transition-[background-color,border-color] before:absolute before:top-0.5 before:left-0.5 before:size-4.5 before:rounded-pill before:bg-bg before:shadow-card before:transition-transform hover:border-muted checked:border-accent checked:bg-accent checked:before:translate-x-5 checked:hover:border-accent-hover checked:hover:bg-accent-hover motion-reduce:before:transition-none";
-
 type Tree = { [key: string]: string | Tree };
 
 /**
@@ -79,7 +76,6 @@ export default function PageEditor({ page, save, hasBody, contentGroups, labels 
   const [result, setResult] = useState<PageActionResult | null>(null);
   const [pending, startTransition] = useTransition();
   const formRef = useFormResultFocus(result);
-  const tabs = useRef(new Map<Locale, HTMLButtonElement>());
   const baseId = useId();
   const hintId = `${baseId}-show-in-nav-hint`;
   const failure = result && !result.ok ? result.error : null;
@@ -126,25 +122,6 @@ export default function PageEditor({ page, save, hasBody, contentGroups, labels 
     });
   }
 
-  function handleTabKey(event: KeyboardEvent<HTMLButtonElement>) {
-    const { locales } = routing;
-    const index = locales.indexOf(locale);
-    const next =
-      event.key === "ArrowRight"
-        ? locales[(index + 1) % locales.length]
-        : event.key === "ArrowLeft"
-          ? locales[(index - 1 + locales.length) % locales.length]
-          : event.key === "Home"
-            ? locales[0]
-            : event.key === "End"
-              ? locales[locales.length - 1]
-              : undefined;
-    if (!next) return;
-    event.preventDefault();
-    setLocale(next);
-    tabs.current.get(next)?.focus();
-  }
-
   return (
     <form
       ref={formRef}
@@ -161,34 +138,13 @@ export default function PageEditor({ page, save, hasBody, contentGroups, labels 
         </Notice>
       )}
 
-      <div role="tablist" aria-label={labels.languages} className="flex gap-1 self-start rounded-pill border border-border p-1">
-        {routing.locales.map((tabLocale) => {
-          const selected = tabLocale === locale;
-          return (
-            <button
-              key={tabLocale}
-              ref={(element) => {
-                if (element) tabs.current.set(tabLocale, element);
-                else tabs.current.delete(tabLocale);
-              }}
-              type="button"
-              role="tab"
-              id={`${baseId}-tab-${tabLocale}`}
-              aria-selected={selected}
-              aria-controls={`${baseId}-panel-${tabLocale}`}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => setLocale(tabLocale)}
-              onKeyDown={handleTabKey}
-              className={cx(
-                "min-h-11 cursor-pointer rounded-pill px-4 text-small font-semibold transition-[background-color,color]",
-                selected ? "bg-brand-navy text-accent-ink" : "text-muted hover:bg-surface hover:text-fg active:bg-surface",
-              )}
-            >
-              {labels.locales[tabLocale]}
-            </button>
-          );
-        })}
-      </div>
+      <LocaleTabs
+        baseId={baseId}
+        label={labels.languages}
+        names={labels.locales}
+        selected={locale}
+        onSelect={setLocale}
+      />
 
       {routing.locales.map((panelLocale) => {
         const values = page.translations[panelLocale];
@@ -197,8 +153,8 @@ export default function PageEditor({ page, save, hasBody, contentGroups, labels 
           <div
             key={panelLocale}
             role="tabpanel"
-            id={`${baseId}-panel-${panelLocale}`}
-            aria-labelledby={`${baseId}-tab-${panelLocale}`}
+            id={localePanelId(baseId, panelLocale)}
+            aria-labelledby={localeTabId(baseId, panelLocale)}
             hidden={panelLocale !== locale}
             className="flex flex-col gap-6"
           >
@@ -295,7 +251,7 @@ export default function PageEditor({ page, save, hasBody, contentGroups, labels 
             name="show_in_nav"
             defaultChecked={page.showInNav}
             aria-describedby={hintId}
-            className={SWITCH}
+            className={SWITCH_CLASS}
           />
         </label>
         <p id={hintId} className="text-small text-muted">

@@ -1,6 +1,6 @@
 import { cx } from "@/lib/cx";
 
-export type ButtonVariant = "primary" | "secondary";
+export type ButtonVariant = "primary" | "secondary" | "danger";
 
 /**
  * Shared look of Button and LinkButton (one source for both).
@@ -16,6 +16,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
     "border-transparent bg-accent text-accent-ink not-disabled:hover:bg-accent-hover not-disabled:active:bg-accent-hover",
   secondary:
     "border-border bg-bg text-fg not-disabled:hover:bg-surface not-disabled:active:bg-surface",
+  // Destructive action (approved item-editor mock "Slet element"): outline in the error colour, 5.9:1 on white.
+  danger: "border-error/30 bg-bg text-error not-disabled:hover:bg-error/5 not-disabled:active:bg-error/5",
 };
 
 /** Class list for a button-styled element of the given variant. */

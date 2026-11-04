@@ -64,6 +64,8 @@
     "nav": {
       "label": "Administration",
       "overview": "Oversigt",
+      "catalogGroup": "Kataloger",
+      "catalog": "Katalog",
       "pages": "Sider"
     },
     "account": {
@@ -169,6 +171,179 @@
         },
         "save": "Gem",
         "saved": "Gemt. Ændringerne vises nu på sitet."
+      }
+    },
+    "catalog": {
+      "title": "Katalog",
+      "lead": "Rediger sektionerne, deres tekst og synlighed.",
+      "breadcrumb": "Brødkrummesti",
+      "kinds": {
+        "apps": "Apps",
+        "websites": "Hjemmesider",
+        "services": "Ydelser",
+        "models3d": "3D-modeller"
+      },
+      "status": {
+        "published": "Offentlig",
+        "draft": "Kladde"
+      },
+      "languages": "Sprog",
+      "locales": {
+        "da": "Dansk",
+        "en": "Engelsk"
+      },
+      "newTab": "(åbner i en ny fane)",
+      "overview": {
+        "heading": "Sektioner",
+        "columns": {
+          "section": "Sektion",
+          "visibility": "Synlighed",
+          "items": "Elementer",
+          "actions": "Handling"
+        },
+        "visibility": {
+          "synlig": "Synlig",
+          "visesVedForste": "Vises ved første udgivne element",
+          "skjult": "Skjult"
+        },
+        "published": "{count, plural, one {# udgivet} other {# udgivne}}",
+        "draft": "{count, plural, one {# kladde} other {# kladder}}",
+        "edit": "Rediger",
+        "note": "En sektion vises først offentligt, når den har mindst ét udgivet element. Sektioner uden udgivet indhold er skjult i menuen, på forsiden og i sitemap."
+      },
+      "section": {
+        "metaTitle": "Rediger sektion",
+        "lead": "Rediger sektionstekst, synlighed og elementer.",
+        "itemsHeading": "Elementer",
+        "textHeading": "Sektionstekst",
+        "fields": {
+          "title": "Titel ({locale})",
+          "description": "Beskrivelse ({locale})",
+          "slug": "URL-slug ({locale})",
+          "slugHint": "Sektionernes adresser er faste og kan ikke ændres her.",
+          "seoTitle": "SEO-titel ({locale})",
+          "seoTitleHint": "Vises i søgeresultater og i browserfanen. Tom: sektionens titel.",
+          "seoDescription": "SEO-beskrivelse ({locale})",
+          "seoDescriptionHint": "Kort beskrivelse til søgeresultater. Tom: sektionens beskrivelse.",
+          "visible": "Synlig",
+          "visibleHint": "Sektionen vises på sitet, når den har mindst ét udgivet element."
+        },
+        "enHint": "Tomme engelske felter viser den danske tekst på den engelske side.",
+        "cancel": "Annuller",
+        "save": "Gem",
+        "saved": "Sektionen er gemt."
+      },
+      "items": {
+        "columns": {
+          "title": "Titel",
+          "status": "Status",
+          "price": "Pris",
+          "actions": "Handlinger"
+        },
+        "newItem": "+ Nyt element",
+        "empty": "Ingen elementer endnu, opret et",
+        "edit": "Rediger",
+        "featured": "Udvalgt",
+        "publish": "Udgiv",
+        "hide": "Skjul",
+        "moveUp": "Flyt op",
+        "moveDown": "Flyt ned",
+        "orderHint": "Træk et element til en ny plads, eller brug pilene. Rækkefølgen gælder også på sitet."
+      },
+      "item": {
+        "metaTitle": "Rediger element",
+        "newTitle": "Nyt element",
+        "contentHeading": "Indhold",
+        "sideHeading": "Pris, links og status",
+        "fields": {
+          "title": "Titel ({locale})",
+          "slug": "URL-slug ({locale})",
+          "slugHint": "Tom: dannes ud fra titlen, når du gemmer.",
+          "summary": "Resumé ({locale})",
+          "body": "Brødtekst ({locale}, markdown)",
+          "bodyHint": "Markdown: ## Overskrift, **fed**, - punkt og [tekst](https://…). HTML vises som almindelig tekst.",
+          "seoTitle": "SEO-titel ({locale})",
+          "seoTitleHint": "Vises i søgeresultater og i browserfanen. Tom: elementets titel.",
+          "seoDescription": "SEO-beskrivelse ({locale})",
+          "seoDescriptionHint": "Kort beskrivelse til søgeresultater. Tom: elementets resumé.",
+          "section": "Sektion",
+          "sectionHint": "Sektionen kan ikke ændres, når elementet er gemt.",
+          "priceType": "Pristype",
+          "priceTypes": {
+            "none": "Ingen pris",
+            "fixed": "Fast",
+            "from": "Fra",
+            "contact": "Kontakt"
+          },
+          "amount": "Beløb (DKK, inkl. moms)",
+          "amountHint": "Bruges ved fast pris og fra-pris.",
+          "links": "Links (kun https)",
+          "linkKeys": {
+            "website": "Hjemmeside",
+            "demo": "Demo",
+            "app_store": "App Store",
+            "google_play": "Google Play",
+            "download": "Download"
+          },
+          "featured": "Udvalgt",
+          "featuredHint": "Vises med badge og først i sektionen."
+        },
+        "enHint": "Elementet kan først udgives, når det har en engelsk URL-slug. Tomme engelske tekstfelter viser den danske tekst.",
+        "save": "Gem",
+        "saveDraft": "Gem kladde",
+        "publish": "Udgiv",
+        "hide": "Skjul",
+        "preview": "Forhåndsvis",
+        "previewHint": "Forhåndsvisning kræver, at elementet er udgivet.",
+        "publishHint": "Gem elementet, før du udgiver det.",
+        "delete": "Slet element",
+        "confirmDelete": "Vil du slette elementet og dets billeder? Det kan ikke fortrydes.",
+        "saved": "Gemt. Ændringerne vises nu på sitet.",
+        "savedDraft": "Kladden er gemt.",
+        "published": "Udgivet. Elementet vises nu på sitet.",
+        "hidden": "Skjult. Elementet vises ikke længere på sitet."
+      },
+      "media": {
+        "heading": "Billeder",
+        "count": "{count} af {max}",
+        "saveFirst": "Gem elementet før upload",
+        "empty": "Ingen billeder endnu",
+        "addImage": "Tilføj billede",
+        "dropHint": "Træk et billede hertil, eller",
+        "formats": "JPG, PNG, WebP eller AVIF, højst 5 MB. Store billeder gøres mindre før upload.",
+        "uploading": "Uploader",
+        "busy": "Vent et øjeblik, mens billedet gemmes eller fjernes.",
+        "altDa": "Alt-tekst (DA)",
+        "altEn": "Alt-tekst (EN)",
+        "image": "billede",
+        "remove": "Fjern",
+        "confirmRemove": "Vil du fjerne billedet? Det kan ikke fortrydes.",
+        "moveUp": "Flyt op",
+        "moveDown": "Flyt ned",
+        "errors": {
+          "too-large": "Filen er for stor. Et billede må højst fylde 5 MB.",
+          "unsupported-type": "Filtypen understøttes ikke. Brug JPG, PNG, WebP eller AVIF.",
+          "too-many-media": "Elementet har allerede det højeste antal billeder.",
+          "alt-required": "Skriv en alt-tekst på dansk.",
+          "failed": "Billedet kunne ikke gemmes. Prøv igen."
+        }
+      },
+      "errors": {
+        "invalid": "Ændringen kunne ikke gemmes, fordi nogle felter er ugyldige. Tjek felterne, og prøv igen.",
+        "da-title-required": "Skriv en titel på dansk. Den danske titel skal altid være udfyldt.",
+        "slug-taken": "Denne URL-slug er allerede i brug. Vælg en anden.",
+        "slug-invalid": "URL-slug må kun bestå af små bogstaver (a-z), tal og enkelte bindestreger.",
+        "price-invalid": "Pristypen kræver et gyldigt beløb i kroner. Skriv beløbet, eller vælg en anden pristype.",
+        "links-invalid": "Et link er ikke gyldigt. Skriv hele adressen med https://, fx https://alnyron.dk.",
+        "alt-required": "Alle billeder skal have en alt-tekst på dansk.",
+        "missing-slugs": "Sektionen skal have en URL-slug på både dansk og engelsk, før den kan gøres synlig.",
+        "missing-translations": "Elementet skal have en dansk og en engelsk version med URL-slug, før det kan udgives.",
+        "too-many-media": "Elementet har for mange billeder.",
+        "too-large": "Filen er for stor.",
+        "unsupported-type": "Filtypen understøttes ikke.",
+        "not-found": "Det, du redigerer, findes ikke længere. Gå tilbage til kataloget.",
+        "forbidden": "Du har ikke adgang til at ændre kataloget.",
+        "failed": "Ændringen kunne ikke gemmes. Prøv igen om lidt."
       }
     }
   },

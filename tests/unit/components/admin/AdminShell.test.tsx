@@ -88,7 +88,7 @@ describe("F-9: admin <main> takes the skip link's focus", () => {
   });
 });
 
-// ── F-nav: every rendered nav href maps to an existing panel page ────────────
+// ── F-nav: every rendered nav href maps to an existing panel route ────────────
 
 const PANEL_DIR = join(process.cwd(), "src/app/admin/(panel)");
 
@@ -106,8 +106,28 @@ function panelRoutes(dir = PANEL_DIR, segments: string[] = []): string[] {
   return routes;
 }
 
+/**
+ * True when `href` either exactly matches a route, or matches a route that has
+ * dynamic `[param]` segments (each `[…]` segment matches any non-empty string).
+ * This allows UUID-based hrefs like `/admin/catalog/categories/<uuid>` to satisfy
+ * a route `/admin/catalog/categories/[id]` without requiring static kind dirs.
+ */
+function satisfiesRoute(href: string, routes: string[]): boolean {
+  if (routes.includes(href)) return true;
+  const hParts = href.split("/");
+  return routes.some((route) => {
+    const rParts = route.split("/");
+    return (
+      rParts.length === hParts.length &&
+      rParts.every((seg, i) =>
+        seg.startsWith("[") && seg.endsWith("]") ? (hParts[i] ?? "") !== "" : seg === hParts[i],
+      )
+    );
+  });
+}
+
 describe("F-nav: every AdminShell nav link points to an existing panel route", () => {
-  it("F-nav: each rendered nav href resolves to a src/app/admin/(panel)/**/page.tsx", async () => {
+  it("F-nav: each rendered nav href resolves to a src/app/admin/(panel)/**/page.tsx (dynamic segments matched as wildcards)", async () => {
     render(await AdminShell({ user: USER, children: null }));
     const nav = screen.getByRole("navigation", { name: "Administration" });
     const hrefs = within(nav)
@@ -116,6 +136,6 @@ describe("F-nav: every AdminShell nav link points to an existing panel route", (
 
     expect(hrefs).toContain(ADMIN_HOME_PATH);
     const routes = panelRoutes();
-    expect(hrefs.filter((href) => href === null || !routes.includes(href))).toEqual([]);
+    expect(hrefs.filter((href) => href === null || !satisfiesRoute(href, routes))).toEqual([]);
   });
 });

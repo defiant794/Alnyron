@@ -1,7 +1,8 @@
 /**
  * Unit tests — admin catalog service (F2.1 catalog-model)
  * Journey: catalog-model  AC-CAT-46, AC-CAT-81, AC-CAT-82, AC-CAT-83, AC-CAT-84, AC-CAT-85, AC-CAT-86, AC-CAT-87, AC-CAT-88;
- * security hardening (f21-security-1 L1/L3) AC-CAT-S15, AC-CAT-S16
+ * security hardening (f21-security-1 L1/L3) AC-CAT-S15, AC-CAT-S16;
+ * catalog-admin AC-CATADM-24 (the language of a slug error, for the item editor)
  *
  * Module: src/services/admin/catalog.ts
  *
@@ -304,6 +305,74 @@ describe("AC-CAT-84: saveItem calls admin_save_item RPC", () => {
     const result = await saveItem(VALID_SAVE_ITEM_INPUT);
 
     expect(result).toEqual({ ok: false, error: "not-found" });
+  });
+});
+
+// ── AC-CATADM-24: a slug error names its language ────────────────────────────
+
+describe("AC-CATADM-24: saveItem names the language of a slug error", () => {
+  const withEn = (enSlug: string) => ({
+    ...VALID_SAVE_ITEM_INPUT,
+    translations: {
+      ...VALID_SAVE_ITEM_INPUT.translations,
+      en: { slug: enSlug, title: "Test Item", summary: "", body_md: "", seo_title: "", seo_description: "" },
+    },
+  });
+
+  // The PostgREST error of a real clash: admin_save_item re-raises the unique violation as
+  // 23505 slug_taken with the locale as HINT; RLS drops the key DETAIL (migration 20261103000600).
+  const slugTaken = (hint: string | null) => ({ code: "23505", message: "slug_taken", details: null, hint });
+
+  it("23505 slug_taken with HINT en: slug-taken with locale en", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: slugTaken("en") });
+
+    expect(await saveItem(withEn("test-item-en"))).toStrictEqual({ ok: false, error: "slug-taken", locale: "en" });
+  });
+
+  it("23505 slug_taken with HINT da: slug-taken with locale da", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: slugTaken("da") });
+
+    expect(await saveItem(withEn("test-item-en"))).toStrictEqual({ ok: false, error: "slug-taken", locale: "da" });
+  });
+
+  it("23505 slug_taken with a HINT that names no locale: slug-taken without a locale", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: slugTaken("fr") });
+
+    expect(await saveItem(VALID_SAVE_ITEM_INPUT)).toStrictEqual({ ok: false, error: "slug-taken" });
+  });
+
+  it("23505 without HINT: the locale from the key detail (a caller that bypasses RLS)", async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "item_translations_locale_slug_key"',
+        details: "Key (locale, slug)=(en, test-item-en) already exists.",
+        hint: null,
+      },
+    });
+
+    expect(await saveItem(withEn("test-item-en"))).toStrictEqual({ ok: false, error: "slug-taken", locale: "en" });
+  });
+
+  it("23505 with neither HINT nor key detail: slug-taken without a locale", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { code: "23505", message: "duplicate key", details: null, hint: null } });
+
+    expect(await saveItem(VALID_SAVE_ITEM_INPUT)).toStrictEqual({ ok: false, error: "slug-taken" });
+  });
+
+  it("a schema-invalid EN slug: slug-invalid with locale en, no RPC call", async () => {
+    expect(await saveItem(withEn("Not A Slug"))).toStrictEqual({ ok: false, error: "slug-invalid", locale: "en" });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("a schema-invalid DA slug: slug-invalid with locale da", async () => {
+    const input = {
+      ...VALID_SAVE_ITEM_INPUT,
+      translations: { da: { ...VALID_SAVE_ITEM_INPUT.translations.da, slug: "-bad-" } },
+    };
+
+    expect(await saveItem(input)).toStrictEqual({ ok: false, error: "slug-invalid", locale: "da" });
   });
 });
 

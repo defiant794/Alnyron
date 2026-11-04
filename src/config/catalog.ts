@@ -53,6 +53,15 @@ export const MEDIA_ALT_MAX = 300;
 /** Max upload size: 5 MiB, the `media` bucket's `file_size_limit` (5242880). */
 export const MEDIA_MAX_BYTES = 5 * 1024 * 1024;
 
+/**
+ * Longest side of an uploaded image: the admin's browser scales larger
+ * images down to it before upload (and re-encodes them as WebP where it can).
+ */
+export const MEDIA_MAX_DIMENSION = 2400;
+
+/** WebP quality (0 to 1) of an image the browser re-encodes before upload. */
+export const MEDIA_WEBP_QUALITY = 0.85;
+
 /** The image types the `media` bucket accepts (`allowed_mime_types`, `media.mime_type` CHECK). */
 export const MEDIA_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"] as const;
 

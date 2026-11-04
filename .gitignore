@@ -50,3 +50,6 @@ next-env.d.ts
 
 # OMP planning artifacts live in the Jottacloud workspace, never the code repo
 .omp/
+
+# local e2e dev server log
+.e2e-server.log

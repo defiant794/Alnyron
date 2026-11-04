@@ -21,8 +21,10 @@ export type OrphanCleanupResult = { ok: true; removed: number } | CatalogFailure
  * Issues a signed upload URL for one image of an item. Type and size are
  * checked first (`unsupported-type`, `too-large`; the bucket enforces both
  * again on the upload), then `admin_check_media_slot` confirms the item exists
- * and has room for another image (`not-found`, `too-many-media`, `forbidden`),
- * so nothing is uploaded for an unknown or full item. Only then is the object
+ * and has room for another image: fewer than 8 images and fewer than 16
+ * unattached objects in its bucket folder (`not-found`, `too-many-media`,
+ * `forbidden`), so nothing is uploaded for an unknown or full item and
+ * never-attached uploads cannot pile up. Only then is the object
  * name chosen, `items/{itemId}/{random uuid}.{ext}` (the only names the
  * bucket's insert policy accepts; no client text reaches the path), and
  * signed. The Storage API checks the admin insert policy when signing; a
@@ -120,7 +122,8 @@ export async function detachMedia(mediaId: unknown): Promise<CatalogActionResult
  * older than a day (uploads never attached, or objects whose removal failed
  * after a delete), through `admin_list_orphan_media` and the Storage API.
  * One call handles at most 1000 objects (the Storage API's limit for one
- * remove); call again until `removed` is 0.
+ * remove); call again until `removed` is 0. `createMediaUploadAction` runs it,
+ * best-effort, before every new upload URL.
  */
 export async function removeOrphanMedia(): Promise<OrphanCleanupResult> {
   const supabase = await createServerClient();

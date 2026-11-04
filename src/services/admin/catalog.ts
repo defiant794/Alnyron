@@ -1,6 +1,8 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import { hasLocale, type Locale } from "next-intl";
 import type { z } from "zod";
 import { MEDIA_BUCKET } from "@/config/catalog";
+import { routing } from "@/i18n/routing";
 import { createServerClient } from "@/lib/supabase/server";
 import {
   ALT_REQUIRED,
@@ -32,8 +34,9 @@ import type { Database } from "@/types/database";
  * - `alt-required`: blank Danish alt text (`media_alt_da_check`).
  * - `missing-slugs` / `missing-translations`: P0001, a category needs a DA and an EN slug,
  *   an item a DA and an EN translation, before it is published.
- * - `too-many-media`: the item already holds the maximum number of images (P0001
- *   `too_many_media`: the media trigger, the upload pre-check, or a save listing more).
+ * - `too-many-media`: P0001 `too_many_media` — the item already holds the maximum number of
+ *   images (media trigger / a save listing more), OR its folder reached the unattached-upload
+ *   ceiling (the upload pre-check).
  * - `too-large` / `unsupported-type`: an upload the media bucket would refuse.
  * - `not-found`: P0002 / 23503 / 22P02, the id names no row of that kind.
  * - `forbidden`: 42501, the caller is not an admin (RLS / `is_admin()`).
@@ -56,7 +59,13 @@ export type CatalogActionError =
   | "forbidden"
   | "failed";
 
-export type CatalogFailure = { ok: false; error: CatalogActionError };
+/**
+ * A failed catalog mutation. `locale` names the translation a `slug-taken` or
+ * `slug-invalid` belongs to when it is known (the schema issue's path, the
+ * HINT of `admin_save_item`'s `slug_taken`, or a unique violation's key
+ * detail), so the editor can mark that language's URL-slug.
+ */
+export type CatalogFailure = { ok: false; error: CatalogActionError; locale?: Locale };
 
 /** Result of a status change, reorder or delete. */
 export type CatalogActionResult = { ok: true } | CatalogFailure;
@@ -176,16 +185,41 @@ export async function removeMediaObjects(supabase: SupabaseClient<Database>, pat
 export function invalidInput(error: z.ZodError): CatalogFailure {
   for (const issue of error.issues) {
     const specific = ISSUE_ERRORS.find((code) => code === issue.message);
-    if (specific) return { ok: false, error: specific };
+    if (!specific) continue;
+    // A translation's slug issue sits at ["translations", <locale>, "slug"].
+    const [group, locale] = issue.path;
+    return specific === SLUG_INVALID && group === "translations" && hasLocale(routing.locales, locale)
+      ? { ok: false, error: specific, locale }
+      : { ok: false, error: specific };
   }
   return { ok: false, error: "invalid" };
 }
 
 /** Maps an RPC error to a failure result, logging (by code only) the unexpected ones. */
-export function failure(operation: string, error: Pick<PostgrestError, "code" | "message">): CatalogFailure {
+export function failure(
+  operation: string,
+  error: Pick<PostgrestError, "code" | "message"> & Partial<Pick<PostgrestError, "details" | "hint">>,
+): CatalogFailure {
   const reason = catalogActionError(error);
   if (reason === "failed") console.error(`${operation} failed: ${error.code || "unknown"}`);
-  return { ok: false, error: reason };
+  const locale = reason === "slug-taken" ? takenSlugLocale(error) : undefined;
+  return locale ? { ok: false, error: reason, locale } : { ok: false, error: reason };
+}
+
+/**
+ * The locale of a taken slug. `admin_save_item` raises its 23505 `slug_taken`
+ * with the clashing translation's locale as HINT (migration
+ * 20261103000600): Postgres drops a unique violation's key DETAIL for callers
+ * that RLS applies to, which every API caller of these security-invoker RPCs
+ * is. The detail ("Key (locale, slug)=(en, puls) already exists.", the
+ * `item_translations_locale_slug_key` and routes key) is the fallback for a
+ * caller that bypasses RLS. `undefined` when neither names a locale (the
+ * editor then shows a form-level alert).
+ */
+function takenSlugLocale({ hint, details }: Partial<Pick<PostgrestError, "details" | "hint">>): Locale | undefined {
+  if (hasLocale(routing.locales, hint)) return hint;
+  const locale = /^Key \(locale, slug\)=\(([^,]+),/.exec(details ?? "")?.[1];
+  return hasLocale(routing.locales, locale) ? locale : undefined;
 }
 
 /**

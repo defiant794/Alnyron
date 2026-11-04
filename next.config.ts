@@ -24,13 +24,20 @@ const mediaImageSrc = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? ` ${new URL(`/storage/v1/object/public/${MEDIA_BUCKET}/`, process.env.NEXT_PUBLIC_SUPABASE_URL).toString()}`
   : "";
 
+// The admin MediaManager PUTs images straight to a signed upload URL of the
+// media bucket (src/lib/media-upload.ts); only that endpoint is allowed, every
+// other request stays same-origin.
+const mediaUploadConnectSrc = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ? ` ${new URL(`/storage/v1/object/upload/sign/${MEDIA_BUCKET}/`, process.env.NEXT_PUBLIC_SUPABASE_URL).toString()}`
+  : "";
+
 const csp = [
   "default-src 'self'",
   scriptSrc,
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob:${mediaImageSrc}`,
   "font-src 'self'",
-  "connect-src 'self'",
+  `connect-src 'self'${mediaUploadConnectSrc}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
