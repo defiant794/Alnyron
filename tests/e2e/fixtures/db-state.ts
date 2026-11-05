@@ -90,12 +90,19 @@ export async function hasRealPublicCategory(kind?: CatalogKind): Promise<boolean
 // ─────────────────────────────────────────────────────────────────────────────
 // Catalog-public (F2.2) fixture helpers
 //
-// All test rows are marked by a DA item slug that starts with `e2e-cat-`.
-// `removeCatalogTestItems()` sweeps them after every block (and in beforeAll
-// to clean up aborted runs). Do not use these against the production project.
+// Test rows are marked by a DA item slug prefix. `removeCatalogTestItems()`
+// sweeps every `e2e-cat-` row by default after every block (and in beforeAll
+// to clean up aborted runs). A spec passes its own longer prefix
+// (`e2e-cat-sec-`) so it never deletes another spec's rows under
+// fullyParallel; one whose rows must also survive the `e2e-cat-` sweeps of
+// other specs seeds them outside it (`e2e-enslug-`). Do not use these
+// against the production project.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CATALOG_SLUG_PREFIX = "e2e-cat-";
+
+/** `e2e-` plus at least one slug segment, each ending in `-`: one spec's test-row namespace. */
+const TEST_SLUG_PREFIX = /^e2e-([a-z0-9]+-)+$/;
 
 /** Random 8-char suffix so repeated calls never collide on the unique slug constraint. */
 function e2eSuffix(): string {
@@ -125,7 +132,8 @@ export interface AddCatalogTestItemOptions {
  * `kind`. Publishing it makes that category publicly visible via
  * `private.category_is_public`. Returns the inserted `item_id`.
  *
- * Slugs use the `e2e-cat-` prefix so `removeCatalogTestItems()` can sweep.
+ * Default slugs use the `e2e-cat-` prefix that `removeCatalogTestItems()`
+ * sweeps; a caller passing its own slugs sweeps their prefix itself.
  */
 export async function addCatalogTestItem(
   kind: CatalogKind,
@@ -187,14 +195,25 @@ export async function addCatalogTestItem(
   return { itemId: rows[0]!.item_id };
 }
 
-/** Removes every test item added by {@link addCatalogTestItem}. */
-export async function removeCatalogTestItems(): Promise<void> {
+/**
+ * Removes the test items added by {@link addCatalogTestItem} whose DA slug
+ * starts with `prefix` (translations cascade): every `e2e-cat-` item by
+ * default, or only one spec's own items when it passes its own prefix.
+ *
+ * @throws when `prefix` is not an `e2e-<name>-` slug prefix, so no call can
+ * reach real content, sweep every e2e row at once (`e2e-`), or widen the
+ * LIKE pattern with `%` or `_`.
+ */
+export async function removeCatalogTestItems(prefix: string = CATALOG_SLUG_PREFIX): Promise<void> {
+  if (!TEST_SLUG_PREFIX.test(prefix)) {
+    throw new Error(`removeCatalogTestItems: "${prefix}" is not an "e2e-<name>-" slug prefix`);
+  }
   await query(
     `delete from public.items
      where id in (
        select item_id from public.item_translations
        where slug like $1 and locale = 'da')`,
-    [`${CATALOG_SLUG_PREFIX}%`],
+    [`${prefix}%`],
   );
 }
 

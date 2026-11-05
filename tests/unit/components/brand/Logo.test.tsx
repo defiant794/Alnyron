@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
 // Tests for AC-DS-22 and AC-DS-23
-// These tests FAIL (Red) until web-developer creates src/components/brand/Logo.tsx
-// and copies the logo-mark asset to public/brand/logo-mark.png.
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';

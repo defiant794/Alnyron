@@ -86,7 +86,8 @@ export type ItemEditorProps = {
     contentHeading: string;
     sideHeading: string;
     fields: Record<Locale, ItemFieldLabels>;
-    slugHint: string;
+    /** URL-slug hint per locale: only the English slug forms the public address (on every locale). */
+    slugHint: Record<Locale, string>;
     bodyHint: string;
     seoTitleHint: string;
     seoDescriptionHint: string;
@@ -362,7 +363,7 @@ export default function ItemEditor({
                     else slugInputs.current.delete(panelLocale);
                   }}
                   label={fieldLabels.slug}
-                  hint={labels.slugHint}
+                  hint={labels.slugHint[panelLocale]}
                   name={name("slug")}
                   defaultValue={values?.slug ?? ""}
                   maxLength={SLUG_MAX_LENGTH}

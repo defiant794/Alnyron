@@ -1,6 +1,5 @@
 // Tests for AC-DS-24 through AC-DS-27
 // Asserts icon.png, apple-icon.png, favicon replacement, and SVG removal.
-// These tests FAIL (Red) until web-developer creates the icon files and removes scaffolding.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';

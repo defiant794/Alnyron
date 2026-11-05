@@ -1,5 +1,6 @@
 import type { Locale } from "next-intl";
 import { getTranslations } from "next-intl/server";
+import { URL_SLUG_LOCALE } from "@/config/catalog";
 import { SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
 import { getPathname } from "@/i18n/navigation";
 import { resolveContent } from "@/lib/i18n/resolve-content";
@@ -11,7 +12,7 @@ export interface NavItem {
   /** Stable identity (React key): `system-home`, `page-<id>`, `category-<id>`. */
   key: string;
   label: string;
-  /** Locale-aware path (`/`, `/en`, `/kontakt`, `/en/apps`); also the active-state key. */
+  /** Locale-aware path (`/`, `/en`, `/contact`, `/en/apps`); also the active-state key. */
   href: string;
   navOrder: number;
   /** The home page, pinned first whatever its `nav_order`. */
@@ -35,8 +36,9 @@ export function buildNavItems(items: readonly NavItem[]): NavItem[] {
  * Header navigation for `locale`: published pages with `show_in_nav` plus the
  * public categories, ordered by {@link buildNavItems}. System pages use the
  * fixed UI labels ("Forside", "Kontakt"); custom pages and categories use
- * their DB title with Danish fallback. A custom page without a slug in
- * `locale` is left out (slugs never fall back).
+ * their DB title with Danish fallback. Every link uses the English URL slug
+ * (`URL_SLUG_LOCALE` route) on every locale; a custom page without one is
+ * left out.
  *
  * @throws when a query fails, so a broken read never caches an empty nav.
  */
@@ -65,7 +67,7 @@ export async function getNavItems(locale: Locale): Promise<NavItem[]> {
       continue;
     }
 
-    const slug = page.routes.find((route) => route.locale === locale)?.slug;
+    const slug = page.routes.find((route) => route.locale === URL_SLUG_LOCALE)?.slug;
     const da = page.page_translations.find((translation) => translation.locale === "da");
     if (!slug || !da) continue;
     const own = page.page_translations.find((translation) => translation.locale === locale);

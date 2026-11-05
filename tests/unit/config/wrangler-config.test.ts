@@ -5,7 +5,6 @@ import * as path from 'node:path';
 
 // AC-16..AC-19: Verify wrangler.jsonc at the repo root satisfies the
 // Cloudflare Workers + KV ISR-cache contract.
-// These tests will FAIL until web-developer creates wrangler.jsonc.
 
 type KvNamespace = { binding: string; id: string };
 type AssetsConfig = { directory: string; binding: string };

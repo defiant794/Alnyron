@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 // Tests for AC-DS-17
-// These tests FAIL (Red) until web-developer creates src/components/ui/Link.tsx.
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
@@ -31,13 +30,13 @@ afterEach(cleanup);
 
 describe('AC-DS-17: Link renders an anchor with correct href', () => {
   it('renders an anchor element', () => {
-    render(<Link href="/om-os">Om os</Link>);
+    render(<Link href="/about">Om os</Link>);
     expect(screen.getByRole('link', { name: 'Om os' })).toBeInTheDocument();
   });
 
   it('passes the href to the underlying anchor', () => {
-    render(<Link href="/kontakt">Kontakt</Link>);
-    expect(screen.getByRole('link', { name: 'Kontakt' })).toHaveAttribute('href', '/kontakt');
+    render(<Link href="/contact">Kontakt</Link>);
+    expect(screen.getByRole('link', { name: 'Kontakt' })).toHaveAttribute('href', '/contact');
   });
 });
 

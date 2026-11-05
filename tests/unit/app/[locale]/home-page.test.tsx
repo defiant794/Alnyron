@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 // Home page route (src/app/[locale]/page.tsx). Since F0.5 (home-page) it renders
 // DB content: the content services are mocked here, so these tests check the
-// wiring (route locale in, resolved content out to HomeView) and the static/ISR
-// contract. Service logic: tests/unit/services/content/*; HomeView rendering:
-// tests/unit/components/site/HomeView.test.tsx; real DB: tests/e2e/home-page.spec.ts.
+// wiring (route locale in, resolved content out to HomeView), the static/ISR
+// contract and the metadata (SEO title plus canonical and hreflang,
+// AC-ENSLUG-06e). Service logic: tests/unit/services/content/*; HomeView
+// rendering: tests/unit/components/site/HomeView.test.tsx; real DB:
+// tests/e2e/home-page.spec.ts.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
@@ -12,14 +14,14 @@ import '@testing-library/jest-dom/vitest';
 vi.mock('next-intl/server', async () =>
   (await import('../../../helpers/next-intl-server')).nextIntlServerMock(),
 );
-vi.mock('@/services/content/pages', () => ({ getHomePage: vi.fn() }));
+vi.mock('@/services/content/pages', () => ({ getHomePage: vi.fn(), getPageMetadata: vi.fn() }));
 vi.mock('@/services/content/categories', () => ({ getPublicCategories: vi.fn() }));
 vi.mock('@/services/content/settings', () => ({ getSiteSettings: vi.fn() }));
 
 import { setRequestLocale } from 'next-intl/server';
-import Page, { revalidate } from '@/app/[locale]/page';
+import Page, { generateMetadata, revalidate } from '@/app/[locale]/page';
 import { getPublicCategories, type PublicCategory } from '@/services/content/categories';
-import { getHomePage, type HomePageTranslation } from '@/services/content/pages';
+import { getHomePage, getPageMetadata, type HomePageTranslation } from '@/services/content/pages';
 import { getSiteSettings } from '@/services/content/settings';
 
 const DA_TITLE = 'Moderne apps, hjemmesider og digitale ydelser.';
@@ -67,6 +69,7 @@ beforeEach(() => {
     companyName: 'Alnyron',
     contactEmail: 'info@alnyron.dk',
   });
+  vi.mocked(getPageMetadata).mockResolvedValue({ title: '', description: '' });
 });
 
 afterEach(cleanup);
@@ -111,7 +114,8 @@ describe('AC-HOME-02/03: EN home passes the DA fallback keys on', () => {
 
   it('AC-I18N-01: DA home shows Danish UI copy', async () => {
     await renderHome('da');
-    expect(screen.getByRole('link', { name: 'Kom i kontakt' })).toHaveAttribute('href', '/kontakt');
+    // routing.pathnames maps /contact to itself, so the DA link is unprefixed /contact.
+    expect(screen.getByRole('link', { name: 'Kom i kontakt' })).toHaveAttribute('href', '/contact');
   });
 });
 
@@ -130,5 +134,34 @@ describe('AC-HOME-12: home page is static with a ~5 minute ISR fallback', () => 
   it('AC-I18N-04: EN home calls setRequestLocale("en")', async () => {
     await renderHome('en');
     expect(setRequestLocale).toHaveBeenCalledWith('en');
+  });
+});
+
+describe('AC-ENSLUG-06e: home page metadata — canonical and hreflang on / and /en', () => {
+  const metadata = (locale: string) => generateMetadata({ params: Promise.resolve({ locale }) });
+  const ALTERNATES = { da: '/', en: '/en', 'x-default': '/' };
+
+  it('DA: canonical / with da, en and x-default alternates', async () => {
+    expect((await metadata('da')).alternates).toEqual({ canonical: '/', languages: ALTERNATES });
+  });
+
+  it('EN: canonical /en with the same alternates', async () => {
+    expect((await metadata('en')).alternates).toEqual({ canonical: '/en', languages: ALTERNATES });
+  });
+
+  it('keeps the SEO title and description of the home row', async () => {
+    vi.mocked(getPageMetadata).mockResolvedValue({ title: 'Alnyron', description: 'Apps og hjemmesider.' });
+    expect(await metadata('da')).toMatchObject({ title: 'Alnyron', description: 'Apps og hjemmesider.' });
+    expect(getPageMetadata).toHaveBeenCalledWith('home', 'da');
+  });
+
+  it('leaves out a blank title and description so the site defaults apply', async () => {
+    const meta = await metadata('en');
+    expect(meta).not.toHaveProperty('title');
+    expect(meta).not.toHaveProperty('description');
+  });
+
+  it('is empty for an unsupported locale', async () => {
+    expect(await metadata('de')).toEqual({});
   });
 });

@@ -1,3 +1,4 @@
+import type { Locale } from "next-intl";
 import type { Database } from "@/types/database";
 
 /** A catalog section (`categories.kind`). */
@@ -86,6 +87,16 @@ export const SLUG_MAX_LENGTH = 80;
  * slug CHECK): lower-case `a-z0-9` words joined by single dashes.
  */
 export const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * The locale whose slug forms the public URL on every locale: a page or
+ * section's `routes` row and an item's `item_translations` row in this
+ * locale give the path segment of both `/services/web-development` (Danish)
+ * and `/en/services/web-development`. The other locales' slugs stay in the
+ * DB (an item's Danish slug is still required) but are not part of any
+ * address.
+ */
+export const URL_SLUG_LOCALE: Locale = "en";
 
 /**
  * Slugs no route may take (the `routes_slug_reserved` CHECK): app paths and

@@ -52,6 +52,7 @@ import {
   restoreCategoryStatuses,
   type CategoryStatusSnapshot,
 } from "./fixtures/db-state";
+import { loginAs } from "./fixtures/admin-login";
 import { revalidateSite } from "./fixtures/revalidate";
 
 // ── Pool lifecycle ─────────────────────────────────────────────────────────────
@@ -61,23 +62,6 @@ test.afterAll(async () => {
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function loginAs(page: Page, email: string, password: string, path = "/admin"): Promise<void> {
-  // Pass ?next= so signIn redirects straight to `path` — no extra goto needed.
-  // safeNext requires the path to start with /admin/ (trailing slash), so the
-  // bare /admin home is sent without next= and relies on the action's default.
-  const loginUrl =
-    path === "/admin"
-      ? "/admin/login"
-      : `/admin/login?next=${encodeURIComponent(path)}`;
-  await page.goto(loginUrl);
-  await page.getByLabel(/E-mail/i).fill(email);
-  await page.getByLabel(/Adgangskode/i).fill(password);
-  await page.getByRole("button", { name: /Log ind/i }).click();
-  // For the non-admin path (/admin/no-access) the server redirects there
-  // directly; for admin paths signIn → redirect(safeNext(next)) → page.
-  await page.waitForURL(path, { timeout: 10_000 });
-}
 
 async function loginAdmin(page: Page, password: string, path = "/admin"): Promise<void> {
   await loginAs(page, E2E_CAT_ADMIN_EMAIL, password, path);
@@ -344,7 +328,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     });
     await revalidateSite();
 
-    const visible = await page.goto("/ydelser");
+    const visible = await page.goto("/services");
     expect(visible?.status()).not.toBe(404);
 
     const servicesId = await getCategoryId(pgClient, "services");
@@ -359,7 +343,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     }
     await revalidateSite();
 
-    const hidden = await page.goto("/ydelser");
+    const hidden = await page.goto("/services");
     expect(hidden?.status()).toBe(404);
 
     // Restore done by afterAll (catStatusSnapshots + removeCatalogTestItems).
@@ -693,7 +677,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     await setCategoryStatus("services", "published");
     await revalidateSite();
 
-    await page.goto("/ydelser");
+    await page.goto("/services");
     expect(await page.content()).not.toContain("E2E Publish Hide");
 
     // Publish via item editor
@@ -702,7 +686,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     // Wait for the publish action to complete before revalidating — same race as AC-14.
     await expect(page.getByRole("status")).toContainText(/udgivet/i, { timeout: 10_000 });
     await revalidateSite();
-    await page.goto("/ydelser");
+    await page.goto("/services");
     await expect(page.getByRole("main")).toContainText("E2E Publish Hide");
 
     // Hide again
@@ -711,7 +695,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     // Wait for the hide action to complete before revalidating.
     await expect(page.getByRole("status")).toContainText(/skjult/i, { timeout: 10_000 });
     await revalidateSite();
-    await page.goto("/ydelser");
+    await page.goto("/services");
     expect(await page.content()).not.toContain("E2E Publish Hide");
 
     await deleteTestItem(pgClient, itemId);
@@ -733,7 +717,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     await revalidateSite();
 
     // Item should be visible on the public section page
-    await page.goto("/ydelser");
+    await page.goto("/services");
     await expect(page.getByRole("main")).toContainText("E2E AC29 Hide Test");
 
     // Hide the item via the item editor
@@ -743,7 +727,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     await revalidateSite();
 
     // Item must no longer appear on the public section page
-    await page.goto("/ydelser");
+    await page.goto("/services");
     expect(await page.content()).not.toContain("E2E AC29 Hide Test");
 
     await deleteTestItem(pgClient, itemId);
@@ -755,7 +739,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
   // previewHref is set only when item AND section are both published.
   // A link (<a target="_blank">) renders instead of a disabled button.
 
-  test("AC-CATADM-30: 'Forhåndsvis' is a new-tab link to the public item page (published item + section)", async ({
+  test("AC-CATADM-30/AC-ENSLUG-07c: 'Forhåndsvis' is a new-tab link to the public item page at its EN slug (published item + section)", async ({
     page,
   }) => {
     const { itemId } = await addCatalogTestItem("services", "published", {
@@ -773,8 +757,8 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     const previewLink = page.getByRole("link", { name: /Forhåndsvis/i });
     await expect(previewLink).toBeVisible();
     await expect(previewLink).toHaveAttribute("target", "_blank");
-    // The href must include the DA item slug
-    await expect(previewLink).toHaveAttribute("href", /e2e-cat-adm-ac30-preview/);
+    // AC-ENSLUG-07c: the EN item slug forms the address, not the DA slug.
+    await expect(previewLink).toHaveAttribute("href", "/services/e2e-cat-adm-ac30-preview-en");
 
     await deleteTestItem(pgClient, itemId);
     await revalidateSite();

@@ -1,6 +1,6 @@
 /**
  * Unit tests: hreflang alternates (src/i18n/alternates.ts), shared by the
- * catalog page metadata and the sitemap.
+ * page metadata and the sitemap.
  * Journey: catalog-public
  * Acceptance IDs: AC-CATPUB-22, AC-CATPUB-31
  */
@@ -9,19 +9,19 @@ import { languageAlternates } from "@/i18n/alternates";
 
 describe("AC-CATPUB-22: languageAlternates: da, en and x-default", () => {
   it("lists the path per locale, with x-default pointing at the Danish path", () => {
-    expect(languageAlternates({ da: "/ydelser", en: "/en/services" })).toEqual({
-      da: "/ydelser",
+    expect(languageAlternates({ da: "/services", en: "/en/services" })).toEqual({
+      da: "/services",
       en: "/en/services",
-      "x-default": "/ydelser",
+      "x-default": "/services",
     });
   });
 
   it("orders the keys da, en, x-default whatever the input order", () => {
-    expect(Object.keys(languageAlternates({ en: "/en/services", da: "/ydelser" }))).toEqual(["da", "en", "x-default"]);
+    expect(Object.keys(languageAlternates({ en: "/en/services", da: "/services" }))).toEqual(["da", "en", "x-default"]);
   });
 
   it("leaves out a locale the page does not exist in", () => {
-    expect(languageAlternates({ da: "/ydelser" })).toEqual({ da: "/ydelser", "x-default": "/ydelser" });
+    expect(languageAlternates({ da: "/services" })).toEqual({ da: "/services", "x-default": "/services" });
   });
 
   it("has no x-default without a Danish path", () => {

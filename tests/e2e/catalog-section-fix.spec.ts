@@ -12,8 +12,9 @@
  *   - tests/.env.e2e-project with SUPABASE_E2E_REF + DB credentials
  *
  * Test-data rules:
- *   - All test item DA slugs use the `e2e-cat-sec-` prefix so the shared
- *     `removeCatalogTestItems()` (sweeps `e2e-cat-%`) picks them up automatically.
+ *   - All test item DA slugs use the `e2e-cat-sec-` prefix, and the spec sweeps
+ *     only that prefix (`removeCatalogTestItems(ITEM_SLUG_PREFIX)`), never the
+ *     `e2e-cat-` rows of a spec running in parallel.
  */
 
 import { test, expect, type Locator, type Page } from "@playwright/test";
@@ -22,10 +23,11 @@ import {
   getClient,
   endPool,
   randomE2ePassword,
-  E2E_CAT_ADMIN_EMAIL,
+  E2E_CATSEC_ADMIN,
   seedCatalogAdmin,
   cleanupCatalogAdmin,
 } from "./fixtures/catalog-admin-seed";
+import { loginAs } from "./fixtures/admin-login";
 import {
   addCatalogTestItem,
   removeCatalogTestItems,
@@ -34,6 +36,9 @@ import {
   type CategoryStatusSnapshot,
 } from "./fixtures/db-state";
 
+/** DA slug prefix of this spec's test items: the only catalog rows it deletes. */
+const ITEM_SLUG_PREFIX = "e2e-cat-sec-";
+
 // ── Pool lifecycle ──────────────────────────────────────────────────────────────
 
 test.afterAll(async () => {
@@ -41,18 +46,6 @@ test.afterAll(async () => {
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function loginAdmin(page: Page, email: string, password: string, path = "/admin"): Promise<void> {
-  const loginUrl =
-    path === "/admin"
-      ? "/admin/login"
-      : `/admin/login?next=${encodeURIComponent(path)}`;
-  await page.goto(loginUrl);
-  await page.getByLabel(/E-mail/i).fill(email);
-  await page.getByLabel(/Adgangskode/i).fill(password);
-  await page.getByRole("button", { name: /Log ind/i }).click();
-  await page.waitForURL(path, { timeout: 10_000 });
-}
 
 /**
  * Waits until React has hydrated `locator`, so a click goes through the
@@ -112,13 +105,13 @@ async function getCategoryId(client: PoolClient, kind: string): Promise<string> 
   return result.rows[0].id;
 }
 
-/** DA URL slug of a section (its `routes` row): the first path segment of its public pages. */
+/** URL slug of a section (its English `routes` row): the first path segment of its public pages on every locale. */
 async function getSectionSlug(client: PoolClient, categoryId: string): Promise<string> {
   const result = await client.query<{ slug: string }>(
-    "SELECT slug FROM public.routes WHERE category_id = $1 AND locale = 'da'",
+    "SELECT slug FROM public.routes WHERE category_id = $1 AND locale = 'en'",
     [categoryId],
   );
-  if (!result.rows[0]) throw new Error(`Section ${categoryId} has no DA route in e2e project`);
+  if (!result.rows[0]) throw new Error(`Section ${categoryId} has no EN route in e2e project`);
   return result.rows[0].slug;
 }
 
@@ -170,10 +163,10 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     pgClient = await getClient();
     adminPassword = randomE2ePassword();
 
-    await removeCatalogTestItems();
+    await removeCatalogTestItems(ITEM_SLUG_PREFIX);
 
-    await cleanupCatalogAdmin(pgClient);
-    await seedCatalogAdmin(pgClient, adminPassword);
+    await cleanupCatalogAdmin(pgClient, E2E_CATSEC_ADMIN);
+    await seedCatalogAdmin(pgClient, adminPassword, E2E_CATSEC_ADMIN);
 
     const kinds = ["apps", "websites", "services", "models3d"] as const;
     const allSnapshots = await Promise.all(kinds.map((k) => snapshotCategoryStatuses(k)));
@@ -182,9 +175,9 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
 
   test.afterAll(async () => {
     if (pgClient) {
-      await removeCatalogTestItems();
+      await removeCatalogTestItems(ITEM_SLUG_PREFIX);
       await restoreCategoryStatuses(catStatusSnapshots);
-      await cleanupCatalogAdmin(pgClient);
+      await cleanupCatalogAdmin(pgClient, E2E_CATSEC_ADMIN);
       pgClient.release();
     }
   });
@@ -196,7 +189,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     page,
   }) => {
     const websitesId = await getCategoryId(pgClient, "websites");
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/items/new?category=${websitesId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/items/new?category=${websitesId}`);
 
     // The section select should show Hjemmesider (or the websites section title)
     const sectionSelect = page.getByLabel(/Sektion/i);
@@ -214,7 +207,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     const appsId = await getCategoryId(pgClient, "apps");
     const websitesId = await getCategoryId(pgClient, "websites");
 
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/items/new?category=${appsId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/items/new?category=${appsId}`);
 
     // Fill slug before title to avoid prefillSlug concatenation race
     const slugField = page.getByLabel("URL-slug (DA)", { exact: true });
@@ -265,8 +258,8 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     const appsId = await getCategoryId(pgClient, "apps");
     const websitesId = await getCategoryId(pgClient, "websites");
 
-    // Start: Apps section editor (loginAdmin uses goto — only full load allowed here)
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/categories/${appsId}`);
+    // Start: Apps section editor (loginAs uses goto — only full load allowed here)
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/categories/${appsId}`);
 
     // Click-nav 1: Apps section editor → Apps new-item
     await page.getByRole("link", { name: "+ Nyt element" }).click();
@@ -327,7 +320,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     const websitesId = await getCategoryId(pgClient, "websites");
 
     // Start: Apps section editor
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/categories/${appsId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/categories/${appsId}`);
 
     // Click-nav 1: Apps section editor → Apps new-item
     await page.getByRole("link", { name: "+ Nyt element" }).click();
@@ -391,7 +384,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     const websitesId = await getCategoryId(pgClient, "websites");
 
     // Start: Apps section editor, then click "+ Nyt element" to seed router cache
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/categories/${appsId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/categories/${appsId}`);
     await page.getByRole("link", { name: "+ Nyt element" }).click();
     await page.waitForURL(new RegExp(`items/new.*category=${appsId}`), { timeout: 10_000 });
     await page.waitForLoadState("networkidle");
@@ -433,7 +426,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     const websitesId = await getCategoryId(pgClient, "websites");
 
     // Build history: Apps section → Apps new-item → back → Hjemmesider section → Hjemmesider new-item
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/categories/${appsId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/categories/${appsId}`);
     await page.getByRole("link", { name: "+ Nyt element" }).click();
     await page.waitForURL(new RegExp(`items/new.*category=${appsId}`), { timeout: 10_000 });
     await page.waitForLoadState("networkidle");
@@ -479,7 +472,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     page,
   }) => {
     // Must be logged in first; use a plain goto to the catalog overview
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, "/admin/catalog");
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, "/admin/catalog");
 
     // Navigate directly to new-item with no ?category
     await page.goto("/admin/catalog/items/new");
@@ -490,7 +483,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
   test("AC-CATSEC-4-d-ii: new item with unknown uuid ?category redirects to /admin/catalog", async ({
     page,
   }) => {
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, "/admin/catalog");
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, "/admin/catalog");
 
     const unknownUuid = "00000000-0000-0000-0000-000000000000";
     await page.goto(`/admin/catalog/items/new?category=${unknownUuid}`);
@@ -522,7 +515,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     );
 
     // Start: Apps section editor
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/categories/${appsId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/categories/${appsId}`);
 
     const staleNewItem = page.locator(`a[href*="category=${appsId}"]`).filter({ hasText: /Nyt element/i });
     await expect(staleNewItem).toBeVisible();
@@ -573,7 +566,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     const hold = await holdRoute(page, (url) => url.pathname.startsWith(`/admin/catalog/categories/${websitesId}`));
 
     // Start: catalog overview (no `networkidle` wait: a held prefetch keeps the network busy)
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, "/admin/catalog");
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, "/admin/catalog");
 
     // Click the Hjemmesider row's "Rediger" link once hydrated, so it is a soft navigation
     const websitesRow = page.getByRole("row").filter({ hasText: /Hjemmesider/i }).first();
@@ -612,7 +605,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
       enTitle: "E2E SecFix Move Enabled EN",
     });
 
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/items/${itemId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/items/${itemId}`);
 
     const sectionSelect = page.getByLabel(/Sektion/i);
     await expect(sectionSelect).toBeVisible();
@@ -639,7 +632,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     const maxSortBefore = await getCategoryMaxSortOrder(pgClient, websitesId);
     const expectedSortOrder = maxSortBefore + 10;
 
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/items/${itemId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/items/${itemId}`);
 
     // The select must be enabled (AC-CATSEC-5 prerequisite)
     const sectionSelect = page.getByLabel(/Sektion/i);
@@ -687,7 +680,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
       enTitle: "E2E SecFix Move WA EN",
     });
 
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/items/${itemId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/items/${itemId}`);
 
     // The select must be enabled (AC-CATSEC-5 prerequisite)
     const sectionSelect = page.getByLabel(/Sektion/i);
@@ -745,7 +738,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
 
     const sortBefore = await getItemSortOrder(pgClient, itemId);
 
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/items/${itemId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/items/${itemId}`);
 
     // Select is enabled (AC-CATSEC-5)
     const sectionSelect = page.getByLabel(/Sektion/i);
@@ -792,8 +785,9 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
       [servicesId, websitesId],
     ]);
 
-    const oldUrl = `/${oldSectionSlug}/${itemSlug}`;
-    const newUrl = `/${newSectionSlug}/${itemSlug}`;
+    // The item's URL slug is its EN slug, on every locale.
+    const oldUrl = `/${oldSectionSlug}/${itemSlug}-en`;
+    const newUrl = `/${newSectionSlug}/${itemSlug}-en`;
     const itemHeading = page.getByRole("heading", { level: 1, name: title, exact: true });
 
     // Baseline: before the move the old section URL serves the item
@@ -802,7 +796,7 @@ test.describe("Catalog section fix (DB fixture, serial)", () => {
     await expect(itemHeading).toBeVisible();
 
     // Move to Hjemmesider
-    await loginAdmin(page, E2E_CAT_ADMIN_EMAIL, adminPassword, `/admin/catalog/items/${itemId}`);
+    await loginAs(page, E2E_CATSEC_ADMIN.email, adminPassword, `/admin/catalog/items/${itemId}`);
     const sectionSelect = page.getByLabel(/Sektion/i);
     await expect(sectionSelect).toBeEnabled();
     await sectionSelect.selectOption(websitesId);

@@ -1,6 +1,6 @@
 import type { Locale } from "next-intl";
 import { cache } from "react";
-import type { CatalogKind } from "@/config/catalog";
+import { URL_SLUG_LOCALE, type CatalogKind } from "@/config/catalog";
 import { getPathname } from "@/i18n/navigation";
 import { resolveContent } from "@/lib/i18n/resolve-content";
 import { getPublicClient } from "@/lib/supabase/public";
@@ -13,7 +13,7 @@ export interface PublicCategory {
   title: string;
   /** Short card text; `""` when neither locale has one. */
   description: string;
-  /** Locale-aware path: `/apps` (DA), `/en/apps` (EN). */
+  /** Locale-aware path with the English URL slug: `/websites` (DA), `/en/websites` (EN). */
   href: string;
   /** Fields shown from the Danish row (`"title"`, `"description"`): render with `lang="da"`. */
   fallbackKeys: string[];
@@ -28,9 +28,10 @@ const NO_TEXT: CategoryText = { title: "", description: "" };
  * categories that are published and hold at least one published item, so an
  * empty category never reaches the site (Q-8).
  *
- * Text falls back to Danish per field. A category without a route in
- * `locale` is left out: slugs never fall back. Deduplicated per render (the
- * header nav and the home page both list categories).
+ * Text falls back to Danish per field. The URL slug is the category's
+ * English route slug on every locale (`URL_SLUG_LOCALE`); a category without
+ * one is left out. Deduplicated per render (the header nav and the home page
+ * both list categories).
  *
  * @throws when the query fails, so a broken read never caches an empty list.
  */
@@ -43,7 +44,7 @@ export const getPublicCategories = cache(async (locale: Locale): Promise<PublicC
 
   const categories: PublicCategory[] = [];
   for (const row of data ?? []) {
-    const slug = row.routes.find((route) => route.locale === locale)?.slug;
+    const slug = row.routes.find((route) => route.locale === URL_SLUG_LOCALE)?.slug;
     if (!slug) continue;
 
     const da = pickText(row.category_translations, "da") ?? NO_TEXT;

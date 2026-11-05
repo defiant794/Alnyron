@@ -14,9 +14,10 @@ export type LanguageSwitcherProps = {
 
 /**
  * `DA | EN` pill toggle (DESIGN.md). The other locale is a plain `<a>` to the
- * same page in that locale (`/kontakt` <-> `/en/contact`): a full document
- * load, so `<html lang>` updates and it works without JavaScript. The current
- * locale is marked, not linked.
+ * same page in that locale: paths are English on every locale, so only the
+ * prefix changes (`/contact` <-> `/en/contact`). A full document load, so
+ * `<html lang>` updates and it works without JavaScript. The current locale
+ * is marked, not linked.
  */
 export default function LanguageSwitcher({ label, localeNames }: LanguageSwitcherProps) {
   const currentLocale = useLocale();

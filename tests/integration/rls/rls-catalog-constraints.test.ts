@@ -503,21 +503,21 @@ describe.skipIf(!DB_AVAILABLE)("Constraints — catalog", () => {
     });
   }, 12_000);
 
-  it("AC-CAT-43: the 8 seeded category routes still exist, each on its kind's category", async () => {
+  it("AC-CAT-43: the 8 seeded category routes still exist, each on its kind's category, with the English slug on both locales", async () => {
     await withTx(client, async (c) => {
       const { rows } = await c.query<{ kind: string; locale: string; slug: string }>(
         `SELECT cat.kind, r.locale, r.slug
            FROM public.routes r
            JOIN public.categories cat ON cat.id = r.category_id
-          WHERE (r.locale, r.slug) IN (('da', 'apps'), ('da', 'hjemmesider'), ('da', 'ydelser'), ('da', '3d-modeller'),
+          WHERE (r.locale, r.slug) IN (('da', 'apps'), ('da', 'websites'), ('da', 'services'), ('da', '3d-models'),
                                        ('en', 'apps'), ('en', 'websites'), ('en', 'services'), ('en', '3d-models'))
           ORDER BY r.locale, r.slug`,
       );
       expect(rows).toEqual([
-        { kind: "models3d", locale: "da", slug: "3d-modeller" },
+        { kind: "models3d", locale: "da", slug: "3d-models" },
         { kind: "apps", locale: "da", slug: "apps" },
-        { kind: "websites", locale: "da", slug: "hjemmesider" },
-        { kind: "services", locale: "da", slug: "ydelser" },
+        { kind: "services", locale: "da", slug: "services" },
+        { kind: "websites", locale: "da", slug: "websites" },
         { kind: "models3d", locale: "en", slug: "3d-models" },
         { kind: "apps", locale: "en", slug: "apps" },
         { kind: "services", locale: "en", slug: "services" },

@@ -11,7 +11,7 @@ import ItemEditor, { type ItemEditorItem, type ItemFieldLabels } from "@/compone
 import Badge from "@/components/ui/Badge";
 import { ADMIN_CATALOG_PATH, adminCategoryPath } from "@/config/admin";
 import { AUTH_LOCALE } from "@/config/auth-areas";
-import { MEDIA_MAX_PER_ITEM } from "@/config/catalog";
+import { MEDIA_MAX_PER_ITEM, URL_SLUG_LOCALE } from "@/config/catalog";
 import { loadMessages } from "@/i18n/messages";
 import { getPathname } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
@@ -36,12 +36,13 @@ export default async function ItemEditorScreen({ item, sections }: ItemEditorScr
   const section = sections.find((candidate) => candidate.id === item.categoryId);
   const itemTitle = item.translations.da?.title;
   const title = item.id && itemTitle ? itemTitle : t("item.newTitle");
-  const daSlug = item.translations.da?.slug;
-  // The public item page exists only while the item and its section are published.
+  const urlSlug = item.translations[URL_SLUG_LOCALE]?.slug;
+  // The public item page exists only while the item and its section are published; its
+  // address uses the English slugs on every locale.
   const previewHref =
-    item.status === "published" && section?.status === "published" && section.slug && daSlug
+    item.status === "published" && section?.status === "published" && section.slug && urlSlug
       ? getPathname({
-          href: { pathname: "/[slug]/[item]", params: { slug: section.slug, item: daSlug } },
+          href: { pathname: "/[slug]/[item]", params: { slug: section.slug, item: urlSlug } },
           locale: routing.defaultLocale,
         })
       : null;
@@ -96,7 +97,7 @@ export default async function ItemEditorScreen({ item, sections }: ItemEditorScr
           contentHeading: t("item.contentHeading"),
           sideHeading: t("item.sideHeading"),
           fields: { da: fieldLabels("da"), en: fieldLabels("en") },
-          slugHint: t("item.fields.slugHint"),
+          slugHint: { da: t("item.fields.slugHint.da"), en: t("item.fields.slugHint.en") },
           bodyHint: t("item.fields.bodyHint"),
           seoTitleHint: t("item.fields.seoTitleHint"),
           seoDescriptionHint: t("item.fields.seoDescriptionHint"),

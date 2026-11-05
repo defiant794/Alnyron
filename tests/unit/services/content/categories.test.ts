@@ -27,7 +27,8 @@ const appsRow = {
   kind: "apps",
   nav_order: 10,
   category_translations: [{ locale: "da", title: "Apps" }],
-  routes: [{ locale: "da", slug: "apps" }],
+  // The same slug in both locales.
+  routes: [{ locale: "da", slug: "apps" }, { locale: "en", slug: "apps" }],
 };
 
 const servicesRow = {
@@ -35,7 +36,8 @@ const servicesRow = {
   kind: "services",
   nav_order: 30,
   category_translations: [{ locale: "da", title: "Ydelser" }],
-  routes: [{ locale: "da", slug: "ydelser" }],
+  // DA and EN route slugs differ: only the EN one (URL_SLUG_LOCALE) forms the href.
+  routes: [{ locale: "da", slug: "ydelser" }, { locale: "en", slug: "services" }],
 };
 
 const appsRowEn = {
@@ -91,15 +93,26 @@ describe("AC-HOME-06: getPublicCategories — maps DB rows to PublicCategory", (
   it("maps href as a locale-aware slug path for DA (no /en prefix)", async () => {
     mockCategoryRows([appsRow]);
     const [cat] = await getPublicCategories("da");
-    // DA: unprefixed slug path → "/apps"
     expect(cat!.href).toBe("/apps");
   });
 
   it("maps href as a /en-prefixed slug path for EN locale", async () => {
     mockCategoryRows([appsRowEn]);
     const [cat] = await getPublicCategories("en");
-    // EN: /en/<slug>
     expect(cat!.href).toBe("/en/apps");
+  });
+
+  it("AC-ENSLUG-08: DA category href uses the English route slug (URL_SLUG_LOCALE), not the DA one", async () => {
+    mockCategoryRows([servicesRow]);
+    const [cat] = await getPublicCategories("da");
+    expect(cat!.href).toBe("/services");
+  });
+
+  it("AC-ENSLUG-08: EN category href uses the same English route slug", async () => {
+    const servicesRowEn = { ...servicesRow, category_translations: [{ locale: "en", title: "Services" }] };
+    mockCategoryRows([servicesRowEn]);
+    const [cat] = await getPublicCategories("en");
+    expect(cat!.href).toBe("/en/services");
   });
 });
 

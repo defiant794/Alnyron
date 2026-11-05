@@ -38,7 +38,7 @@ describe("AC-CATPUB-10: item page shows the item", () => {
   it("renders a breadcrumb: the section linked, then the item as the current page", () => {
     renderItem();
     const breadcrumb = screen.getByRole("navigation", { name: "Brødkrummesti" });
-    expect(within(breadcrumb).getByRole("link", { name: "Ydelser" })).toHaveAttribute("href", "/ydelser");
+    expect(within(breadcrumb).getByRole("link", { name: "Ydelser" })).toHaveAttribute("href", "/services");
     expect(within(breadcrumb).getByText("Webudvikling")).toHaveAttribute("aria-current", "page");
   });
 
@@ -137,10 +137,10 @@ describe("AC-CATPUB-03: item price", () => {
 });
 
 describe("AC-CATPUB-11: contact call to action", () => {
-  it("links 'Kontakt os' to /kontakt on the Danish page", () => {
+  it("AC-ENSLUG-08: links 'Kontakt os' to /contact on the Danish page", () => {
     renderItem();
     const cta = screen.getByRole("region", { name: "Interesseret?" });
-    expect(within(cta).getByRole("link", { name: "Kontakt os" })).toHaveAttribute("href", "/kontakt");
+    expect(within(cta).getByRole("link", { name: "Kontakt os" })).toHaveAttribute("href", "/contact");
   });
 
   it("links 'Contact us' to /en/contact on the English page", () => {

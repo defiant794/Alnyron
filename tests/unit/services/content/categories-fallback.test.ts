@@ -59,18 +59,19 @@ describe("getPublicCategories — field-level DA fallback", () => {
     expect(category?.fallbackKeys).toContain("title");
   });
 
-  it("DA: Danish values, no fallback keys", async () => {
+  it("AC-ENSLUG-08: DA: Danish values, no fallback keys, English URL slug", async () => {
     const [category] = await getPublicCategories("da");
-    expect(category).toMatchObject({ title: "Hjemmesider", href: "/hjemmesider", fallbackKeys: [] });
+    expect(category).toMatchObject({ title: "Hjemmesider", href: "/websites", fallbackKeys: [] });
   });
 });
 
 describe("getPublicCategories — categories that cannot be linked are left out", () => {
-  it("no route in the locale (slugs never fall back)", async () => {
+  it("no English route (the URL slug on every locale)", async () => {
     mockOrder.mockResolvedValue({
       data: [{ ...websitesRow, routes: [{ locale: "da", slug: "hjemmesider" }] }],
       error: null,
     });
+    expect(await getPublicCategories("da")).toEqual([]);
     expect(await getPublicCategories("en")).toEqual([]);
   });
 

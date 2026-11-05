@@ -23,9 +23,10 @@ export function catalogImage(overrides: Partial<CatalogImage> = {}): CatalogImag
 export function catalogItem(overrides: Partial<PublicCatalogItem> = {}): PublicCatalogItem {
   return {
     id: "item-web",
-    slug: "webudvikling",
-    href: "/ydelser/webudvikling",
-    paths: { da: "/ydelser/webudvikling", en: "/en/services/web-development" },
+    // The URL slug is the EN item slug; the DA slug ("webudvikling") is no address.
+    slug: "web-development",
+    href: "/services/web-development",
+    paths: { da: "/services/web-development", en: "/en/services/web-development" },
     title: "Webudvikling",
     summary: "Moderne og hurtige websites.",
     bodyMd: "## Hvad du får\n\nEt skræddersyet website.",
@@ -45,10 +46,8 @@ export function catalogSection(overrides: Partial<PublicCatalogSection> = {}): P
     kind: "services",
     title: "Ydelser",
     description: "Udvikling, rådgivning og vedligehold.",
-    href: "/ydelser",
-    slugDA: "ydelser",
-    slugEN: "services",
-    paths: { da: "/ydelser", en: "/en/services" },
+    href: "/services",
+    paths: { da: "/services", en: "/en/services" },
     seo: { title: "Ydelser hos Alnyron", description: "Udvikling, rådgivning og vedligehold." },
     fallbackKeys: [],
     items: [catalogItem()],

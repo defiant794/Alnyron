@@ -1,6 +1,4 @@
 // Tests for AC-I18N-15 through AC-I18N-18
-// Imports from src/lib/i18n/resolve-content.ts — DOES NOT EXIST YET (Red phase).
-// All tests in this file MUST fail until web-developer creates the module.
 import { describe, it, expect } from "vitest";
 
 import { resolveContent } from "@/lib/i18n/resolve-content";

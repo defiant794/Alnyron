@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-// Tests for AC-I18N-05 (/kontakt -> /en/contact) and AC-I18N-06
-// (/en/contact -> /kontakt) at the component level, plus the switcher's a11y
+// Tests for AC-I18N-05 (/contact -> /en/contact) and AC-I18N-06
+// (/en/contact -> /contact) at the component level, plus the switcher's a11y
 // contract. tests/e2e/i18n-routing.spec.ts covers the hrefs in a real browser;
 // these pin the markup:
 // - The href is right in the prerendered HTML too, not only after
-//   hydration (the prerendered /kontakt once linked to /en/[slug]).
+//   hydration (the prerendered contact page once linked to /en/[slug]).
 // - WCAG 2.5.3 Label in Name: the other locale's link has an accessible name
 //   that STARTS with its visible code ("EN English"). This regressed once.
 // - The current locale is marked (aria-current), not linked.
@@ -19,8 +19,8 @@ import { NextIntlClientProvider, type Locale } from 'next-intl';
 // There is no Next router outside Next. Each hook returns what it returns on
 // the live route for a client component in the `[locale]` layout:
 // `useSelectedLayoutSegments` the internal segments below that layout
-// (["contact"] on /kontakt and /en/contact) and `useParams` the route params.
-// `usePathname` is the URL in the browser ("/kontakt") but the rewrite target
+// (["contact"] on /contact and /en/contact) and `useParams` the route params.
+// `usePathname` is the URL in the browser ("/contact") but the rewrite target
 // while the page is prerendered ("/da/contact"), so the DA cases run with
 // both. Everything above the hooks is real: `getPathname` builds the href
 // from the routing table in src/i18n/routing.ts.
@@ -78,12 +78,12 @@ function renderSwitcher(
  */
 const nameStartsWith = (code: string) => (name: string) => name.startsWith(code);
 
-// ── AC-I18N-05: DA contact page (/kontakt) ───────────────────────────────────
+// ── AC-I18N-05/AC-ENSLUG-05d: DA contact page (/contact) ─────────────────────
 
 describe.each([
   ['prerendered', '/da/contact'],
-  ['in the browser', '/kontakt'],
-])('AC-I18N-05: LanguageSwitcher on /kontakt (DA, %s)', (_phase, pathname) => {
+  ['in the browser', '/contact'],
+])('AC-I18N-05/AC-ENSLUG-05d: LanguageSwitcher on /contact (DA, %s)', (_phase, pathname) => {
   const renderContact = () => renderSwitcher('da', ['contact'], pathname);
 
   it('nav landmark is labelled "Sprog"', () => {
@@ -130,11 +130,11 @@ describe('AC-I18N-06: LanguageSwitcher on /en/contact (EN)', () => {
     expect(screen.getByRole('navigation', { name: 'Language' })).toBeInTheDocument();
   });
 
-  it('DA link name starts with the visible code "DA" (WCAG 2.5.3) and points to /kontakt', () => {
+  it('DA link points to /contact (the same English path, unprefixed)', () => {
     const nav = renderContact();
     const link = within(nav).getByRole('link', { name: nameStartsWith('DA') });
     expect(link).toHaveTextContent(/^DA Dansk$/);
-    expect(link).toHaveAttribute('href', '/kontakt');
+    expect(link).toHaveAttribute('href', '/contact');
   });
 
   it('DA link carries hreflang="da" and lang="da"', () => {
@@ -159,7 +159,7 @@ describe('AC-I18N-06: LanguageSwitcher on /en/contact (EN)', () => {
   });
 });
 
-// ── Other routes: home and the DB-slug route ─────────────────────────────────
+// ── Other routes: home, DB-slug catalog pages ─────────────────────────────────
 
 describe('LanguageSwitcher links the same route in the other locale', () => {
   it.each([
@@ -171,12 +171,14 @@ describe('LanguageSwitcher links the same route in the other locale', () => {
     expect(within(nav).getByRole('link')).toHaveAttribute('href', href);
   });
 
-  it.each([
-    ['prerendered', '/da/privacy'],
-    ['in the browser', '/privatliv'],
-  ])('the privacy route links /privatliv -> /en/privacy (%s)', (_phase, pathname) => {
-    const nav = renderSwitcher('da', ['privacy'], pathname);
+  it('the privacy route links /privacy -> /en/privacy', () => {
+    const nav = renderSwitcher('da', ['privacy'], '/privacy');
     expect(within(nav).getByRole('link')).toHaveAttribute('href', '/en/privacy');
+  });
+
+  it('AC-ENSLUG-05: a DB-slug catalog page keeps its English slug (/services -> /en/services)', () => {
+    const nav = renderSwitcher('da', ['services'], '/services', { slug: 'services' });
+    expect(within(nav).getByRole('link')).toHaveAttribute('href', '/en/services');
   });
 
   it('a DB-slug page keeps its slug (/apps -> /en/apps)', () => {

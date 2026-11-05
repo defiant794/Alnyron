@@ -108,7 +108,7 @@ test("AC-HOME-09: Footer on / shows © year + company name + email link + Privat
   ).toHaveAttribute("href", "mailto:info@alnyron.dk");
   await expect(
     footer.getByRole("link", { name: /Privatliv/i }),
-  ).toHaveAttribute("href", "/privatliv");
+  ).toHaveAttribute("href", "/privacy");
 });
 
 test("AC-HOME-09b: Footer on /en shows Privacy link to /en/privacy", async ({ page }) => {
@@ -301,7 +301,7 @@ test.describe("Category visibility (DB fixture)", () => {
       await page.goto("/");
       const btn = page.getByRole("link", { name: /Se ydelser/i });
       await expect(btn).toBeVisible();
-      await expect(btn).toHaveAttribute("href", "/ydelser");
+      await expect(btn).toHaveAttribute("href", "/services");
     });
   });
 });

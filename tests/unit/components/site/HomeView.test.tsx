@@ -46,7 +46,7 @@ const servicesCategory: PublicCategory = {
   navOrder: 30,
   title: "Ydelser",
   description: "Udvikling, AI og automatisering.",
-  href: "/ydelser",
+  href: "/services",
   fallbackKeys: [],
 };
 
@@ -171,7 +171,7 @@ describe('AC-HOME-11b: HomeView — "Se ydelser" visible when services category 
   it('"Se ydelser" link href points to the services category href', () => {
     renderHome({ publicCategories: [appsCategory, servicesCategory] });
     const btn = screen.getByRole("link", { name: /Se ydelser/i });
-    expect(btn).toHaveAttribute("href", "/ydelser");
+    expect(btn).toHaveAttribute("href", "/services");
   });
 });
 

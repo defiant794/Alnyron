@@ -25,7 +25,7 @@ vi.mock("@supabase/ssr", () => ({
     return { auth: { getClaims: mockGetClaims } };
   }),
 }));
-// createMiddleware(routing) returns the public handler; it is called for /kontakt below.
+// createMiddleware(routing) returns the public handler; it is called for /contact below.
 vi.mock("next-intl/middleware", () => ({
   default: vi.fn(() => vi.fn(() => new Response(null, { status: 200 }))),
 }));
@@ -107,7 +107,7 @@ describe("middleware: AC-ADMINAUTH-04 session refresh on admin routes", () => {
   });
 
   it("AC-ADMINAUTH-04i: public routes never create a Supabase client (stay cookie-free)", async () => {
-    await middleware(request("/kontakt"));
+    await middleware(request("/contact"));
 
     expect(mockGetClaims).not.toHaveBeenCalled();
     expect(cookieMethods.setAll).toBeUndefined();

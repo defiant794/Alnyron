@@ -1,7 +1,4 @@
 // Tests for AC-I18N-10 through AC-I18N-14
-// Imports src/lib/i18n/merge-localized.ts which DOES NOT EXIST YET (Red phase).
-// Static import: the suite-level "Cannot find module" error is the correct Red
-// signal — a failed test file in Vitest counts as a failure in CI.
 import { describe, it, expect } from "vitest";
 import { mergeLocalized } from "@/lib/i18n/merge-localized";
 

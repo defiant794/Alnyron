@@ -16,7 +16,7 @@ const homeItem: NavItem = {
 const contactItem: NavItem = {
   key: "page-contact",
   label: "Kontakt",
-  href: "/kontakt",
+  href: "/contact",
   navOrder: 1000,
   isHome: false,
 };
@@ -32,15 +32,15 @@ const appsCategory: NavItem = {
 const servicesCategory: NavItem = {
   key: "category-services",
   label: "Ydelser",
-  href: "/ydelser",
+  href: "/services",
   navOrder: 30,
   isHome: false,
 };
 
 const customPage: NavItem = {
-  key: "page-om-os",
+  key: "page-about",
   label: "Om os",
-  href: "/om-os",
+  href: "/about",
   navOrder: 500,
   isHome: false,
 };
@@ -142,7 +142,7 @@ describe("AC-HOME-06/07: buildNavItems — categories merged with pages in nav_o
       "system-home",
       "category-apps",
       "category-services",
-      "page-om-os",
+      "page-about",
       "page-contact",
     ]);
   });

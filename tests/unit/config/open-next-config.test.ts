@@ -62,19 +62,19 @@ describe("open-next.config: security M1 residual, 404s never reach the KV increm
   it.each(Object.entries(overrides))("%s: a 404 page is not written to KV", async (_target, override) => {
     const cache = await loadIncrementalCache(override);
 
-    await cache.set("/da/ikke-en-side", notFoundPage, "cache");
+    await cache.set("/da/not-a-page", notFoundPage, "cache");
 
     // The 404 reached KV through this override (its existence check) and wrote nothing.
-    expect(kv.get).toHaveBeenCalledExactlyOnceWith("/da/ikke-en-side", "cache");
+    expect(kv.get).toHaveBeenCalledExactlyOnceWith("/da/not-a-page", "cache");
     expect(kv.set).not.toHaveBeenCalled();
   });
 
   it.each(Object.entries(overrides))("%s: a 200 page is written to KV as given", async (_target, override) => {
     const cache = await loadIncrementalCache(override);
 
-    await cache.set("/da/ydelser", okPage, "cache");
+    await cache.set("/da/services", okPage, "cache");
 
-    expect(kv.set).toHaveBeenCalledExactlyOnceWith("/da/ydelser", okPage, "cache");
+    expect(kv.set).toHaveBeenCalledExactlyOnceWith("/da/services", okPage, "cache");
   });
 
   it.each(Object.entries(overrides))(

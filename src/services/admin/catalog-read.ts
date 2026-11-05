@@ -1,6 +1,7 @@
 import type { Locale } from "next-intl";
 import {
   EXTERNAL_LINK_KEYS,
+  URL_SLUG_LOCALE,
   type CatalogKind,
   type ExternalLinkKey,
   type PriceType,
@@ -25,7 +26,7 @@ export interface AdminCatalogSection {
   status: ContentStatus;
   /** The Danish title (blank only if the Danish row is missing). */
   title: string;
-  /** The Danish route slug, `null` when the section has none. */
+  /** The URL slug (English route slug, the public path on every locale), `null` when the section has none. */
   slug: string | null;
   publishedCount: number;
   draftCount: number;
@@ -95,7 +96,7 @@ export interface AdminItemDetail {
 
 /**
  * The catalog sections for the overview, in nav order, with their Danish
- * title and route and how many items are published and drafts.
+ * title, URL slug and how many items are published and drafts.
  *
  * @throws when the query fails.
  */
@@ -113,7 +114,7 @@ export async function listCatalogSections(): Promise<AdminCatalogSection[]> {
     kind: category.kind,
     status: category.status,
     title: category.category_translations.find((row) => row.locale === "da")?.title ?? "",
-    slug: category.routes.find((row) => row.locale === "da")?.slug ?? null,
+    slug: category.routes.find((row) => row.locale === URL_SLUG_LOCALE)?.slug ?? null,
     publishedCount: category.items.filter((item) => item.status === "published").length,
     draftCount: category.items.filter((item) => item.status === "draft").length,
   }));

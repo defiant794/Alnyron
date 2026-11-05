@@ -3,12 +3,16 @@ import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { MARKDOWN_BODY_CLASSES } from "@/components/site/markdown-body";
+import { SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
+import { languageAlternates } from "@/i18n/alternates";
+import { pathsInEveryLocale } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
 import { sanitizeMarkdown } from "@/lib/sanitize-markdown";
 import { getPageMetadata, getPrivacyPage } from "@/services/content/pages";
 
 type PrivacyProps = Readonly<{ params: Promise<{ locale: string }> }>;
 
+/** SEO title/description (DB, falling back to the nav label) and hreflang alternates. */
 export async function generateMetadata({ params }: PrivacyProps): Promise<Metadata> {
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) return {};
@@ -16,11 +20,16 @@ export async function generateMetadata({ params }: PrivacyProps): Promise<Metada
     getPageMetadata("privacy", locale),
     getTranslations({ locale, namespace: "Nav" }),
   ]);
-  return { title: seo.title || t("privacy"), ...(seo.description && { description: seo.description }) };
+  const paths = pathsInEveryLocale(SYSTEM_PAGE_PATHNAMES.privacy);
+  return {
+    title: seo.title || t("privacy"),
+    ...(seo.description && { description: seo.description }),
+    alternates: { canonical: paths[locale], languages: languageAlternates(paths) },
+  };
 }
 
 /**
- * Privacy policy (`/privatliv`, `/en/privacy`; approved privacy mock):
+ * Privacy policy (`/privacy`, `/en/privacy`; approved privacy mock):
  * eyebrow, title, optional lead and the policy text. All copy comes from the
  * privacy system page in the DB (edited under Admin > Sider), with Danish
  * filling blank English fields (marked `lang="da"`). The body is markdown,

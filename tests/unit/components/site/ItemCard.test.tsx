@@ -28,7 +28,7 @@ describe("AC-CATPUB-01: ItemCard shows the item and links to its page", () => {
   it("titles the card with a level-3 heading at the DESIGN.md h3 size, whose link goes to the item page", () => {
     renderCard();
     expect(screen.getByRole("heading", { level: 3, name: "Webudvikling" })).toHaveClass("text-h3");
-    expect(screen.getByRole("link", { name: "Webudvikling" })).toHaveAttribute("href", "/ydelser/webudvikling");
+    expect(screen.getByRole("link", { name: "Webudvikling" })).toHaveAttribute("href", "/services/web-development");
   });
 
   it("fades in the DESIGN.md card shadow on hover and keyboard focus (opacity of ::after only)", () => {

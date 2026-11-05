@@ -8,9 +8,11 @@
  *  - Uploaded-object cleanup so bucket objects seeded by the MediaManager tests
  *    do not accumulate between runs.
  *
- * All e2e test items MUST use slugs prefixed with `e2e-cat-` (e.g. `e2e-cat-adm-…`)
- * so the existing `removeCatalogTestItems()` in db-state.ts sweeps them automatically
- * (it deletes rows whose DA slug matches `e2e-cat-%`).
+ * Test-item DA slug prefixes follow the rules in db-state.ts (the comment
+ * above `CATALOG_SLUG_PREFIX`): the default `removeCatalogTestItems()` sweeps
+ * every `e2e-cat-` row (catalog-admin's `e2e-cat-adm-` items among them),
+ * while a spec may seed under its own prefix (`e2e-cat-sec-`, `e2e-enslug-`)
+ * and sweep only that. `getUploadedMediaPaths()` finds `e2e-cat-` media only.
  */
 
 import { randomBytes } from "node:crypto";
@@ -33,24 +35,49 @@ export function randomE2ePassword(): string {
   return `${randomBytes(24).toString("base64url")}aA1!`;
 }
 
-// ── Dedicated catalog-admin user (UUID …0008) ─────────────────────────────────
+// ── Dedicated admin users (UUID …0008, …0009, …0014) ──────────────────────────
 //
-// Uses its own UUID so it never races E2E_ADMIN_UUID (…0001) used by
-// admin-auth.spec under fullyParallel:true. sweepE2eTestUsers still removes
-// it via the @alnyron-test.local domain.
+// Each spec that signs in as an admin uses its own user (catalog-admin …0008,
+// english-slugs …0009, catalog-section-fix …0014), so its seed and cleanup
+// never race E2E_ADMIN_UUID (…0001) used by admin-auth.spec, or another
+// spec's, under fullyParallel:true. sweepE2eTestUsers still removes them via
+// the @alnyron-test.local domain.
+
+/** An allowlisted e2e admin: `seedCatalogAdmin` / `cleanupCatalogAdmin` target. */
+export interface E2eAdminUser {
+  uuid: string;
+  email: string;
+}
 
 export const E2E_CAT_ADMIN_EMAIL = `e2e-cat-admin@${E2E_EMAIL_DOMAIN}`;
 export const E2E_CAT_ADMIN_UUID = "00000000-0000-0000-e2e0-000000000008";
+const E2E_CAT_ADMIN: E2eAdminUser = { uuid: E2E_CAT_ADMIN_UUID, email: E2E_CAT_ADMIN_EMAIL };
 
-/** Seed the dedicated catalog-admin user (in user_allowlist + auth.users). */
-export async function seedCatalogAdmin(client: pg.PoolClient, password: string): Promise<void> {
+/** The admin of english-slugs.spec (the item editor's URL-slug hints). */
+export const E2E_ENSLUG_ADMIN: E2eAdminUser = {
+  uuid: "00000000-0000-0000-e2e0-000000000009",
+  email: `e2e-enslug-admin@${E2E_EMAIL_DOMAIN}`,
+};
+
+/** The admin of catalog-section-fix.spec (the item editor's section select and moves). */
+export const E2E_CATSEC_ADMIN: E2eAdminUser = {
+  uuid: "00000000-0000-0000-e2e0-000000000014",
+  email: `e2e-catsec-admin@${E2E_EMAIL_DOMAIN}`,
+};
+
+/** Seed an admin user (in user_allowlist + auth.users); the catalog-admin user by default. */
+export async function seedCatalogAdmin(
+  client: pg.PoolClient,
+  password: string,
+  user: E2eAdminUser = E2E_CAT_ADMIN,
+): Promise<void> {
   await client.query("BEGIN");
   try {
     await client.query(
       `INSERT INTO public.user_allowlist (email, role)
        VALUES ($1, 'admin')
        ON CONFLICT (email) DO UPDATE SET role = 'admin'`,
-      [E2E_CAT_ADMIN_EMAIL],
+      [user.email],
     );
     const { rows } = await client.query<{ pwd: string }>(
       `SELECT crypt($1, gen_salt('bf', 10)) AS pwd`,
@@ -67,7 +94,7 @@ export async function seedCatalogAdmin(client: pg.PoolClient, password: string):
                'authenticated', 'authenticated', $2, now(), $3,
                now(), now(), '{}', '{}', false, '', '', '', '', '')
        ON CONFLICT (id) DO NOTHING`,
-      [E2E_CAT_ADMIN_UUID, E2E_CAT_ADMIN_EMAIL, encrypted],
+      [user.uuid, user.email, encrypted],
     );
     await client.query(
       `INSERT INTO auth.identities
@@ -76,7 +103,7 @@ export async function seedCatalogAdmin(client: pg.PoolClient, password: string):
                jsonb_build_object('sub', $1::text, 'email', $3::text),
                'email', now(), now(), now())
        ON CONFLICT (provider, provider_id) DO NOTHING`,
-      [E2E_CAT_ADMIN_UUID, E2E_CAT_ADMIN_UUID, E2E_CAT_ADMIN_EMAIL],
+      [user.uuid, user.uuid, user.email],
     );
     await client.query("COMMIT");
   } catch (e) {
@@ -85,10 +112,10 @@ export async function seedCatalogAdmin(client: pg.PoolClient, password: string):
   }
 }
 
-/** Remove the catalog-admin user and allowlist entry. */
-export async function cleanupCatalogAdmin(client: pg.PoolClient): Promise<void> {
-  await client.query(`DELETE FROM auth.users WHERE id = $1`, [E2E_CAT_ADMIN_UUID]);
-  await client.query(`DELETE FROM public.user_allowlist WHERE email = $1`, [E2E_CAT_ADMIN_EMAIL]);
+/** Remove an admin user and its allowlist entry; the catalog-admin user by default. */
+export async function cleanupCatalogAdmin(client: pg.PoolClient, user: E2eAdminUser = E2E_CAT_ADMIN): Promise<void> {
+  await client.query(`DELETE FROM auth.users WHERE id = $1`, [user.uuid]);
+  await client.query(`DELETE FROM public.user_allowlist WHERE email = $1`, [user.email]);
 }
 
 

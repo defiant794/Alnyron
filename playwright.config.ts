@@ -29,6 +29,11 @@ applyEnvPatch(
 export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: true,
+  // One worker: specs share one e2e DB, and some seed rows or publish sections
+  // that another spec's assertions read (english-slugs publishes every
+  // section; home-page checks for real public categories). Running the files
+  // one at a time keeps each spec's DB state its own.
+  workers: 1,
   // Before and after the whole run (not per worker, so no parallel block loses
   // its seeded user): delete every leftover @alnyron-test.local auth user.
   globalSetup: "./tests/e2e/sweep-test-users.ts",

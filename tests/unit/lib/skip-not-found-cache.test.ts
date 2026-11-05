@@ -52,7 +52,7 @@ describe("security M1 residual: a 404 response is never written to the KV increm
   it("does not write a 404 page entry for a path that has no entry", async () => {
     const underlying = underlyingCache(null);
 
-    await skipNotFoundWrites(underlying.cache).set("/da/ikke-en-side", notFoundPage, "cache");
+    await skipNotFoundWrites(underlying.cache).set("/da/not-a-page", notFoundPage, "cache");
 
     expect(underlying.set).not.toHaveBeenCalled();
     expect(underlying.delete).not.toHaveBeenCalled();
@@ -70,10 +70,10 @@ describe("security M1 residual: a 404 response is never written to the KV increm
   it("deletes the entry a key already holds when it now renders a 404 (an unpublished section is not served stale)", async () => {
     const underlying = underlyingCache(STORED);
 
-    await skipNotFoundWrites(underlying.cache).set("/da/ydelser", notFoundPage, "cache");
+    await skipNotFoundWrites(underlying.cache).set("/da/services", notFoundPage, "cache");
 
-    expect(underlying.get).toHaveBeenCalledWith("/da/ydelser", "cache");
-    expect(underlying.delete).toHaveBeenCalledWith("/da/ydelser");
+    expect(underlying.get).toHaveBeenCalledWith("/da/services", "cache");
+    expect(underlying.delete).toHaveBeenCalledWith("/da/services");
     expect(underlying.set).not.toHaveBeenCalled();
   });
 });
@@ -82,9 +82,9 @@ describe("security M1 residual: every other cache call passes through unchanged"
   it("writes a 200 page entry as given", async () => {
     const underlying = underlyingCache(null);
 
-    await skipNotFoundWrites(underlying.cache).set("/da/ydelser", okPage, "cache");
+    await skipNotFoundWrites(underlying.cache).set("/da/services", okPage, "cache");
 
-    expect(underlying.set).toHaveBeenCalledWith("/da/ydelser", okPage, "cache");
+    expect(underlying.set).toHaveBeenCalledWith("/da/services", okPage, "cache");
     expect(underlying.get).not.toHaveBeenCalled();
     expect(underlying.delete).not.toHaveBeenCalled();
   });
@@ -99,28 +99,28 @@ describe("security M1 residual: every other cache call passes through unchanged"
       revalidate: 60,
     };
 
-    await wrapped.set("/en/ydelser", redirect, "cache");
+    await wrapped.set("/en/services", redirect, "cache");
     await wrapped.set("fetch-key", fetchEntry, "fetch");
 
-    expect(underlying.set).toHaveBeenNthCalledWith(1, "/en/ydelser", redirect, "cache");
+    expect(underlying.set).toHaveBeenNthCalledWith(1, "/en/services", redirect, "cache");
     expect(underlying.set).toHaveBeenNthCalledWith(2, "fetch-key", fetchEntry, "fetch");
   });
 
   it("reads through to the underlying cache", async () => {
     const underlying = underlyingCache(STORED);
 
-    const entry = await skipNotFoundWrites(underlying.cache).get("/da/ydelser", "cache");
+    const entry = await skipNotFoundWrites(underlying.cache).get("/da/services", "cache");
 
     expect(entry).toBe(STORED);
-    expect(underlying.get).toHaveBeenCalledWith("/da/ydelser", "cache");
+    expect(underlying.get).toHaveBeenCalledWith("/da/services", "cache");
   });
 
   it("deletes through to the underlying cache", async () => {
     const underlying = underlyingCache(STORED);
 
-    await skipNotFoundWrites(underlying.cache).delete("/da/ydelser");
+    await skipNotFoundWrites(underlying.cache).delete("/da/services");
 
-    expect(underlying.delete).toHaveBeenCalledWith("/da/ydelser");
+    expect(underlying.delete).toHaveBeenCalledWith("/da/services");
   });
 
   it("keeps the underlying cache's name (opennextjs-cloudflare deploy populates the KV cache by name)", () => {
@@ -144,10 +144,10 @@ describe("security M1 residual: every other cache call passes through unchanged"
     };
     const wrapped = skipNotFoundWrites(cache);
 
-    await wrapped.get("/da/ydelser", "cache");
-    await wrapped.set("/da/ydelser", okPage, "cache");
-    await wrapped.set("/da/ydelser", notFoundPage, "cache");
-    await wrapped.delete("/da/ydelser");
+    await wrapped.get("/da/services", "cache");
+    await wrapped.set("/da/services", okPage, "cache");
+    await wrapped.set("/da/services", notFoundPage, "cache");
+    await wrapped.delete("/da/services");
 
     // get, set, then get + delete for the 404, then delete.
     expect(receivers).toEqual([cache, cache, cache, cache, cache]);

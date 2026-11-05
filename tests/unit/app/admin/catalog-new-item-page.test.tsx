@@ -57,7 +57,8 @@ function makeSection(id: string, kind: AdminCatalogSection["kind"]): AdminCatalo
     kind,
     status: "published",
     title: kind === "apps" ? "Apps" : "Hjemmesider",
-    slug: kind === "apps" ? "apps" : "hjemmesider",
+    // The URL slug: the English route slug.
+    slug: kind === "apps" ? "apps" : "websites",
     publishedCount: 0,
     draftCount: 0,
   };

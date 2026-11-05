@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 // Tests for AC-DS-10 (standalone SkipLink component)
-// These tests FAIL (Red) until web-developer creates src/components/ui/SkipLink.tsx.
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';

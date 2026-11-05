@@ -1,10 +1,7 @@
 import { useLocale } from "next-intl";
 import { useParams, useSelectedLayoutSegments } from "next/navigation";
-import { getPathname } from "./navigation";
+import { getPathname, type RouteHref } from "./navigation";
 import { routing } from "./routing";
-
-/** A next-intl href: internal pathname template plus the params that fill it. */
-export type RouteHref = Parameters<typeof getPathname>[0]["href"];
 
 /** Route params as `useParams` returns them (`{ locale: "da", slug: "apps" }`). */
 type RouteParams = Record<string, string | string[] | undefined>;
@@ -36,10 +33,10 @@ function fillTemplate(template: string, params: RouteParams): string {
  *
  * Built from the internal route (the active segments below the `[locale]`
  * layout), not from the URL: while a page is prerendered, `usePathname`
- * returns the rewrite target (`/da/contact` for `/kontakt`), which next-intl
- * cannot map back to `/contact`, so the static HTML linked to `/en/[slug]`
- * until hydration. The segments are the same on the server and in the
- * browser.
+ * returns the rewrite target (`/da/contact` for `/contact`), which next-intl
+ * does not map back to the unprefixed path, so the static HTML linked to
+ * `/en/[slug]` until hydration. The segments are the same on the server and
+ * in the browser.
  *
  * Client components rendered by the `[locale]` layout only (site header and
  * footer): `useSelectedLayoutSegments` is relative to the calling layout, so
@@ -47,7 +44,7 @@ function fillTemplate(template: string, params: RouteParams): string {
  */
 export function useCurrentRoute(): RouteHref {
   const params = useParams<RouteParams>();
-  // [] on the home page, ["contact"] on /kontakt and /en/contact.
+  // [] on the home page, ["contact"] on /contact and /en/contact.
   const path = `/${useSelectedLayoutSegments().join("/")}`;
   const pathname = TEMPLATES.find((template) => fillTemplate(template, params) === path) ?? path;
   // The template and params describe the same route; the pathname union
@@ -56,7 +53,7 @@ export function useCurrentRoute(): RouteHref {
 }
 
 /**
- * Locale-aware path of the current page (`/`, `/en`, `/kontakt`,
+ * Locale-aware path of the current page (`/`, `/en`, `/contact`,
  * `/en/apps`): the same form as server-built nav hrefs, so equality marks the
  * current page. Client components rendered by the `[locale]` layout only.
  */

@@ -15,7 +15,7 @@ const CURRENT =
 const HOME_PATHS = new Set<string>(routing.locales.map((locale) => getPathname({ href: "/", locale })));
 
 export type NavLinkProps = Omit<ComponentPropsWithRef<typeof NextLink>, "href"> & {
-  /** Locale-aware path (`/kontakt`, `/en/apps`), as built on the server. */
+  /** Locale-aware path (`/contact`, `/en/apps`), as built on the server. */
   href: string;
 };
 

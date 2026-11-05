@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Tests for the header/footer NavLink (AC-HOME-04/05: the current page's nav
 // link carries aria-current="page"). SiteHeader builds every href on the
-// server in the locale-aware form ("/", "/kontakt", "/en/apps"); NavLink
+// server in the locale-aware form ("/", "/contact", "/en/apps"); NavLink
 // compares it with the current page in the same form, so these pin:
 // - exactly the link to the current page is marked, on fixed routes, the
 //   DB-slug route and both home pages ("/" must not match "/apps"), in the
@@ -45,7 +45,7 @@ const NAV: Record<Locale, Item[]> = {
   da: [
     { href: "/", label: "Forside" },
     { href: "/apps", label: "Apps" },
-    { href: "/kontakt", label: "Kontakt" },
+    { href: "/contact", label: "Kontakt" },
   ],
   en: [
     { href: "/en", label: "Home" },
@@ -85,7 +85,7 @@ function renderNav(
   );
 }
 
-/** Links currently marked as the current page. */
+/** Links that carry an aria-current mark (either value). */
 function currentLinks() {
   return screen.getAllByRole("link").filter((link) => link.hasAttribute("aria-current"));
 }
@@ -109,7 +109,7 @@ describe('AC-HOME-04/05: NavLink marks only the current page with aria-current="
   });
 
   it.each([
-    ["da", "ydelser", { href: "/ydelser", label: "Ydelser" }],
+    ["da", "services", { href: "/services", label: "Ydelser" }],
     ["en", "services", { href: "/en/services", label: "Services" }],
   ] as const)('%s section page /%s: the section link is the current page (aria-current="page")', (locale, slug, link) => {
     renderNav(locale, [slug], { params: { slug }, items: [...NAV[locale], link] });
@@ -119,20 +119,20 @@ describe('AC-HOME-04/05: NavLink marks only the current page with aria-current="
     expect(current[0]).toHaveAttribute("aria-current", "page");
   });
 
-  it("marks Kontakt on the prerendered /kontakt, where usePathname is the rewrite target /da/contact", () => {
+  it("marks Kontakt on the prerendered /contact, where usePathname is the rewrite target /da/contact", () => {
     renderNav("da", ["contact"], { pathname: "/da/contact" });
     const current = currentLinks();
     expect(current).toHaveLength(1);
     expect(current[0]).toHaveTextContent("Kontakt");
   });
 
-  it("marks no link on a page that is not in the nav (/privatliv)", () => {
+  it("marks no link on a page that is not in the nav (/privacy)", () => {
     renderNav("da", ["privacy"]);
     expect(currentLinks()).toHaveLength(0);
   });
 
-  it("never marks a link into the other locale (/kontakt while on /en/contact)", () => {
-    renderNav("en", ["contact"], { items: [{ href: "/kontakt", label: "Kontakt" }] });
+  it("never marks a link into the other locale (/contact while on /en/contact)", () => {
+    renderNav("en", ["contact"], { items: [{ href: "/contact", label: "Kontakt" }] });
     expect(screen.getByRole("link", { name: "Kontakt" })).not.toHaveAttribute("aria-current");
   });
 });
@@ -141,7 +141,7 @@ describe('AC-HOME-04/05: NavLink marks only the current page with aria-current="
 
 describe('NavLink marks the section of a catalog item page with aria-current="true"', () => {
   it.each([
-    ["da", "som-app", "Apps"],
+    ["da", "some-app", "Apps"],
     ["en", "some-app", "Apps"],
   ] as const)("%s item %s: only the section link %s is marked, and as the section", (locale, item, label) => {
     renderNav(locale, ["apps", item], { params: { slug: "apps", item } });
@@ -152,9 +152,9 @@ describe('NavLink marks the section of a catalog item page with aria-current="tr
   });
 
   it('never marks a nav link "page" on an item page: the item itself is the current page (breadcrumb)', () => {
-    renderNav("da", ["ydelser", "webudvikling"], {
-      params: { slug: "ydelser", item: "webudvikling" },
-      items: [...NAV.da, { href: "/ydelser", label: "Ydelser" }],
+    renderNav("da", ["services", "web-development"], {
+      params: { slug: "services", item: "web-development" },
+      items: [...NAV.da, { href: "/services", label: "Ydelser" }],
     });
     expect(screen.getByRole("link", { name: "Ydelser" })).toHaveAttribute("aria-current", "true");
     expect(currentLinks().filter((link) => link.getAttribute("aria-current") === "page")).toHaveLength(0);

@@ -18,8 +18,8 @@ afterEach(cleanup);
 const featured = catalogItem({ id: "item-web", title: "Webudvikling", featured: true });
 const plain = catalogItem({
   id: "item-advice",
-  slug: "raadgivning",
-  href: "/ydelser/raadgivning",
+  slug: "consulting",
+  href: "/services/consulting",
   title: "Teknisk rådgivning",
   summary: "Arkitektur og kodegennemgang.",
   price: { text: "Kontakt", vat: null },
@@ -52,7 +52,7 @@ describe("AC-CATPUB-01: section page shows the section and its published items",
     renderSection(catalogSection({ items: [featured, plain] }));
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(within(card("Webudvikling")).getByRole("heading", { level: 3 })).toHaveTextContent("Webudvikling");
-    expect(screen.getByRole("link", { name: "Teknisk rådgivning" })).toHaveAttribute("href", "/ydelser/raadgivning");
+    expect(screen.getByRole("link", { name: "Teknisk rådgivning" })).toHaveAttribute("href", "/services/consulting");
     expect(within(card("Teknisk rådgivning")).getByText("Arkitektur og kodegennemgang.")).toBeInTheDocument();
   });
 

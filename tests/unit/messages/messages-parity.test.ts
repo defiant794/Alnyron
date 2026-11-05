@@ -1,7 +1,5 @@
 // Tests for AC-I18N-07, AC-I18N-08, AC-I18N-09
 // Reads messages/da.json and messages/en.json from the repo root.
-// These files DO NOT EXIST YET (Red phase) — tests fail with JSON parse / import errors
-// until web-developer creates them.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";

@@ -114,7 +114,7 @@ export async function getHomePage(locale: Locale): Promise<ResolvedContent<HomeP
 }
 
 /**
- * The contact system page (`/kontakt`, `/en/contact`) for `locale`, with the
+ * The contact system page (`/contact`, `/en/contact`) for `locale`, with the
  * same per-field Danish fallback as {@link getHomePage}.
  *
  * @throws like {@link getHomePage}.
@@ -126,7 +126,7 @@ export async function getContactPage(locale: Locale): Promise<ResolvedContent<Co
 }
 
 /**
- * The privacy system page (`/privatliv`, `/en/privacy`) for `locale`, with
+ * The privacy system page (`/privacy`, `/en/privacy`) for `locale`, with
  * the same per-field Danish fallback as {@link getHomePage}. Each `{email}` in
  * `body_md` becomes a markdown autolink to `site_settings.contact_email`, so
  * the rendered policy links the current contact address.

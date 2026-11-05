@@ -3,10 +3,9 @@
  * Unit test — AdminShell includes a "Sider" nav link (F1.2 pages editor)
  * Journey: pages-editor  AC-PAGES-18
  *
- * Uses the real nextIntlServerMock() WITHOUT a "Sider" override so that:
- *  - A missing Admin.nav.pages key in messages/da.json throws at render time
- *    (correct RED: the key must be added as part of the implementation).
- *  - A working implementation must both add the nav item AND the translation.
+ * Uses the real nextIntlServerMock() WITHOUT a "Sider" override, so a missing
+ * Admin.nav.pages key in messages/da.json throws at render time: the nav item
+ * and its translation must both exist.
  *
  * The existing F-nav test in AdminShell.test.tsx enforces that every nav href
  * points to an existing panel page.tsx (glob: admin/(panel)/**), so /admin/pages

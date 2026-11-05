@@ -2,11 +2,15 @@ import type { Metadata } from "next";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
+import { languageAlternates } from "@/i18n/alternates";
+import { pathsInEveryLocale } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
 import { getContactPage, getPageMetadata } from "@/services/content/pages";
 
 type ContactProps = Readonly<{ params: Promise<{ locale: string }> }>;
 
+/** SEO title/description (DB, falling back to the nav label) and hreflang alternates. */
 export async function generateMetadata({ params }: ContactProps): Promise<Metadata> {
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) return {};
@@ -14,11 +18,16 @@ export async function generateMetadata({ params }: ContactProps): Promise<Metada
     getPageMetadata("contact", locale),
     getTranslations({ locale, namespace: "Nav" }),
   ]);
-  return { title: seo.title || t("contact"), ...(seo.description && { description: seo.description }) };
+  const paths = pathsInEveryLocale(SYSTEM_PAGE_PATHNAMES.contact);
+  return {
+    title: seo.title || t("contact"),
+    ...(seo.description && { description: seo.description }),
+    alternates: { canonical: paths[locale], languages: languageAlternates(paths) },
+  };
 }
 
 /**
- * Contact page (`/kontakt`, `/en/contact`; approved contact mock): eyebrow,
+ * Contact page (`/contact`, `/en/contact`; approved contact mock): eyebrow,
  * title and lead, then the response time and languages. All copy comes from
  * the contact system page in the DB (edited under Admin > Sider), with
  * Danish filling blank English fields (marked `lang="da"`). Blank fields are

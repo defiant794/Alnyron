@@ -2,8 +2,8 @@
  * Unit tests: /sitemap.xml (src/app/sitemap.ts). The catalog service is
  * mocked (its own filtering and alternates: tests/unit/services/content/catalog.test.ts);
  * these tests check the system pages, the absolute URLs and the failure modes.
- * Journey: catalog-public
- * Acceptance IDs: AC-CATPUB-30, AC-CATPUB-31
+ * Journey: catalog-public, english-slugs
+ * Acceptance IDs: AC-CATPUB-30, AC-CATPUB-31, AC-ENSLUG-06, AC-ENSLUG-06b
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,17 +15,18 @@ import { getCatalogSitemapEntries, type CatalogSitemapEntry } from "@/services/c
 const SITE = "https://alnyron.example";
 const UPDATED = new Date("2026-11-02T10:00:00Z");
 
-const SECTION_LANGUAGES = { da: "/ydelser", en: "/en/services", "x-default": "/ydelser" };
+// The service's entries (site-relative, English slugs on both locales).
+const SECTION_LANGUAGES = { da: "/services", en: "/en/services", "x-default": "/services" };
 const ITEM_LANGUAGES = {
-  da: "/ydelser/webudvikling",
+  da: "/services/web-development",
   en: "/en/services/web-development",
-  "x-default": "/ydelser/webudvikling",
+  "x-default": "/services/web-development",
 };
 
 const CATALOG: CatalogSitemapEntry[] = [
-  { url: "/ydelser", lastModified: UPDATED, alternates: { languages: SECTION_LANGUAGES } },
+  { url: "/services", lastModified: UPDATED, alternates: { languages: SECTION_LANGUAGES } },
   { url: "/en/services", lastModified: UPDATED, alternates: { languages: SECTION_LANGUAGES } },
-  { url: "/ydelser/webudvikling", lastModified: UPDATED, alternates: { languages: ITEM_LANGUAGES } },
+  { url: "/services/web-development", lastModified: UPDATED, alternates: { languages: ITEM_LANGUAGES } },
   { url: "/en/services/web-development", lastModified: UPDATED, alternates: { languages: ITEM_LANGUAGES } },
 ];
 
@@ -45,17 +46,17 @@ async function entry(url: string) {
 }
 
 describe("AC-CATPUB-30: sitemap lists the system pages and every public catalog page", () => {
-  it("lists home, contact and privacy in both locales, then the catalog entries", async () => {
+  it("AC-ENSLUG-06/06b: lists home, contact and privacy at English paths, then the catalog entries", async () => {
     expect((await sitemap()).map((candidate) => candidate.url)).toEqual([
       `${SITE}/`,
       `${SITE}/en`,
-      `${SITE}/kontakt`,
+      `${SITE}/contact`,
       `${SITE}/en/contact`,
-      `${SITE}/privatliv`,
+      `${SITE}/privacy`,
       `${SITE}/en/privacy`,
-      `${SITE}/ydelser`,
+      `${SITE}/services`,
       `${SITE}/en/services`,
-      `${SITE}/ydelser/webudvikling`,
+      `${SITE}/services/web-development`,
       `${SITE}/en/services/web-development`,
     ]);
   });
@@ -66,7 +67,7 @@ describe("AC-CATPUB-30: sitemap lists the system pages and every public catalog 
   });
 
   it("keeps each catalog page's last modification", async () => {
-    expect((await entry(`${SITE}/ydelser/webudvikling`)).lastModified).toEqual(UPDATED);
+    expect((await entry(`${SITE}/services/web-development`)).lastModified).toEqual(UPDATED);
   });
 
   it("throws when NEXT_PUBLIC_SITE_URL is missing, so a broken sitemap is never cached", async () => {
@@ -85,27 +86,27 @@ describe("AC-CATPUB-30: sitemap lists the system pages and every public catalog 
 });
 
 describe("AC-CATPUB-31: sitemap alternates are absolute, with x-default = Danish", () => {
-  it("gives the DA section entry its EN alternate and x-default on the DA URL", async () => {
-    expect((await entry(`${SITE}/ydelser`)).alternates?.languages).toEqual({
-      da: `${SITE}/ydelser`,
+  it("makes a catalog section's alternates absolute", async () => {
+    expect((await entry(`${SITE}/services`)).alternates?.languages).toEqual({
+      da: `${SITE}/services`,
       en: `${SITE}/en/services`,
-      "x-default": `${SITE}/ydelser`,
+      "x-default": `${SITE}/services`,
     });
   });
 
-  it("gives an EN item entry the same absolute alternates as its DA entry", async () => {
+  it("makes a catalog item's alternates absolute on its EN entry too", async () => {
     expect((await entry(`${SITE}/en/services/web-development`)).alternates?.languages).toEqual({
-      da: `${SITE}/ydelser/webudvikling`,
+      da: `${SITE}/services/web-development`,
       en: `${SITE}/en/services/web-development`,
-      "x-default": `${SITE}/ydelser/webudvikling`,
+      "x-default": `${SITE}/services/web-development`,
     });
   });
 
-  it("gives a system page its localized paths as alternates", async () => {
+  it("AC-ENSLUG-06: the contact page alternates are /contact and /en/contact, x-default /contact", async () => {
     expect((await entry(`${SITE}/en/contact`)).alternates?.languages).toEqual({
-      da: `${SITE}/kontakt`,
+      da: `${SITE}/contact`,
       en: `${SITE}/en/contact`,
-      "x-default": `${SITE}/kontakt`,
+      "x-default": `${SITE}/contact`,
     });
   });
 });

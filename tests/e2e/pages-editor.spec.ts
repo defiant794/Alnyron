@@ -4,7 +4,7 @@
  *
  * Coverage:
  *  - Admin area: Sider list, Rediger editor, save, nav toggle, reorder affordance
- *  - Public: /kontakt reads DB, /privatliv renders sanitized markdown
+ *  - Public: /contact reads DB, /privacy renders sanitized markdown
  *
  * Auth: uses a DEDICATED pages-editor test user (E2E_PAGES_ADMIN_UUID/EMAIL)
  * so this block never races admin-auth.spec.ts which seeds E2E_ADMIN_UUID.
@@ -20,7 +20,7 @@
  * Requires: dev server at PLAYWRIGHT_BASE_URL (default http://localhost:3000).
  */
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import type { PoolClient } from "../integration/rls/helpers/db";
 import {
   DB_AVAILABLE,
@@ -34,6 +34,7 @@ import {
   endPool,
   type SystemPagesSnapshot,
 } from "./fixtures/pages-editor-seed";
+import { loginAs } from "./fixtures/admin-login";
 import { revalidateSite } from "./fixtures/revalidate";
 
 // ── Pool lifecycle ────────────────────────────────────────────────────────────
@@ -42,27 +43,12 @@ test.afterAll(async () => {
   await endPool();
 });
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function loginPagesAdmin(page: Page, password: string, path = "/admin"): Promise<void> {
-  await page.goto("/admin/login");
-  await page.getByRole("textbox", { name: /e-?mail/i }).fill(E2E_PAGES_ADMIN_EMAIL);
-  await page.getByLabel(/adgangskode|password/i).fill(password);
-  await page.getByRole("button", { name: /log ind|sign in/i }).click();
-  await expect(page).toHaveURL((u) => u.pathname.startsWith("/admin") && !/^\/admin\/(login|no-access)/.test(u.pathname));
-  if (path !== "/admin") await page.goto(path);
-}
-
 // ── Public pages — no auth or DB needed ──────────────────────────────────────
 
-test("AC-PAGES-E11: GET /kontakt shows the seeded DA title (DB-backed, not placeholder)", async ({
+test("AC-PAGES-E11: GET /contact shows the seeded DA title (DB-backed, not placeholder)", async ({
   page,
 }) => {
-  await page.goto("/kontakt");
-  // The seeded DA title (20261101000300_seed_system_content.sql:34) is
-  // "Lad os tale om dit projekt".  The current placeholder only renders the
-  // nav label "Kontakt" in an h1.  Asserting the seeded text proves the page
-  // reads from page_translations rather than the i18n message file.
+  await page.goto("/contact");
   await expect(page.locator("h1")).toContainText("Lad os tale om dit projekt");
 });
 
@@ -75,10 +61,10 @@ test("AC-PAGES-E11b: GET /en/contact shows the DA fallback title (EN row is blan
 });
 
 
-test("AC-PAGES-E12: GET /privatliv renders the privacy page (route exists, not 404)", async ({
+test("AC-PAGES-E12: GET /privacy renders the privacy page (route exists, not 404)", async ({
   page,
 }) => {
-  const response = await page.goto("/privatliv");
+  const response = await page.goto("/privacy");
   expect(response?.status()).not.toBe(404);
   await expect(page.locator("h1")).toBeVisible();
 });
@@ -88,10 +74,10 @@ test("AC-PAGES-E12b: GET /en/privacy renders the privacy page (EN route)", async
   expect(response?.status()).not.toBe(404);
 });
 
-test("AC-PAGES-E13: /privatliv does not output raw markdown syntax — body_md is converted to HTML", async ({
+test("AC-PAGES-E13: /privacy does not output raw markdown syntax — body_md is converted to HTML", async ({
   page,
 }) => {
-  await page.goto("/privatliv");
+  await page.goto("/privacy");
   const body = await page.content();
   // Raw ATX headings and emphasis syntax must not appear — they must be rendered to HTML.
   expect(body).not.toMatch(/^##\s/m);
@@ -137,7 +123,7 @@ test.describe("Pages editor — needs DB", () => {
   test("AC-PAGES-E01: AdminShell sidebar nav contains a 'Sider' link pointing to /admin/pages", async ({
     page,
   }) => {
-    await loginPagesAdmin(page, password);
+    await loginAs(page, E2E_PAGES_ADMIN_EMAIL, password);
     const nav = page.getByRole("navigation", { name: "Administration" });
     // exact: name matching is substring by default, and the catalog group's
     // "Hjemmesider" link also contains "sider".
@@ -151,7 +137,7 @@ test.describe("Pages editor — needs DB", () => {
   test("AC-PAGES-E02: GET /admin/pages lists all three system pages (home/contact/privacy)", async ({
     page,
   }) => {
-    await loginPagesAdmin(page, password, "/admin/pages");
+    await loginAs(page, E2E_PAGES_ADMIN_EMAIL, password, "/admin/pages");
     await expect(page.getByRole("main")).toContainText(/Forside|Home/i);
     await expect(page.getByRole("main")).toContainText(/Kontakt|Contact/i);
     await expect(page.getByRole("main")).toContainText(/Privatliv|Privacy/i);
@@ -162,7 +148,7 @@ test.describe("Pages editor — needs DB", () => {
   test("AC-PAGES-E03: clicking Rediger for Contact opens the editor with DA and EN tabs", async ({
     page,
   }) => {
-    await loginPagesAdmin(page, password, "/admin/pages");
+    await loginAs(page, E2E_PAGES_ADMIN_EMAIL, password, "/admin/pages");
     const contactRow = page.getByRole("row").filter({ hasText: /Kontakt|Contact/i }).first();
     await contactRow.getByRole("link", { name: /Rediger/i }).click();
 
@@ -176,7 +162,7 @@ test.describe("Pages editor — needs DB", () => {
   test("AC-PAGES-E04: editing the DA Titel and clicking Gem shows success feedback", async ({
     page,
   }) => {
-    await loginPagesAdmin(page, password, "/admin/pages");
+    await loginAs(page, E2E_PAGES_ADMIN_EMAIL, password, "/admin/pages");
     const contactRow = page.getByRole("row").filter({ hasText: /Kontakt|Contact/i }).first();
     await contactRow.getByRole("link", { name: /Rediger/i }).click();
 
@@ -195,7 +181,7 @@ test.describe("Pages editor — needs DB", () => {
   test("AC-PAGES-E05: toggling 'Vis i menuen' for Contact and saving persists on reload", async ({
     page,
   }) => {
-    await loginPagesAdmin(page, password, "/admin/pages");
+    await loginAs(page, E2E_PAGES_ADMIN_EMAIL, password, "/admin/pages");
     const contactRow = page.getByRole("row").filter({ hasText: /Kontakt|Contact/i }).first();
     await contactRow.getByRole("link", { name: /Rediger/i }).click();
 
@@ -217,11 +203,11 @@ test.describe("Pages editor — needs DB", () => {
 
   // ── AC-PAGES-E06: Forhåndsvis opens the published public URL ─────────────
 
-  test("AC-PAGES-E06: Forhåndsvis button on the Contact editor opens /kontakt in a new tab", async ({
+  test("AC-PAGES-E06: Forhåndsvis button on the Contact editor opens /contact in a new tab", async ({
     page,
     context,
   }) => {
-    await loginPagesAdmin(page, password, "/admin/pages");
+    await loginAs(page, E2E_PAGES_ADMIN_EMAIL, password, "/admin/pages");
     const contactRow = page.getByRole("row").filter({ hasText: /Kontakt|Contact/i }).first();
     await contactRow.getByRole("link", { name: /Rediger/i }).click();
 
@@ -230,17 +216,17 @@ test.describe("Pages editor — needs DB", () => {
       page.getByRole("link", { name: /Forhåndsvis/i }).click(),
     ]);
     await newTab.waitForLoadState();
-    expect(newTab.url()).toMatch(/\/kontakt/);
+    expect(new URL(newTab.url()).pathname).toBe("/contact");
   });
 
-  // ── AC-PAGES-E07: public /kontakt reflects saved title ───────────────────
+  // ── AC-PAGES-E07: public /contact reflects saved title ───────────────────
 
-  test("AC-PAGES-E07: after saving a DA title, GET /kontakt renders it in the public heading", async ({
+  test("AC-PAGES-E07: after saving a DA title, GET /contact renders it in the public heading", async ({
     page,
   }) => {
     const uniqueTitle = `Kontakt e2e ${Date.now()}`;
 
-    await loginPagesAdmin(page, password, "/admin/pages");
+    await loginAs(page, E2E_PAGES_ADMIN_EMAIL, password, "/admin/pages");
     const contactRow = page.getByRole("row").filter({ hasText: /Kontakt|Contact/i }).first();
     await contactRow.getByRole("link", { name: /Rediger/i }).click();
 
@@ -251,8 +237,7 @@ test.describe("Pages editor — needs DB", () => {
       page.getByRole("status").filter({ hasText: /gemt/i }),
     ).toBeVisible();
 
-    // Dev server renders from DB on every request — no ISR revalidation needed here.
-    await page.goto("/kontakt");
+    await page.goto("/contact");
     await expect(page.locator("h1")).toContainText(uniqueTitle);
   });
 
@@ -265,7 +250,7 @@ test.describe("Pages editor — needs DB", () => {
     // Persistence of the reorder is verified by the server-action unit tests
     // (AC-PAGES-14/15/16) which confirm admin_reorder_nav is called with the
     // correct array and revalidation follows.
-    await loginPagesAdmin(page, password, "/admin/pages");
+    await loginAs(page, E2E_PAGES_ADMIN_EMAIL, password, "/admin/pages");
 
     // A reorder affordance must exist — either explicit up/down controls or
     // drag handles.  Both are valid implementations; the test accepts either.

@@ -4,7 +4,8 @@
 // Ordering is covered by nav.test.ts (buildNavItems). These tests cover the
 // mapping: system pages get fixed UI labels and routes, custom pages and
 // categories get their DB title (Danish fallback marked with lang="da"), and
-// a custom page without a slug in the locale is left out.
+// a custom page without an English route slug (the URL slug on every locale,
+// english-slugs) is left out.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { mockPagesQuery } = vi.hoisted(() => ({ mockPagesQuery: vi.fn() }));
@@ -67,12 +68,12 @@ beforeEach(() => {
 });
 
 describe("AC-HOME-04/13: getNavItems — system pages use fixed labels and locale routes", () => {
-  it("DA: Forside at / first, Kontakt at /kontakt", async () => {
+  it("DA: Forside at / first, Kontakt at /contact", async () => {
     const items = await getNavItems("da");
     expect(items[0]).toMatchObject({ key: "system-home", label: "Forside", href: "/", isHome: true });
     expect(items.find((item) => item.key === "system-contact")).toMatchObject({
       label: "Kontakt",
-      href: "/kontakt",
+      href: "/contact",
     });
   });
 
@@ -107,21 +108,23 @@ describe("AC-HOME-06/08: getNavItems — custom pages and categories in nav_orde
     expect(getPublicCategories).toHaveBeenCalledWith("en");
   });
 
-  it("custom page: DB title as label and its slug in the locale as href", async () => {
+  it("AC-ENSLUG-08: custom page: DB title as label and its English route slug as href on DA too", async () => {
     const items = await getNavItems("da");
     expect(items.find((item) => item.key === "page-page-about-uuid")).toMatchObject({
       label: "Om os",
-      href: "/om-os",
+      href: "/about",
     });
   });
 
-  it("leaves out a custom page without a slug in the locale (slugs never fall back)", async () => {
+  it("leaves out a custom page without an English route slug, on every locale", async () => {
     mockPagesQuery.mockResolvedValue({
       data: [homeRow, { ...aboutRow, routes: [{ locale: "da", slug: "om-os" }] }],
       error: null,
     });
-    const items = await getNavItems("en");
-    expect(items.some((item) => item.key === "page-page-about-uuid")).toBe(false);
+    for (const locale of ["da", "en"] as const) {
+      const items = await getNavItems(locale);
+      expect(items.some((item) => item.key === "page-page-about-uuid")).toBe(false);
+    }
   });
 });
 

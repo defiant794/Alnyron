@@ -259,7 +259,10 @@
         "fields": {
           "title": "Titel ({locale})",
           "slug": "URL-slug ({locale})",
-          "slugHint": "Tom: dannes ud fra titlen, når du gemmer.",
+          "slugHint": {
+            "da": "Den offentlige adresse bruger den engelske URL-slug på begge sprog, så den danske er ikke en del af adressen. Tom: dannes ud fra titlen, når du gemmer.",
+            "en": "Danner den offentlige adresse på begge sprog. Tom: dannes ud fra titlen, når du gemmer."
+          },
           "summary": "Resumé ({locale})",
           "body": "Brødtekst ({locale}, markdown)",
           "bodyHint": "Markdown: ## Overskrift, **fed**, - punkt og [tekst](https://…). HTML vises som almindelig tekst.",

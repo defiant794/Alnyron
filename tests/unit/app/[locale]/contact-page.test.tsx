@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 /**
  * Unit tests — Contact page route (src/app/[locale]/contact/page.tsx)
- * Journey: pages-editor  AC-PAGES-19 (wiring), AC-PAGES-21/22 (sanitised content)
+ * Journeys: pages-editor  AC-PAGES-19 (wiring), AC-PAGES-21/22 (sanitised content);
+ *           english-slugs AC-ENSLUG-06e (canonical + hreflang in the page <head>)
  *
  * Checks that:
  *  - The page calls getContactPage() with the request locale (not the placeholder).
  *  - The seeded DA title, lead and all three content fields render in the DOM.
  *  - On EN locale with blank EN fields, the DA fallback values appear.
  *  - body_md with injected <script>/onerror is not present in the rendered DOM.
+ *  - generateMetadata gives the canonical path and hreflang alternates
+ *    (/contact, /en/contact, x-default = Danish) next to the SEO title.
  *
  * Service implementation: src/services/content/pages.ts (getContactPage).
  * Sanitisation: src/lib/sanitize-markdown.ts (sanitizeMarkdown).
@@ -17,24 +20,30 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import type * as NextNavigation from "next/navigation";
 
 // Dynamic import required: vi.mock factories are hoisted by Vite above all static
 // imports, so a static import of the helper would not yet exist at factory time.
 vi.mock("next-intl/server", async () =>
   (await import("../../../helpers/next-intl-server")).nextIntlServerMock(),
 );
-vi.mock("next/navigation", () => ({ notFound: vi.fn(), redirect: vi.fn() }));
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof NextNavigation>()),
+  notFound: vi.fn(),
+  redirect: vi.fn(),
+}));
 vi.mock("@/services/content/pages", () => ({
   getHomePage: vi.fn(),
   getContactPage: vi.fn(),
   getPrivacyPage: vi.fn(),
+  getPageMetadata: vi.fn(),
 }));
 vi.mock("@/lib/sanitize-markdown", () => ({
   sanitizeMarkdown: vi.fn((md: string) => `<p>${md}</p>`),
 }));
 
-import Page from "@/app/[locale]/contact/page";
-import { getContactPage } from "@/services/content/pages";
+import Page, { generateMetadata } from "@/app/[locale]/contact/page";
+import { getContactPage, getPageMetadata } from "@/services/content/pages";
 
 // ── Fixtures (seeded values from 20261101000300_seed_system_content.sql) ──────
 
@@ -64,6 +73,7 @@ beforeEach(() => {
   vi.mocked(getContactPage).mockImplementation(async (locale) =>
     locale === "da" ? DA_RESOLVED : EN_FALLBACK_RESOLVED,
   );
+  vi.mocked(getPageMetadata).mockResolvedValue({ title: "", description: "" });
 });
 
 afterEach(cleanup);
@@ -135,5 +145,36 @@ describe("Contact page — XSS: body_md with script/onerror is not in the DOM", 
     });
     const { container } = render(await Page({ params: Promise.resolve({ locale: "da" }) }));
     expect(container.querySelectorAll("script")).toHaveLength(0);
+  });
+});
+
+// ── AC-ENSLUG-06e: canonical and hreflang on the English-slug path ───────────
+
+describe("AC-ENSLUG-06e: Contact page metadata — canonical and hreflang on /contact", () => {
+  const metadata = (locale: string) => generateMetadata({ params: Promise.resolve({ locale }) });
+  const ALTERNATES = { da: "/contact", en: "/en/contact", "x-default": "/contact" };
+
+  it("DA: canonical /contact with da, en and x-default alternates", async () => {
+    expect((await metadata("da")).alternates).toEqual({ canonical: "/contact", languages: ALTERNATES });
+  });
+
+  it("EN: canonical /en/contact with the same alternates", async () => {
+    expect((await metadata("en")).alternates).toEqual({ canonical: "/en/contact", languages: ALTERNATES });
+  });
+
+  it("keeps the SEO title and description of the page row", async () => {
+    vi.mocked(getPageMetadata).mockResolvedValue({ title: "Kontakt Alnyron", description: "Skriv til os." });
+    expect(await metadata("da")).toMatchObject({ title: "Kontakt Alnyron", description: "Skriv til os." });
+    expect(getPageMetadata).toHaveBeenCalledWith("contact", "da");
+  });
+
+  it("falls back to the nav label as title and leaves out a blank description", async () => {
+    const meta = await metadata("en");
+    expect(meta.title).toBe("Contact");
+    expect(meta).not.toHaveProperty("description");
+  });
+
+  it("is empty for an unsupported locale", async () => {
+    expect(await metadata("de")).toEqual({});
   });
 });

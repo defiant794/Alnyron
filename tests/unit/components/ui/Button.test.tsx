@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 // Tests for AC-DS-12 through AC-DS-16
-// These tests FAIL (Red) until web-developer creates src/components/ui/Button.tsx.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

@@ -1,7 +1,6 @@
 // Tests for AC-DS-01 through AC-DS-06
 // Reads src/styles/globals.css and asserts every @theme token name+value
 // from the F0.2 design-system contract.
-// These tests FAIL (Red) until web-developer creates src/styles/globals.css.
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -29,7 +28,7 @@ describe('AC-DS-02: @theme tokens have correct names and values', () => {
 
   beforeAll(() => {
     const cssPath = join(ROOT, 'src/styles/globals.css');
-    // If the file does not exist yet the tests below will fail descriptively.
+    // Without the file the tests below fail on the empty string, naming each token.
     if (existsSync(cssPath)) {
       css = readFileSync(cssPath, 'utf-8');
     }

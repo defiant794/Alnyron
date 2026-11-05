@@ -106,14 +106,14 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
       await expect(page.locator("h1")).toBeVisible();
     });
 
-    test("GET /ydelser returns 404 when services has no published items", async ({
+    test("GET /services returns 404 when services has no published items", async ({
       page,
     }) => {
       test.skip(
         await hasRealPublicCatalogItem("services"),
         "Real published services content exists; section is legitimately visible",
       );
-      const response = await page.goto("/ydelser");
+      const response = await page.goto("/services");
       expect(response?.status()).toBe(404);
     });
 
@@ -145,7 +145,7 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
   test.describe("AC-CATPUB-01/10: published item appears on section index and item detail", () => {
     test.beforeAll(async () => {
       await addCatalogTestItem("services", "published", {
-        daSlug: "e2e-cat-webudvikling",
+        daSlug: "e2e-cat-webudvikling", // DA slug, no address: the EN slug is the URL
         daTitle: "E2E Webudvikling",
         daSummary: "Moderne, hurtige sites i Next.js.",
         enSlug: "e2e-cat-web-development",
@@ -163,8 +163,8 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
       await revalidateSite();
     });
 
-    test("AC-CATPUB-01: /ydelser shows the published item card", async ({ page }) => {
-      await page.goto("/ydelser");
+    test("AC-CATPUB-01: /services shows the published item card", async ({ page }) => {
+      await page.goto("/services");
       await expect(page.getByRole("heading", { name: "Ydelser" })).toBeVisible();
       await expect(page.getByText("E2E Webudvikling")).toBeVisible();
     });
@@ -183,14 +183,14 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
     test("AC-CATPUB-03: 'from' price renders 'fra 12.000 kr. inkl. moms' on DA section index", async ({
       page,
     }) => {
-      await page.goto("/ydelser");
+      await page.goto("/services");
       await expect(page.getByText(/fra.*12\.000.*kr\..*inkl\. moms/i)).toBeVisible();
     });
 
-    test("AC-CATPUB-10: DA item detail /ydelser/e2e-cat-webudvikling renders title", async ({
+    test("AC-CATPUB-10: DA item detail /services/e2e-cat-web-development renders the DA title", async ({
       page,
     }) => {
-      await page.goto("/ydelser/e2e-cat-webudvikling");
+      await page.goto("/services/e2e-cat-web-development");
       await expect(page.getByRole("heading", { name: "E2E Webudvikling" })).toBeVisible();
     });
 
@@ -201,70 +201,69 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
       await expect(page.getByRole("heading", { name: "E2E Web Development" })).toBeVisible();
     });
 
-    test("AC-CATPUB-11: item detail shows 'Kontakt os' CTA linking to /kontakt", async ({
+    test("AC-CATPUB-11: item detail shows 'Kontakt os' CTA linking to /contact", async ({
       page,
     }) => {
-      await page.goto("/ydelser/e2e-cat-webudvikling");
+      await page.goto("/services/e2e-cat-web-development");
       const cta = page.getByRole("link", { name: /kontakt os/i });
       await expect(cta).toBeVisible();
-      await expect(cta).toHaveAttribute("href", "/kontakt");
+      await expect(cta).toHaveAttribute("href", "/contact");
     });
 
-    // Language switch — locators use hreflang attribute (per i18n-routing.spec.ts pattern;
-    // accessible name in Chromium is "EN English" / "DA Dansk", not "EN"/"DA").
-    test("AC-CATPUB-21: language switcher on /ydelser navigates to /en/services", async ({
+    // Language switch: locators use the hreflang attribute (per i18n-routing.spec.ts;
+    // the accessible name in Chromium is "EN English" / "DA Dansk", not "EN"/"DA").
+    test("AC-CATPUB-21: language switcher on /services navigates to /en/services", async ({
       page,
     }) => {
-      await page.goto("/ydelser");
+      await page.goto("/services");
       await page.locator('a[hreflang="en"]').first().click();
-      await expect(page).toHaveURL(/\/en\/services/);
+      await expect(page).toHaveURL((url) => url.pathname === "/en/services");
     });
 
-    test("AC-CATPUB-21: language switcher on /en/services navigates to /ydelser", async ({
+    test("AC-CATPUB-21: language switcher on /en/services navigates to /services", async ({
       page,
     }) => {
       await page.goto("/en/services");
       await page.locator('a[hreflang="da"]').first().click();
-      await expect(page).toHaveURL(/\/ydelser(?!\/)/);
+      await expect(page).toHaveURL((url) => url.pathname === "/services");
     });
 
     test("AC-CATPUB-21: language switch on DA item navigates to EN item", async ({ page }) => {
-      await page.goto("/ydelser/e2e-cat-webudvikling");
+      await page.goto("/services/e2e-cat-web-development");
       await page.locator('a[hreflang="en"]').first().click();
-      await expect(page).toHaveURL(/\/en\/services\/e2e-cat-web-development/);
+      await expect(page).toHaveURL((url) => url.pathname === "/en/services/e2e-cat-web-development");
     });
 
-    // Sitemap — presence anchor (status 200 + /kontakt) before dynamic assertions.
+    // Sitemap: presence anchor (status 200 + /contact) before dynamic assertions.
     test("AC-CATPUB-30: sitemap.xml returns 200", async ({ page }) => {
       const response = await page.goto("/sitemap.xml");
       expect(response?.status()).toBe(200);
     });
 
-    test("AC-CATPUB-30: sitemap contains DA section URL", async ({ page }) => {
-      await page.goto("/sitemap.xml");
-      const content = await page.content();
-      expect(content).toContain("/kontakt"); // always-present anchor
-      expect(content).toContain("/ydelser");
+    test("AC-CATPUB-30: sitemap contains DA section URL", async ({ request }) => {
+      const xml = await (await request.get("/sitemap.xml")).text();
+      expect(xml).toContain("/contact"); // always-present anchor
+      expect(sitemapAlternates(xml, "/services")).toBeDefined();
     });
 
     test("AC-CATPUB-30: sitemap contains EN section URL", async ({ page }) => {
       await page.goto("/sitemap.xml");
       const content = await page.content();
-      expect(content).toContain("/kontakt");
+      expect(content).toContain("/contact");
       expect(content).toContain("/en/services");
     });
 
-    test("AC-CATPUB-30: sitemap contains DA item URL", async ({ page }) => {
-      await page.goto("/sitemap.xml");
-      const content = await page.content();
-      expect(content).toContain("/kontakt");
-      expect(content).toContain("/ydelser/e2e-cat-webudvikling");
+    test("AC-CATPUB-30: sitemap contains DA item URL", async ({ request }) => {
+      const xml = await (await request.get("/sitemap.xml")).text();
+      expect(xml).toContain("/contact");
+      expect(sitemapAlternates(xml, "/services/e2e-cat-web-development")).toBeDefined();
+      expect(xml).not.toContain("e2e-cat-webudvikling");
     });
 
     test("AC-CATPUB-30: sitemap contains EN item URL", async ({ page }) => {
       await page.goto("/sitemap.xml");
       const content = await page.content();
-      expect(content).toContain("/kontakt");
+      expect(content).toContain("/contact");
       expect(content).toContain("/en/services/e2e-cat-web-development");
     });
 
@@ -276,11 +275,11 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
       const response = await request.get("/sitemap.xml");
       expect(response.status()).toBe(200);
       const xml = await response.text();
-      const section = { da: "/ydelser", en: "/en/services", "x-default": "/ydelser" };
+      const section = { da: "/services", en: "/en/services", "x-default": "/services" };
       const item = {
-        da: "/ydelser/e2e-cat-webudvikling",
+        da: "/services/e2e-cat-web-development",
         en: "/en/services/e2e-cat-web-development",
-        "x-default": "/ydelser/e2e-cat-webudvikling",
+        "x-default": "/services/e2e-cat-web-development",
       };
       // The DA and the EN <url> of a page carry the same alternates.
       for (const alternates of [section, item]) {
@@ -296,10 +295,10 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
   // After the publish block's afterAll sweeps test rows, the section has no
   // published items → it should be hidden.
   //
-  // Sitemap absence: presence anchor (200 + /kontakt) before not.toContain.
+  // Sitemap absence: presence anchor (200 + /contact) before not.toContain.
 
   test.describe("AC-CATPUB-01: draft items (none published) → 404 + absent", () => {
-    test("GET /ydelser returns 404 after test items removed", async ({
+    test("GET /services returns 404 after test items removed", async ({
       page,
     }) => {
       test.skip(
@@ -308,7 +307,7 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
       );
       await page.goto("/");
       await expect(page.locator("h1")).toBeVisible(); // presence anchor
-      const response = await page.goto("/ydelser");
+      const response = await page.goto("/services");
       expect(response?.status()).toBe(404);
     });
 
@@ -326,12 +325,11 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
     });
 
     test("AC-CATPUB-30: test item absent from sitemap after removal", async ({ page }) => {
-      // Presence anchor: sitemap returns 200 and contains /kontakt.
       const response = await page.goto("/sitemap.xml");
       expect(response?.status()).toBe(200);
       const content = await page.content();
-      expect(content).toContain("/kontakt");
-      expect(content).not.toContain("e2e-cat-webudvikling");
+      expect(content).toContain("/contact"); // presence anchor
+      expect(content).not.toContain("e2e-cat-web-development");
     });
   });
 
@@ -362,20 +360,20 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
     });
 
     test("AC-CATPUB-02: featured item card shows 'Udvalgt' badge", async ({ page }) => {
-      await page.goto("/ydelser");
+      await page.goto("/services");
       await expect(page.getByRole("heading", { name: "Ydelser" })).toBeVisible();
       const featuredCard = page.locator("article", { hasText: "E2E Udvalgt Ydelse" });
       await expect(featuredCard.getByText("Udvalgt", { exact: true })).toBeVisible();
     });
 
     test("AC-CATPUB-02: featured item appears before non-featured in DOM", async ({ page }) => {
-      await page.goto("/ydelser");
+      await page.goto("/services");
       await expect(page.getByRole("heading", { name: "Ydelser" })).toBeVisible();
       await expect(page.locator("article").first()).toContainText("E2E Udvalgt Ydelse");
     });
 
     test("AC-CATPUB-02: non-featured item has no 'Udvalgt' badge", async ({ page }) => {
-      await page.goto("/ydelser");
+      await page.goto("/services");
       const nonFeaturedCard = page.locator("article", { hasText: "E2E Normal Ydelse" });
       await expect(nonFeaturedCard.getByText("Udvalgt")).toHaveCount(0);
     });
@@ -405,18 +403,18 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
       await revalidateSite();
     });
 
-    test("presence anchor: /ydelser/e2e-cat-anchor returns 200", async ({ page }) => {
-      const response = await page.goto("/ydelser/e2e-cat-anchor");
+    test("presence anchor: /services/e2e-cat-anchor-en returns 200 (EN slug is URL)", async ({ page }) => {
+      const response = await page.goto("/services/e2e-cat-anchor-en");
       expect(response?.status()).toBe(200);
     });
 
-    test("AC-CATPUB-10: /ydelser/e2e-cat-draft returns 404", async ({ page }) => {
-      const response = await page.goto("/ydelser/e2e-cat-draft");
+    test("AC-CATPUB-10: /services/e2e-cat-draft-en returns 404", async ({ page }) => {
+      const response = await page.goto("/services/e2e-cat-draft-en");
       expect(response?.status()).toBe(404);
     });
 
     test("AC-CATPUB-10: draft item absent from section index", async ({ page }) => {
-      await page.goto("/ydelser");
+      await page.goto("/services");
       await expect(page.getByText("E2E Anchor Item")).toBeVisible(); // presence
       await expect(page.getByText("E2E Draft Item")).toHaveCount(0);
     });
@@ -456,8 +454,8 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
       await expect(page.locator("h1")).toBeVisible();
     });
 
-    test("AC-CATPUB-01: /ydelser returns 404 when category is draft", async ({ page }) => {
-      const response = await page.goto("/ydelser");
+    test("AC-CATPUB-01: /services returns 404 when category is draft", async ({ page }) => {
+      const response = await page.goto("/services");
       expect(response?.status()).toBe(404);
     });
 
@@ -477,8 +475,9 @@ test.describe("Catalog public pages (DB fixture, serial)", () => {
       const response = await page.goto("/sitemap.xml");
       expect(response?.status()).toBe(200);
       const content = await page.content();
-      expect(content).toContain("/kontakt"); // anchor
-      expect(content).not.toContain("/ydelser");
+      expect(content).toContain("/contact"); // presence anchor
+      // The section's <loc> on either locale (/services, /en/services), not item URLs.
+      expect(content).not.toMatch(/<loc>[^<]*\/services<\/loc>/);
     });
   });
 

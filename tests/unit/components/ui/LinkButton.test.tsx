@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 // Tests for AC-DS-18
-// These tests FAIL (Red) until web-developer creates src/components/ui/LinkButton.tsx.
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
@@ -30,21 +29,21 @@ afterEach(cleanup);
 
 describe('AC-DS-18: LinkButton renders as an accessible link', () => {
   it('has role="link"', () => {
-    render(<LinkButton href="/kom-i-gang">Kom i gang</LinkButton>);
+    render(<LinkButton href="/get-started">Kom i gang</LinkButton>);
     expect(screen.getByRole('link', { name: 'Kom i gang' })).toBeInTheDocument();
   });
 
   it('carries the href', () => {
-    render(<LinkButton href="/kontakt">Kontakt os</LinkButton>);
+    render(<LinkButton href="/contact">Kontakt os</LinkButton>);
     expect(screen.getByRole('link', { name: 'Kontakt os' })).toHaveAttribute(
       'href',
-      '/kontakt',
+      '/contact',
     );
   });
 
   it('primary variant renders without crashing', () => {
     render(
-      <LinkButton href="/tilbud" variant="primary">
+      <LinkButton href="/offers" variant="primary">
         Se tilbud
       </LinkButton>,
     );
@@ -53,7 +52,7 @@ describe('AC-DS-18: LinkButton renders as an accessible link', () => {
 
   it('secondary variant renders without crashing', () => {
     render(
-      <LinkButton href="/om-os" variant="secondary">
+      <LinkButton href="/about" variant="secondary">
         Om os
       </LinkButton>,
     );

@@ -2,9 +2,7 @@
 // Acceptance IDs: AC-I18N-01 through AC-I18N-06, AC-I18N-03
 // Run with: npm run test:e2e
 // Requires: app running at PLAYWRIGHT_BASE_URL (default http://localhost:3000)
-// These specs FAIL (Red) until web-developer implements:
-//   src/i18n/routing.ts, src/i18n/request.ts, src/middleware.ts,
-//   messages/da.json, messages/en.json, src/app/[locale]/layout.tsx
+// The old Danish slugs (/kontakt, /privatliv) are covered by english-slugs.spec.ts.
 import { test, expect } from "@playwright/test";
 
 // ── AC-I18N-01: GET `/` serves Danish content ─────────────────────────────
@@ -27,31 +25,24 @@ test("AC-I18N-04: GET /en responds with <html lang=\"en\">", async ({ page }) =>
   expect(lang).toBe("en");
 });
 
-// ── AC-I18N-02: `/da/kontakt` redirects to `/kontakt` ────────────────────
+// ── AC-I18N-02: `/da/contact` redirects to `/contact` ────────────────────
 
-test("AC-I18N-02: GET /da/kontakt redirects to /kontakt (no DA prefix)", async ({
+test("AC-I18N-02: GET /da/contact redirects to /contact (no DA prefix)", async ({
   page,
 }) => {
-  // Follow the redirect chain; final URL must be the unprefixed path.
-  await page.goto("/da/kontakt");
+  await page.goto("/da/contact");
   const finalUrl = new URL(page.url());
-  expect(finalUrl.pathname).toBe("/kontakt");
+  expect(finalUrl.pathname).toBe("/contact");
 });
 
-test("AC-I18N-02b: GET /da/kontakt (no redirect follow) is a permanent 308 to /kontakt with no Set-Cookie", async ({
+test("AC-I18N-02b: GET /da/contact (no redirect follow) is a permanent 308 to /contact with no Set-Cookie", async ({
   request,
 }) => {
-  // Stop at the redirect response itself: this catches a cookie set on the
-  // redirect leg (next-intl may write NEXT_LOCALE here if localeCookie is on).
-  const response = await request.get("/da/kontakt", { maxRedirects: 0 });
-
-  // AC-I18N-02: permanent redirect (301/308), so crawlers drop the /da/ URL.
+  const response = await request.get("/da/contact", { maxRedirects: 0 });
   expect(response.status()).toBe(308);
-
   const location = response.headers()["location"] ?? "";
-  // Location may be absolute or relative; the path must end with /kontakt.
-  expect(location.endsWith("/kontakt")).toBe(true);
-
+  // Location may be absolute or relative; the path must end with /contact.
+  expect(location.endsWith("/contact")).toBe(true);
   const setCookie = response.headers()["set-cookie"] ?? "";
   expect(setCookie).toBe("");
 });
@@ -64,8 +55,8 @@ test("AC-I18N-03: GET / has no Set-Cookie header", async ({ request }) => {
   expect(setCookie).toBe("");
 });
 
-test("AC-I18N-03b: GET /kontakt has no Set-Cookie header", async ({ request }) => {
-  const response = await request.get("/kontakt");
+test("AC-I18N-03b: GET /contact has no Set-Cookie header", async ({ request }) => {
+  const response = await request.get("/contact");
   const setCookie = response.headers()["set-cookie"] ?? "";
   expect(setCookie).toBe("");
 });
@@ -79,9 +70,6 @@ test("AC-I18N-03c: GET /en has no Set-Cookie header", async ({ request }) => {
 test("AC-I18N-03d: GET / with Accept-Language: en has no Set-Cookie (locale detection is off)", async ({
   request,
 }) => {
-  // This is the exact case that triggers NEXT_LOCALE cookie when
-  // localeDetection is accidentally left on. Sending a non-DA Accept-Language
-  // must not cause the middleware to write a locale cookie.
   const response = await request.get("/", {
     headers: { "accept-language": "en,en-US;q=0.9" },
   });
@@ -89,14 +77,13 @@ test("AC-I18N-03d: GET / with Accept-Language: en has no Set-Cookie (locale dete
   expect(setCookie).toBe("");
 });
 
-// ── AC-I18N-05: Language switcher from /kontakt links to /en/contact ─────
+// ── AC-I18N-05: Language switcher from /contact links to /en/contact ──────
 
 test(
-  "AC-I18N-05: language switcher on /kontakt href resolves to /en/contact",
+  "AC-I18N-05: language switcher on /contact href resolves to /en/contact",
   async ({ page }) => {
-    await page.goto("/kontakt");
+    await page.goto("/contact");
 
-    // The LanguageSwitcher renders a plain <a> tag for the EN locale.
     const switcherLink = page.locator('a[hreflang="en"]').first();
     await expect(switcherLink).toBeVisible();
 
@@ -110,10 +97,10 @@ test(
   },
 );
 
-// ── AC-I18N-06: Language switcher from /en/contact links to /kontakt ─────
+// ── AC-I18N-06: Language switcher from /en/contact links to /contact ──────
 
 test(
-  "AC-I18N-06: language switcher on /en/contact href resolves to /kontakt",
+  "AC-I18N-06: language switcher on /en/contact href resolves to /contact",
   async ({ page }) => {
     await page.goto("/en/contact");
 
@@ -126,22 +113,21 @@ test(
         ? new URL(href).pathname
         : href
       : "";
-    expect(pathname).toBe("/kontakt");
+    expect(pathname).toBe("/contact");
   },
 );
 
 // ── AC-I18N-05/06 without JavaScript: the prerendered HTML ────────────────
 // The switcher is a client island, but its links must already be right in
 // the static HTML: a click before hydration, or with JavaScript off, is a
-// plain document load (the prerendered /kontakt once linked to /en/[slug]
-// until hydration).
+// plain document load.
 
 test.describe("Language switcher without JavaScript (prerendered HTML)", () => {
   test.use({ javaScriptEnabled: false });
 
   for (const [from, hreflang, to] of [
-    ["/kontakt", "en", "/en/contact"],
-    ["/en/contact", "da", "/kontakt"],
+    ["/contact", "en", "/en/contact"],
+    ["/en/contact", "da", "/contact"],
     ["/", "en", "/en"],
     ["/en", "da", "/"],
   ] as const) {

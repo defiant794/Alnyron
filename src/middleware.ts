@@ -23,8 +23,8 @@ const handleI18n = createMiddleware(routing);
  * - Admin, MyLife and auth routes on the main host (outside `[locale]`) go
  *   through the Supabase session refresh and the unauthenticated-area
  *   redirect, the only place cookies are set.
- * - Public routes go through next-intl only (locale prefix handling,
- *   `/da/*` -> unprefixed redirect, localized pathname rewrites). With
+ * - Public routes go through next-intl only (locale-prefix rewrites
+ *   (`/contact` -> `/da/contact`), `/da/*` -> unprefixed redirect). With
  *   `localeCookie: false` and `localeDetection: false` that branch sets no
  *   cookies, so public responses stay cacheable.
  */
@@ -41,9 +41,9 @@ export default async function middleware(request: NextRequest) {
 
   const response = handleI18n(request);
   // next-intl redirects with 307. Without detection or a cookie every redirect
-  // it issues depends on the URL alone (`/da/kontakt` -> `/kontakt`,
-  // `/contact` -> `/kontakt`), so it is a canonical-URL redirect: make it
-  // permanent (308) so crawlers drop the duplicate URL.
+  // it issues depends on the URL alone (`/da/contact` -> `/contact`), so it is
+  // a canonical-URL redirect: make it permanent (308) so crawlers drop the
+  // duplicate URL.
   const location = response.headers.get("location");
   if (response.status === 307 && location) return NextResponse.redirect(location, 308);
   return response;
