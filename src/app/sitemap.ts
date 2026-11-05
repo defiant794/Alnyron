@@ -6,10 +6,11 @@ import { pathsInEveryLocale } from "@/i18n/navigation";
 import { getCatalogSitemapEntries } from "@/services/content/catalog";
 
 /**
- * Like the public pages: ~5-minute time-based refresh. See the [locale] layout
+ * Like the public pages: publishes refresh it at once through the tag cache;
+ * the hourly time-based window is a safety fallback. See the [locale] layout
  * comment for the free-tier KV write-quota trade-off.
  */
-export const revalidate = 300;
+export const revalidate = 3600;
 
 /**
  * `/sitemap.xml`: the system pages (home, contact, privacy) and every public

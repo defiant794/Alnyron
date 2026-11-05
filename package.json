@@ -34,7 +34,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
-    "@opennextjs/cloudflare": "^1.20.14",
+    "@opennextjs/cloudflare": "^1.20.16",
     "@playwright/test": "^1.64.1",
     "@swc/helpers": "^0.5.23",
     "@tailwindcss/postcss": "^4",

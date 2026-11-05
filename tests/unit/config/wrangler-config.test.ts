@@ -1,13 +1,26 @@
+/**
+ * Unit tests: wrangler.jsonc satisfies the Cloudflare Workers contract.
+ *
+ * Foundation-toolchain: AC-16..AC-19 (KV ISR cache, name, main, assets, compat).
+ * F2.0 cache-infra:     AC-CACHE-13..AC-CACHE-18 (D1 tag cache, DO queue,
+ *                       migrations, WORKER_SELF_REFERENCE, no env block,
+ *                       preserved KV/flags/vars).
+ *
+ * Package-script assertions (AC-CACHE-19) live in package-scripts.test.ts.
+ */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { parse, type ParseError } from 'jsonc-parser';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-// AC-16..AC-19: Verify wrangler.jsonc at the repo root satisfies the
-// Cloudflare Workers + KV ISR-cache contract.
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type KvNamespace = { binding: string; id: string };
 type AssetsConfig = { directory: string; binding: string };
+type D1Database = { binding: string; database_name: string; database_id: string };
+type DurableObjectBinding = { name: string; class_name: string };
+type ServiceBinding = { binding: string; service: string };
+type Migration = { tag: string; new_sqlite_classes?: string[] };
 type WranglerConfig = {
   name?: string;
   main?: string;
@@ -16,26 +29,34 @@ type WranglerConfig = {
   assets?: AssetsConfig;
   kv_namespaces?: KvNamespace[];
   r2_buckets?: unknown[];
-  [key: string]: unknown;
+  d1_databases?: D1Database[];
+  durable_objects?: { bindings?: DurableObjectBinding[] };
+  migrations?: Migration[];
+  services?: ServiceBinding[];
+  vars?: Record<string, string>;
+  env?: unknown;
 };
 
+// ── Module-scope parse ────────────────────────────────────────────────────────
+// Parsed once; all describe blocks share the same object.
+// ENOENT → readFileSync throws and every test fails clearly.
+
+let config!: WranglerConfig;
+let parseErrors!: ParseError[];
+
+beforeAll(() => {
+  const wranglerPath = path.resolve(process.cwd(), 'wrangler.jsonc');
+  const raw = fs.readFileSync(wranglerPath, 'utf-8');
+  parseErrors = [];
+  config = parse(raw, parseErrors, { allowTrailingComma: true }) as WranglerConfig;
+});
+
+// ── Foundation-toolchain (AC-16..AC-19) ──────────────────────────────────────
+
 describe('wrangler.jsonc (AC-16, AC-17, AC-18, AC-19)', () => {
-  let config!: WranglerConfig;
-  let parseErrors!: ParseError[];
-
-  beforeAll(() => {
-    // Resolve relative to the repo root (process.cwd() = project root under vitest).
-    const wranglerPath = path.resolve(process.cwd(), 'wrangler.jsonc');
-    const raw = fs.readFileSync(wranglerPath, 'utf-8'); // throws if file absent
-    parseErrors = [];
-    config = parse(raw, parseErrors, { allowTrailingComma: true }) as WranglerConfig;
-  });
-
   it('AC-19: wrangler.jsonc parses without JSONC syntax errors', () => {
     expect(parseErrors).toEqual([]);
   });
-
-  // AC-19 ------------------------------------------------------------------
 
   it('AC-19: name is "alnyron-web"', () => {
     expect(config.name).toBe('alnyron-web');
@@ -53,13 +74,9 @@ describe('wrangler.jsonc (AC-16, AC-17, AC-18, AC-19)', () => {
     expect(config.assets?.binding).toBe('ASSETS');
   });
 
-  // AC-17 ------------------------------------------------------------------
-
   it('AC-17: compatibility_flags includes "nodejs_compat"', () => {
     expect(config.compatibility_flags).toContain('nodejs_compat');
   });
-
-  // AC-18 ------------------------------------------------------------------
 
   it('AC-18: compatibility_date is defined and >= 2024-09-23', () => {
     expect(config.compatibility_date).toBeDefined();
@@ -67,8 +84,6 @@ describe('wrangler.jsonc (AC-16, AC-17, AC-18, AC-19)', () => {
     const minimum = new Date('2024-09-23').getTime();
     expect(actual).toBeGreaterThanOrEqual(minimum);
   });
-
-  // AC-16 ------------------------------------------------------------------
 
   it('AC-16: kv_namespaces contains an entry with binding "NEXT_INC_CACHE_KV" (ISR cache is KV)', () => {
     expect(config.kv_namespaces).toBeDefined();
@@ -79,7 +94,99 @@ describe('wrangler.jsonc (AC-16, AC-17, AC-18, AC-19)', () => {
   });
 
   it('AC-16: does not contain r2_buckets (ISR cache is KV, not R2)', () => {
-    // Explicitly verify the KV decision: no R2 bucket config present.
     expect(config.r2_buckets).toBeUndefined();
+  });
+});
+
+// ── F2.0 cache-infra: D1 tag cache (AC-CACHE-13) ─────────────────────────────
+
+describe('wrangler.jsonc F2.0 top-level: D1 tag cache (AC-CACHE-13)', () => {
+  it('AC-CACHE-13: d1_databases entry has binding "NEXT_TAG_CACHE_D1"', () => {
+    const entry = config.d1_databases?.find((d) => d.binding === 'NEXT_TAG_CACHE_D1');
+    expect(entry).toBeDefined();
+  });
+
+  it('AC-CACHE-13: NEXT_TAG_CACHE_D1 database_name is "alnyron-web-tag-cache"', () => {
+    const entry = config.d1_databases?.find((d) => d.binding === 'NEXT_TAG_CACHE_D1');
+    expect(entry?.database_name).toBe('alnyron-web-tag-cache');
+  });
+
+  it('AC-CACHE-13: NEXT_TAG_CACHE_D1 database_id is a non-empty string', () => {
+    const entry = config.d1_databases?.find((d) => d.binding === 'NEXT_TAG_CACHE_D1');
+    expect(typeof entry?.database_id).toBe('string');
+    expect((entry?.database_id ?? '').length).toBeGreaterThan(0);
+  });
+});
+
+// ── F2.0 cache-infra: DO revalidation queue (AC-CACHE-14) ────────────────────
+
+describe('wrangler.jsonc F2.0 top-level: DO revalidation queue (AC-CACHE-14)', () => {
+  it('AC-CACHE-14: durable_objects.bindings has entry name "NEXT_CACHE_DO_QUEUE"', () => {
+    const entry = config.durable_objects?.bindings?.find((b) => b.name === 'NEXT_CACHE_DO_QUEUE');
+    expect(entry).toBeDefined();
+  });
+
+  it('AC-CACHE-14: NEXT_CACHE_DO_QUEUE class_name is "DOQueueHandler"', () => {
+    const entry = config.durable_objects?.bindings?.find((b) => b.name === 'NEXT_CACHE_DO_QUEUE');
+    expect(entry?.class_name).toBe('DOQueueHandler');
+  });
+});
+
+// ── F2.0 cache-infra: DO SQLite migration (AC-CACHE-15) ─────────────────────
+
+describe('wrangler.jsonc F2.0 top-level: DO SQLite migration (AC-CACHE-15)', () => {
+  it('AC-CACHE-15: migrations contains entry with tag "v1"', () => {
+    const entry = config.migrations?.find((m) => m.tag === 'v1');
+    expect(entry).toBeDefined();
+  });
+
+  it('AC-CACHE-15: migrations v1 has new_sqlite_classes: ["DOQueueHandler"]', () => {
+    const entry = config.migrations?.find((m) => m.tag === 'v1');
+    expect(entry?.new_sqlite_classes).toEqual(['DOQueueHandler']);
+  });
+});
+
+// ── F2.0 cache-infra: WORKER_SELF_REFERENCE service binding (AC-CACHE-16) ────
+
+describe('wrangler.jsonc F2.0 top-level: WORKER_SELF_REFERENCE service binding (AC-CACHE-16)', () => {
+  it('AC-CACHE-16: services has WORKER_SELF_REFERENCE binding', () => {
+    const entry = config.services?.find((s) => s.binding === 'WORKER_SELF_REFERENCE');
+    expect(entry).toBeDefined();
+  });
+
+  it('AC-CACHE-16: WORKER_SELF_REFERENCE service is "alnyron-web"', () => {
+    const entry = config.services?.find((s) => s.binding === 'WORKER_SELF_REFERENCE');
+    expect(entry?.service).toBe('alnyron-web');
+  });
+});
+
+// ── F2.0 cache-infra: no env block — straight to prod (AC-CACHE-17) ──────────
+
+describe('wrangler.jsonc F2.0: no env block (AC-CACHE-17)', () => {
+  it('AC-CACHE-17: wrangler.jsonc has no top-level "env" key (no preview Worker, straight to prod)', () => {
+    // The "env" key must be absent entirely — not an empty object.
+    // Its presence would create a named environment (e.g. env.preview) which
+    // the F2.0 design dropped: straight to prod only.
+    expect(config.env).toBeUndefined();
+  });
+});
+
+// ── F2.0 cache-infra: existing bindings/flags/vars preserved (AC-CACHE-18) ───
+
+describe('wrangler.jsonc F2.0: existing KV binding, compat flags, and vars preserved (AC-CACHE-18)', () => {
+  it('AC-CACHE-18: NEXT_INC_CACHE_KV id is still "4a4c256304c143dc89b8685b5a835c3a"', () => {
+    const kv = config.kv_namespaces?.find((ns) => ns.binding === 'NEXT_INC_CACHE_KV');
+    expect(kv?.id).toBe('4a4c256304c143dc89b8685b5a835c3a');
+  });
+
+  it('AC-CACHE-18: compatibility_flags still include "nodejs_compat" and "global_fetch_strictly_public"', () => {
+    expect(config.compatibility_flags).toContain('nodejs_compat');
+    expect(config.compatibility_flags).toContain('global_fetch_strictly_public');
+  });
+
+  it('AC-CACHE-18: vars.MAIL_FROM is still defined', () => {
+    expect(config.vars?.MAIL_FROM).toBeDefined();
+    expect(typeof config.vars?.MAIL_FROM).toBe('string');
+    expect((config.vars?.MAIL_FROM ?? '').length).toBeGreaterThan(0);
   });
 });

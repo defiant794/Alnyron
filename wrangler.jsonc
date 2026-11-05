@@ -1,10 +1,20 @@
 {
-  // Cloudflare Workers config (OpenNext). ISR cache = KV (no payment card).
-  // open-next.config.ts wires the KV incremental cache (binding NEXT_INC_CACHE_KV).
+  // Cloudflare Workers config (OpenNext) for the prod Worker "alnyron-web".
+  // open-next.config.ts uses these bindings: NEXT_INC_CACHE_KV (ISR cache),
+  // NEXT_TAG_CACHE_D1 (tag cache), NEXT_CACHE_DO_QUEUE (revalidation queue),
+  // WORKER_SELF_REFERENCE (self-call that regenerates stale pages).
+  // Deploy = Cloudflare Workers Builds connected to the GitHub repo (runs
+  // `cf:build` on Linux). The deploy must go through `opennextjs-cloudflare
+  // deploy` (wrangler 4.x `wrangler deploy` delegates to it automatically in
+  // this OpenNext project): its populateCache seeds the KV cache and creates
+  // the D1 `revalidations` table the tag cache reads.
   // KV namespace "NEXT_INC_CACHE_KV" was created with
-  // `wrangler kv namespace create NEXT_INC_CACHE_KV` (the id is not a secret).
-  // Deploy = Cloudflare Workers Builds connected to the GitHub repo
-  // (runs `cf:build` on Linux).
+  // `wrangler kv namespace create NEXT_INC_CACHE_KV`. The D1 database
+  // (database_id below) was created with
+  // `wrangler d1 create alnyron-web-tag-cache`.
+  // Ids are not secrets.
+  // The DO SQLite migration "v1" is one-way once deployed: never edit or
+  // remove it; add a new tag instead.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "alnyron-web",
   "main": ".open-next/worker.js",
@@ -15,5 +25,17 @@
   "kv_namespaces": [
     { "binding": "NEXT_INC_CACHE_KV", "id": "4a4c256304c143dc89b8685b5a835c3a" }
   ],
+  "d1_databases": [
+    {
+      "binding": "NEXT_TAG_CACHE_D1",
+      "database_name": "alnyron-web-tag-cache",
+      "database_id": "d13af5da-574f-4f93-a4fa-d411ad9c693c"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "alnyron-web" }],
   "vars": { "MAIL_FROM": "Alnyron <noreply@send.alnyron.dk>" }
 }

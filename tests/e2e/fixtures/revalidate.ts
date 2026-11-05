@@ -2,7 +2,7 @@
  * Makes the app show a DB fixture change (tests/e2e/fixtures/db-state.ts).
  *
  * A production build (`next start`) serves the public pages from the ISR
- * cache, refreshed within ~5 minutes, so a fixture row only shows once the
+ * cache, refreshed hourly, so a fixture row only shows once the
  * cache is revalidated. The test-only `POST /api/test/revalidate`
  * (src/app/api/test/revalidate/route.ts) does that at once,
  * guarded by E2E_REVALIDATE_SECRET: set the same value in the shell

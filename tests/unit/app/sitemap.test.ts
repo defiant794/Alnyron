@@ -80,8 +80,8 @@ describe("AC-CATPUB-30: sitemap lists the system pages and every public catalog 
     await expect(sitemap()).rejects.toThrow(/catalog sitemap/);
   });
 
-  it("is refreshed within ~5 minutes like the public pages", () => {
-    expect(revalidate).toBe(300);
+  it("AC-CACHE-44: is refreshed hourly like the public pages (ISR safety fallback; publishes are instant via D1 tag cache)", () => {
+    expect(revalidate).toBe(3600);
   });
 });
 

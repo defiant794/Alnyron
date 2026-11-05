@@ -1,17 +1,20 @@
-// OpenNext -> Cloudflare Workers adapter config.
-// ISR incremental cache = Workers KV (binding NEXT_INC_CACHE_KV in wrangler.jsonc).
-// No R2 / D1 / Durable Objects, so the stack stays on free tiers (no payment card).
-// queue:"direct" revalidates in-request instead of via a Durable Object queue.
-// Time-based ISR works with KV alone: pages refresh on their `revalidate`
-// window (~5 min). On-demand ISR (revalidatePath/revalidateTag) needs a tag
-// cache, which is not configured, so it is a no-op on the Worker.
-// 404 responses are never written to KV (src/lib/skip-not-found-cache.ts), so
-// junk paths cannot use up the free plan's daily KV writes.
+// OpenNext -> Cloudflare Workers adapter config (bindings in wrangler.jsonc).
+// - Incremental cache = Workers KV (NEXT_INC_CACHE_KV). 404 responses are never
+//   written (src/lib/skip-not-found-cache.ts), so junk paths cannot use up the
+//   free plan's daily KV writes.
+// - Tag cache = D1 in next mode (NEXT_TAG_CACHE_D1): revalidatePath/revalidateTag
+//   on an admin publish mark cache entries stale for every isolate, not just the
+//   one that handled the publish.
+// - Queue = Durable Object (NEXT_CACHE_DO_QUEUE, SQLite-backed, free tier) +
+//   WORKER_SELF_REFERENCE: stale ISR pages are regenerated in the background.
 import { defineCloudflareConfig } from "@opennextjs/cloudflare";
 import kvIncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/kv-incremental-cache";
+import doQueue from "@opennextjs/cloudflare/overrides/queue/do-queue";
+import d1NextTagCache from "@opennextjs/cloudflare/overrides/tag-cache/d1-next-tag-cache";
 import { skipNotFoundWrites } from "./src/lib/skip-not-found-cache";
 
 export default defineCloudflareConfig({
   incrementalCache: skipNotFoundWrites(kvIncrementalCache),
-  queue: "direct",
+  tagCache: d1NextTagCache,
+  queue: doQueue,
 });

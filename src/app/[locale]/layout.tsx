@@ -12,19 +12,19 @@ import "@/styles/globals.css";
 
 /**
  * Header nav and footer come from the DB, so every public page under this
- * layout uses time-based ISR and refreshes within ~5 minutes of a change. This
- * works with KV alone; on the Cloudflare Worker that window is the only
- * refresh, because on-demand (publish) revalidation is a no-op there without a
- * tag cache.
+ * layout is ISR. An admin publish refreshes them at once: on the Cloudflare
+ * Worker the D1 tag cache (open-next.config.ts) records the on-demand
+ * revalidation for every isolate. The hourly time-based window is only a
+ * safety fallback.
  *
  * TRADE-OFF on Cloudflare's free KV tier: the 1,000 writes/day quota is
  * ACCOUNT-WIDE, shared by every page and Next data-cache key, not per page.
- * Sustained or crawler traffic that hits many keys in every window can exhaust
- * it, after which regenerated pages cannot be stored and stale pages persist
- * until the daily reset. Acceptable for this low-traffic site; the
- * write-efficient, instant fix is a tag cache (cache-infra plan / F2.0).
+ * Regenerated pages are written to KV, so the long window keeps writes
+ * down, but sustained or crawler traffic over many keys can still exhaust
+ * the quota, after which regenerated pages cannot be stored and stale pages
+ * persist until the daily reset. Acceptable for this low-traffic site.
  */
-export const revalidate = 300;
+export const revalidate = 3600;
 
 /**
  * Every public page is prerendered and served from the ISR cache (AC-HOME-12):

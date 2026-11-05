@@ -12,10 +12,11 @@ import { getHomePage, getPageMetadata } from "@/services/content/pages";
 import { getSiteSettings } from "@/services/content/settings";
 
 /**
- * SSG + ISR (architecture §2): ~5-minute time-based refresh, like the layout.
+ * SSG + ISR (architecture §2), like the layout: publishes refresh it at once
+ * through the tag cache; the hourly time-based window is a safety fallback.
  * See the [locale] layout comment for the free-tier KV write-quota trade-off.
  */
-export const revalidate = 300;
+export const revalidate = 3600;
 
 type HomeProps = Readonly<{ params: Promise<{ locale: string }> }>;
 

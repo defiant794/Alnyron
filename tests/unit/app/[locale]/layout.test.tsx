@@ -191,8 +191,8 @@ describe("AC-HOME-04/09: [locale]/layout frames the page with SiteHeader and Sit
     expect(docEn.querySelector('[data-testid="site-footer"]')?.getAttribute("data-locale")).toBe("en");
   });
 
-  it("exports revalidate = 300 (DB-driven nav and footer refresh within ~5 minutes)", () => {
-    expect(revalidate).toBe(300);
+  it("AC-CACHE-41: exports revalidate = 3600 (hourly ISR safety fallback; publishes are instant via D1 tag cache)", () => {
+    expect(revalidate).toBe(3600);
   });
 
   it('exports dynamic = "error" (a request-time API fails the build instead of making a route dynamic, AC-HOME-12)', () => {

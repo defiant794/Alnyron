@@ -8,8 +8,13 @@ const MEDIA_BUCKET = "media";
 // Points next-intl's server APIs at the per-request config (locale + messages).
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
-// Populates getCloudflareContext() (KV + other bindings) during `next dev` via
-// the wrangler platform proxy. No-op in production/build.
+// Populates getCloudflareContext() in the Node process of `next dev`, `next
+// build` and `next start` (whenever Next sets globalThis.AsyncLocalStorage) via
+// a local wrangler platform proxy built from wrangler.jsonc. Every binding is
+// simulated locally (the local D1 stand-in never contacts Cloudflare, so any
+// database_id works; the Durable Object binding only logs a wrangler warning).
+// OpenNext's cache overrides (open-next.config.ts) apply only in the built
+// Worker.
 void initOpenNextCloudflareForDev();
 
 // Security headers. CSP uses 'unsafe-inline' for scripts/styles because a nonce

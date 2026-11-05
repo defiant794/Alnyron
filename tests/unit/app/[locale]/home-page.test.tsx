@@ -121,9 +121,9 @@ describe('AC-HOME-02/03: EN home passes the DA fallback keys on', () => {
 
 // Static rendering contract: without setRequestLocale the page still renders
 // but Next renders it dynamically. Vitest 5 clears mock calls before each test.
-describe('AC-HOME-12: home page is static with a ~5 minute ISR fallback', () => {
-  it('exports revalidate = 300', () => {
-    expect(revalidate).toBe(300);
+describe('AC-HOME-12 / AC-CACHE-42: home page is static with hourly ISR safety fallback', () => {
+  it('AC-CACHE-42: exports revalidate = 3600 (hourly ISR safety fallback; publishes are instant via D1 tag cache)', () => {
+    expect(revalidate).toBe(3600);
   });
 
   it('AC-I18N-01: DA home calls setRequestLocale("da")', async () => {
