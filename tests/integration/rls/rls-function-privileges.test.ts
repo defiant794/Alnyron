@@ -2,16 +2,17 @@
  * Integration tests — EXECUTE privileges on functions.
  *
  * Covers F0.4 hardening (migration 20261101000400_hardening.sql), the F2.1 catalog
- * grants (migration 20261103000100_catalog_admin.sql) and the F2.1 catalog hardening
- * (migration 20261103000300_catalog_hardening.sql):
+ * grants (migration 20261103000100_catalog_admin.sql), the F2.1 catalog hardening
+ * (migration 20261103000300_catalog_hardening.sql) and the P3 MyLife role gate
+ * (migration 20261105000400_mylife_role_gate.sql):
  *   - a function newly created by postgres in `private` is not executable by PUBLIC,
  *     anon or authenticated (anon/authenticated hold USAGE on `private`, so a PUBLIC
  *     EXECUTE default would expose every future security-definer helper)
  *   - existing private functions: no PUBLIC EXECUTE; anon may run only the RLS visibility
- *     helpers, authenticated additionally is_owner() and the CHECK / storage-policy
- *     helpers external_links_valid(), media_mime_type() and media_path_valid() (evaluated
- *     as the writer); the trigger functions media_limit_per_item() / stamp_updated_by()
- *     need no grant (triggers are not EXECUTE-checked when they fire)
+ *     helpers, authenticated additionally is_owner(), is_mylife() (the mylife_* policies)
+ *     and the CHECK / storage-policy helpers external_links_valid(), media_mime_type() and
+ *     media_path_valid() (evaluated as the writer); the trigger functions media_limit_per_item() /
+ *     stamp_updated_by() need no grant (triggers are not EXECUTE-checked when they fire)
  *   - admin RPCs (pages + catalog) are executable by authenticated, never by anon / PUBLIC
  *
  * Connection: postgres. The probe function is created inside a rolled-back transaction.
@@ -65,7 +66,7 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
     });
   }, 12_000);
 
-  it("existing private functions: no PUBLIC EXECUTE; anon only the visibility helpers; authenticated also is_owner and the CHECK/policy helpers", async () => {
+  it("existing private functions: no PUBLIC EXECUTE; anon only the visibility helpers; authenticated also is_owner, is_mylife and the CHECK/policy helpers", async () => {
     await withTx(client, async (c) => {
       const rows = await execPrivileges(c, "n.nspname = 'private'");
       const exposed = (key: "public_exec" | "anon_exec" | "authenticated_exec") =>
@@ -83,6 +84,7 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
         "category_is_public(p_id uuid)",
         "external_links_valid(p_links jsonb)",
         "is_admin()",
+        "is_mylife()",
         "is_owner()",
         "item_is_public(p_id uuid)",
         "media_mime_type(p_path text)",
