@@ -1,7 +1,8 @@
 /**
  * Unit tests — catalog validation schemas (F2.1 catalog-model)
  * Journey: catalog-model  AC-CAT-75, AC-CAT-76, AC-CAT-77, AC-CAT-78, AC-CAT-79;
- * security hardening (f21-security-1 L3) AC-CAT-S13, AC-CAT-S14
+ * security hardening (f21-security-1 L3) AC-CAT-S13, AC-CAT-S14;
+ * catalog-section-fix AC-CATSEC-6, AC-CATSEC-10, AC-CATSEC-11
  *
  * Module: src/lib/validation/catalog.ts
  */
@@ -307,6 +308,55 @@ describe("AC-CAT-77: saveItemSchema validates item payloads", () => {
     expect(saveItemSchema.safeParse(payload).success).toBe(true);
   });
 });
+
+// ── AC-CATSEC-6 / AC-CATSEC-10 / AC-CATSEC-11: saveItemSchema — section move payloads ──
+
+describe("AC-CATSEC-6/10/11: saveItemSchema — update with category_id (move)", () => {
+  const validTranslation = {
+    slug: "move-item",
+    title: "Move Item",
+    summary: "",
+    body_md: "",
+    seo_title: "",
+    seo_description: "",
+  };
+
+  it("AC-CATSEC-6v: accepts an update payload with both id and category_id (move operation)", () => {
+    const result = saveItemSchema.safeParse({
+      id: VALID_ITEM_UUID,
+      category_id: VALID_CATEGORY_UUID,
+      price_type: null,
+      price_amount: null,
+      external_links: {},
+      translations: { da: validTranslation },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("AC-CATSEC-11v: rejects an update payload with a non-UUID category_id", () => {
+    const result = saveItemSchema.safeParse({
+      id: VALID_ITEM_UUID,
+      category_id: "not-a-uuid",
+      price_type: null,
+      price_amount: null,
+      external_links: {},
+      translations: { da: validTranslation },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("AC-CATSEC-10v: accepts an update payload without category_id (no move, section unchanged)", () => {
+    const result = saveItemSchema.safeParse({
+      id: VALID_ITEM_UUID,
+      price_type: null,
+      price_amount: null,
+      external_links: {},
+      translations: { da: validTranslation },
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
 
 // ── AC-CAT-78: mediaUploadSchema ─────────────────────────────────────────────
 

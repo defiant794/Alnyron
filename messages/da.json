@@ -61,6 +61,7 @@
   },
   "Admin": {
     "metaTitle": "Alnyron administration",
+    "loading": "Indlæser siden …",
     "nav": {
       "label": "Administration",
       "overview": "Oversigt",
@@ -267,7 +268,7 @@
           "seoDescription": "SEO-beskrivelse ({locale})",
           "seoDescriptionHint": "Kort beskrivelse til søgeresultater. Tom: elementets resumé.",
           "section": "Sektion",
-          "sectionHint": "Sektionen kan ikke ændres, når elementet er gemt.",
+          "sectionHint": "Flytter du elementet til en anden sektion, placeres det sidst i den og får en ny offentlig adresse.",
           "priceType": "Pristype",
           "priceTypes": {
             "none": "Ingen pris",

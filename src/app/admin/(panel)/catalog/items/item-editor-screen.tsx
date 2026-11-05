@@ -73,9 +73,13 @@ export default async function ItemEditorScreen({ item, sections }: ItemEditorScr
           {item.id && <Badge tone={item.status}>{t(`status.${item.status}`)}</Badge>}
         </header>
       </div>
-      {/* Keyed by item, so the form (and its image list) starts fresh on another item. */}
+      {/*
+        Keyed by item, so the form (and its image list) starts fresh on another item. A new item is
+        keyed by its section: "Nyt element" of another section is the same route with another
+        `?category`, and only a remount applies the uncontrolled section select's new default.
+      */}
       <ItemEditor
-        key={item.id ?? "new"}
+        key={item.id ?? `new-${item.categoryId}`}
         item={item}
         sections={sections.map((candidate) => ({ id: candidate.id, title: sectionTitle(candidate) }))}
         previewHref={previewHref}

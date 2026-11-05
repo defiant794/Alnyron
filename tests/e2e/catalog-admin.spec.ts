@@ -21,7 +21,7 @@
  *   - Non-admin access tests use a seeded, signed-in non-allowlisted user.
  */
 
-import { test, expect, type BrowserContext, type Page } from "@playwright/test";
+import { test, expect, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import type { PoolClient } from "../integration/rls/helpers/db";
 import {
   SECRET_KEY_AVAILABLE,
@@ -81,6 +81,29 @@ async function loginAs(page: Page, email: string, password: string, path = "/adm
 
 async function loginAdmin(page: Page, password: string, path = "/admin"): Promise<void> {
   await loginAs(page, E2E_CAT_ADMIN_EMAIL, password, path);
+}
+
+/** Waits until React has hydrated `locator`, so its handlers receive the events sent to it. */
+async function expectHydrated(locator: Locator): Promise<void> {
+  await expect
+    .poll(() => locator.evaluate((el) => Object.keys(el).some((key) => key.startsWith("__reactProps$"))), {
+      timeout: 15_000,
+    })
+    .toBe(true);
+}
+
+/**
+ * Signs in straight to a saved item's editor and returns its MediaManager file
+ * input once it can take a file. The catalog `loading.tsx` fallback ("Indlæser
+ * siden …") can still fill `main` after the URL has changed, and a `change`
+ * sent to the input before React has its props never reaches `onChange`.
+ */
+async function openItemMedia(page: Page, password: string, itemId: string): Promise<Locator> {
+  await loginAdmin(page, password, `/admin/catalog/items/${itemId}`);
+  await expect(page.getByRole("button", { name: /Tilføj billede/i })).toBeEnabled({ timeout: 15_000 });
+  const fileInput = page.locator('input[type="file"]');
+  await expectHydrated(fileInput);
+  return fileInput;
 }
 
 /** First category id of `kind` from the DB. */
@@ -978,19 +1001,16 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
       enSlug: "e2e-cat-adm-media-size-en",
       enTitle: "E2E Media Size EN",
     });
-    await loginAdmin(page, adminPassword, `/admin/catalog/items/${itemId}`);
+    const fileInput = await openItemMedia(page, adminPassword, itemId);
 
     const FIVE_MIB_PLUS = 5 * 1024 * 1024 + 1;
-    await page.evaluate((size) => {
+    await fileInput.evaluate((input: HTMLInputElement, size: number) => {
       const bytes = new Uint8Array(size);
       const file = new File([bytes], "huge.webp", { type: "image/webp" });
       const dt = new DataTransfer();
       dt.items.add(file);
-      const input = document.querySelector('input[type="file"]') as HTMLInputElement | null;
-      if (input) {
-        Object.defineProperty(input, "files", { value: dt.files });
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
+      Object.defineProperty(input, "files", { configurable: true, value: dt.files });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     }, FIVE_MIB_PLUS);
 
     await expect(page.getByRole("main")).toContainText(/for stor/i);
@@ -1008,7 +1028,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
       enSlug: "e2e-cat-adm-ac44-item-en",
       enTitle: "E2E AC44 Type Error EN",
     });
-    await loginAdmin(page, adminPassword, `/admin/catalog/items/${itemId}`);
+    const fileInput = await openItemMedia(page, adminPassword, itemId);
 
     // Inject a file with an unsupported MIME type (PDF) via the hidden input.
     // checkMediaFile returns "unsupported-type" because "application/pdf" is not
@@ -1019,16 +1039,13 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
       if (r.url().includes("/storage/v1/object/upload/sign/")) signHits44++;
     });
 
-    await page.evaluate(() => {
+    await fileInput.evaluate((input: HTMLInputElement) => {
       const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF magic bytes
       const file = new File([bytes], "document.pdf", { type: "application/pdf" });
       const dt = new DataTransfer();
       dt.items.add(file);
-      const input = document.querySelector('input[type="file"]') as HTMLInputElement | null;
-      if (input) {
-        Object.defineProperty(input, "files", { configurable: true, value: dt.files });
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
+      Object.defineProperty(input, "files", { configurable: true, value: dt.files });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
     // Filter past the Next.js route-announcer (also role=alert); assert the type-error.
@@ -1052,7 +1069,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
       enSlug: "e2e-cat-adm-ac45-item-en",
       enTitle: "E2E AC45 Upload Indicator EN",
     });
-    await loginAdmin(page, adminPassword, `/admin/catalog/items/${itemId}`);
+    const fileInput = await openItemMedia(page, adminPassword, itemId);
 
     // Tiny 1×1 white PNG — valid image, well under 5 MiB.
     const TINY_PNG_B64 =
@@ -1067,7 +1084,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     });
 
     // Start upload; because the PUT is gated, the MediaManager stays in "uploading" state.
-    await page.locator('input[type="file"]').setInputFiles({
+    await fileInput.setInputFiles({
       name: "indicator-test.png",
       mimeType: "image/png",
       buffer: Buffer.from(TINY_PNG_B64, "base64"),
@@ -1100,7 +1117,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
       enSlug: "e2e-cat-adm-ac46-item-en",
       enTitle: "E2E AC46 Max Images EN",
     });
-    await loginAdmin(page, adminPassword, `/admin/catalog/items/${itemId}`);
+    const fileInput = await openItemMedia(page, adminPassword, itemId);
 
     const TINY_PNG_B64 =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -1109,7 +1126,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
 
     // Upload 8 images one by one; wait for each thumbnail before starting the next.
     for (let i = 1; i <= MEDIA_MAX; i++) {
-      await page.locator('input[type="file"]').setInputFiles({
+      await fileInput.setInputFiles({
         name: `img${i}.png`,
         mimeType: "image/png",
         buffer: pngBuffer,
@@ -1132,17 +1149,14 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
       if (r.url().includes("/storage/v1/object/upload/sign/")) signHits46++;
     });
 
-    await page.evaluate(() => {
+    await fileInput.evaluate((input: HTMLInputElement) => {
       const bytes = new Uint8Array(100);
       const file = new File([bytes], "9th.png", { type: "image/png" });
       const dt = new DataTransfer();
       dt.items.add(file);
-      const input = document.querySelector('input[type="file"]') as HTMLInputElement | null;
-      if (input) {
-        input.disabled = false; // bypass disabled so React fires onChange
-        Object.defineProperty(input, "files", { configurable: true, value: dt.files });
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
+      input.disabled = false; // bypass disabled so React fires onChange
+      Object.defineProperty(input, "files", { configurable: true, value: dt.files });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     });
     // Client guard sets error immediately — no network round-trip needed.
     await expect(
@@ -1172,11 +1186,11 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
       enSlug: "e2e-cat-adm-ac47-item-en",
       enTitle: "E2E AC47 Alt Required EN",
     });
-    await loginAdmin(page, adminPassword, `/admin/catalog/items/${itemId}`);
+    const fileInput = await openItemMedia(page, adminPassword, itemId);
 
     const TINY_PNG_B64 =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-    await page.locator('input[type="file"]').setInputFiles({
+    await fileInput.setInputFiles({
       name: "alt-test.png",
       mimeType: "image/png",
       buffer: Buffer.from(TINY_PNG_B64, "base64"),
@@ -1212,11 +1226,11 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
       enSlug: "e2e-cat-adm-ac48-item-en",
       enTitle: "E2E AC48 Fjern EN",
     });
-    await loginAdmin(page, adminPassword, `/admin/catalog/items/${itemId}`);
+    const fileInput = await openItemMedia(page, adminPassword, itemId);
 
     const TINY_PNG_B64 =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-    await page.locator('input[type="file"]').setInputFiles({
+    await fileInput.setInputFiles({
       name: "fjern-test.png",
       mimeType: "image/png",
       buffer: Buffer.from(TINY_PNG_B64, "base64"),
@@ -1243,14 +1257,14 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
       enSlug: "e2e-cat-adm-ac49-item-en",
       enTitle: "E2E AC49 Reorder EN",
     });
-    await loginAdmin(page, adminPassword, `/admin/catalog/items/${itemId}`);
+    const fileInput = await openItemMedia(page, adminPassword, itemId);
 
     const TINY_PNG_B64 =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
     const pngBuffer = Buffer.from(TINY_PNG_B64, "base64");
 
     // Upload first image
-    await page.locator('input[type="file"]').setInputFiles({
+    await fileInput.setInputFiles({
       name: "reorder1.png",
       mimeType: "image/png",
       buffer: pngBuffer,
@@ -1258,7 +1272,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     await expect(page.getByRole("main").locator("img")).toHaveCount(1, { timeout: 15_000 });
 
     // Upload second image
-    await page.locator('input[type="file"]').setInputFiles({
+    await fileInput.setInputFiles({
       name: "reorder2.png",
       mimeType: "image/png",
       buffer: pngBuffer,
@@ -1289,7 +1303,7 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
 
   // ── AC-CATADM-42: real signed-URL upload ─────────────────────────────────
   //
-  // Uses page.locator('input[type="file"]').setInputFiles(...) — works on hidden
+  // Uses the MediaManager file input's setInputFiles(...) — works on hidden
   // inputs and fails loudly if the element is missing. Asserts on the DB row, not
   // just a rendered <img>. Bucket paths are collected in afterAll via
   // getUploadedMediaPaths (DB JOIN) — no RSC response-body parsing needed.
@@ -1305,13 +1319,13 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
       enSlug: "e2e-cat-adm-media-upload-en",
       enTitle: "E2E Media Upload EN",
     });
-    await loginAdmin(page, adminPassword, `/admin/catalog/items/${itemId}`);
+    const fileInput = await openItemMedia(page, adminPassword, itemId);
 
     // Tiny 1×1 white PNG — well under 5 MiB, valid image/png.
     const TINY_PNG_B64 =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-    await page.locator('input[type="file"]').setInputFiles({
+    await fileInput.setInputFiles({
       name: "test.png",
       mimeType: "image/png",
       buffer: Buffer.from(TINY_PNG_B64, "base64"),

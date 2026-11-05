@@ -68,11 +68,11 @@ type PriceChoice = PriceType | "none";
 
 export type ItemEditorProps = {
   item: ItemEditorItem;
-  /** Every section, for the section select (fixed once the item is saved). */
+  /** Every section, for the section select (changing it on a saved item moves the item there). */
   sections: { id: string; title: string }[];
   /** The published item's public page (Danish); `null` while it is a draft. */
   previewHref: string | null;
-  /** Where to go after a delete: the item's section editor. */
+  /** Where to go after a delete: the item's section editor (the new one once a move is saved). */
   sectionHref: string;
   save: (input: unknown) => Promise<CatalogSaveResult>;
   setStatus: (itemId: string, status: ContentStatus) => Promise<CatalogActionResult>;
@@ -134,10 +134,14 @@ const SLUG_ERRORS: readonly CatalogActionError[] = ["slug-taken", "slug-invalid"
 
 /**
  * Item editor (approved item-editor mock). Left: Indhold with Dansk /
- * Engelsk tabs (Titel, URL-slug, Resumé, Brødtekst, SEO). Right: the section
- * (fixed once saved), Pristype (Ingen pris / Fast / Fra / Kontakt) with the
- * DKK amount, the https links and "Udvalgt". Below: Billeder (MediaManager)
- * and the actions.
+ * Engelsk tabs (Titel, URL-slug, Resumé, Brødtekst, SEO). Right: the section,
+ * Pristype (Ingen pris / Fast / Fra / Kontakt) with the DKK amount, the https
+ * links and "Udvalgt". Below: Billeder (MediaManager) and the actions.
+ *
+ * Every save sends the selected section: a new item is created in it, and a
+ * saved item moved to another section is placed last there (its public
+ * address changes with the section; the hint says so). The refreshed page
+ * then names the new section in the breadcrumb and as the delete target.
  *
  * A blank slug is formed from its title (prefilled when the title loses
  * focus, and again on save). A blank Danish title is reported here without
@@ -240,7 +244,8 @@ export default function ItemEditor({
       }));
 
     const input = {
-      ...(item.id ? { id: item.id, media } : { category_id: text("category_id") }),
+      ...(item.id ? { id: item.id, media } : {}),
+      category_id: text("category_id"),
       featured: form.get("featured") === "on",
       price_type: priceChoice === "none" ? null : priceChoice,
       price_amount: amount !== null && Number.isFinite(amount) ? amount : null,
@@ -412,7 +417,6 @@ export default function ItemEditor({
                 {...control}
                 name="category_id"
                 defaultValue={item.categoryId}
-                disabled={item.id !== undefined}
                 className={cx(control.className, "cursor-pointer")}
               >
                 {sections.map((section) => (

@@ -1,0 +1,132 @@
+-- F2.x catalog-section-fix: a saved item can move to another section.
+--
+-- The item editor's "Sektion" select was locked once an item was saved, because admin_save_item
+-- ignored category_id on update. An item that landed in the wrong section (the new-item page used
+-- to fall back to the first section) could only be deleted and made again. admin_save_item now
+-- honours category_id on update as well: a category_id that names another section moves the item
+-- to the end of that section (sort_order = the target section's max + 10, as for an insert). An
+-- absent, JSON null or unchanged category_id keeps the section and the order. An unknown
+-- category_id fails the items.category_id foreign key (23503; the service maps it to `not-found`).
+-- The status and published_at are left alone: a published item stays published under the new
+-- section's address (the Server Action revalidates the public pages). Item slugs are unique per
+-- locale across all sections (item_translations_locale_slug_key), so a move cannot clash.
+--
+-- The item row is locked (for update) before its current section is read, so a concurrent save of
+-- the same item waits instead of moving it on a stale read. Not finding the row is P0002
+-- item_not_found as before. The translation upsert (slug_taken with the locale as HINT) and the
+-- media loop are unchanged from 20261103000600.
+--
+-- Same signature as 20261103000600: `create or replace` keeps the owner and the grants, which are
+-- restated below anyway so this file alone shows who may call the function.
+
+-- payload: {id?, category_id (insert: required; update: moves the item when it differs),
+--           featured?, price_type?, price_amount?, price_currency?, external_links?,
+--           translations: {da: {slug, title, summary, body_md, seo_title, seo_description}, en: {...}},
+--           media?: [{id, alt_da, alt_en, sort_order}]}
+create or replace function public.admin_save_item(payload jsonb) returns uuid
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_id         uuid;
+  v_category   uuid;
+  v_current    uuid;
+  v_locale     public.locale_code;
+  v_tr         jsonb;
+  v_media      jsonb;
+  v_constraint text;
+begin
+  if not (select private.is_admin()) then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  -- An item holds at most 8 images, so a longer media list cannot name only its own.
+  if jsonb_array_length(coalesce(payload -> 'media', '[]'::jsonb)) > 8 then
+    raise exception 'too_many_media' using errcode = 'P0001';
+  end if;
+
+  v_id := nullif(payload ->> 'id', '')::uuid;
+  v_category := nullif(payload ->> 'category_id', '')::uuid;
+  if v_id is null then
+    if v_category is null then
+      raise exception 'category_required' using errcode = '22023';
+    end if;
+    insert into public.items
+      (category_id, status, sort_order, featured, price_type, price_amount, price_currency, external_links)
+    values (v_category, 'draft',
+            coalesce((select max(i.sort_order) from public.items i where i.category_id = v_category), 0) + 10,
+            coalesce((payload ->> 'featured')::boolean, false),
+            (payload ->> 'price_type')::public.price_type,
+            (payload ->> 'price_amount')::numeric,
+            coalesce(payload ->> 'price_currency', 'DKK'),
+            coalesce(nullif(payload -> 'external_links', 'null'::jsonb), '{}'::jsonb))
+    returning id into v_id;   -- 23503 when category_id names no category
+  else
+    -- Locked before the section is read, so a concurrent save of this item cannot interleave.
+    select i.category_id into v_current from public.items i where i.id = v_id for update;
+    if not found then raise exception 'item_not_found' using errcode = 'P0002'; end if;
+    -- Only another section moves the item; absent, null or its own section keeps it in place.
+    if v_category = v_current then
+      v_category := null;
+    end if;
+
+    -- A price/link key present in the payload replaces the column (JSON null clears it:
+    -- SQL null for the price, the column default for currency and links); absent keeps it.
+    update public.items i
+       set category_id    = coalesce(v_category, i.category_id),
+           sort_order     = case when v_category is null then i.sort_order
+                                 else coalesce((select max(o.sort_order) from public.items o
+                                                 where o.category_id = v_category), 0) + 10 end,
+           featured       = coalesce((payload ->> 'featured')::boolean, i.featured),
+           price_type     = case when payload ? 'price_type'
+                                 then (payload ->> 'price_type')::public.price_type else i.price_type end,
+           price_amount   = case when payload ? 'price_amount'
+                                 then (payload ->> 'price_amount')::numeric else i.price_amount end,
+           price_currency = case when payload ? 'price_currency'
+                                 then coalesce(payload ->> 'price_currency', 'DKK') else i.price_currency end,
+           external_links = case when payload ? 'external_links'
+                                 then coalesce(nullif(payload -> 'external_links', 'null'::jsonb), '{}'::jsonb)
+                                 else i.external_links end
+     where i.id = v_id;   -- 23503 when category_id names no category
+  end if;
+
+  for v_locale, v_tr in
+    select key::public.locale_code, value from jsonb_each(coalesce(payload -> 'translations', '{}'::jsonb))
+  loop
+    begin
+      insert into public.item_translations
+        (item_id, locale, slug, title, summary, body_md, seo_title, seo_description)
+      values (v_id, v_locale, v_tr ->> 'slug',
+              coalesce(v_tr ->> 'title', ''), coalesce(v_tr ->> 'summary', ''), coalesce(v_tr ->> 'body_md', ''),
+              coalesce(v_tr ->> 'seo_title', ''), coalesce(v_tr ->> 'seo_description', ''))
+      on conflict (item_id, locale) do update
+        set slug = excluded.slug, title = excluded.title, summary = excluded.summary,
+            body_md = excluded.body_md, seo_title = excluded.seo_title,
+            seo_description = excluded.seo_description;
+    exception when unique_violation then
+      -- The constraint name survives RLS (only the key DETAIL is dropped).
+      get stacked diagnostics v_constraint = constraint_name;
+      if v_constraint = 'item_translations_locale_slug_key' then
+        raise exception 'slug_taken'
+          using errcode = '23505', constraint = v_constraint, hint = v_locale::text;
+      end if;
+      raise;
+    end;
+  end loop;
+
+  for v_media in select value from jsonb_array_elements(coalesce(payload -> 'media', '[]'::jsonb))
+  loop
+    update public.media m
+       set alt_da     = coalesce(v_media ->> 'alt_da', m.alt_da),
+           alt_en     = coalesce(v_media ->> 'alt_en', m.alt_en),
+           sort_order = coalesce((v_media ->> 'sort_order')::integer, m.sort_order)
+     where m.id = (v_media ->> 'id')::uuid and m.item_id = v_id;
+    if not found then raise exception 'media_not_found' using errcode = 'P0002'; end if;
+  end loop;
+
+  return v_id;
+end;
+$$;
+
+revoke execute on function public.admin_save_item(jsonb) from public, anon;
+grant  execute on function public.admin_save_item(jsonb) to authenticated;
+
+comment on function public.admin_save_item(jsonb) is
+  'Creates (no id: draft, sort_order = category max + 10, category_id required -> 22023 category_required, unknown -> 23503) or updates an item: price/link keys present in the payload replace the column, absent keys keep it; a category_id naming another section moves the item to the end of it (sort_order = target max + 10, status and published_at kept; unknown -> 23503), an absent, null or unchanged one keeps section and order (the item row is locked while its section is read). Upserts each given locale''s translation and updates alt/sort_order of the listed media of this item (at most 8 entries -> P0001 too_many_media; P0002 media_not_found otherwise). P0002 item_not_found; 23505 slug_taken (constraint item_translations_locale_slug_key) with the clashing translation''s locale as HINT, since RLS drops the key DETAIL; 23514 by constraint name. updated_by is set by the items_updated_by trigger.';

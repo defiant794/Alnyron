@@ -26,10 +26,13 @@ export type FieldFrameProps = {
 };
 
 /**
- * Label, hint and message around one text control (shared by Field and
- * TextAreaField, so both look and announce the same). The required marker
- * is visual only (`aria-hidden`); the native `required` attribute already
- * tells assistive technology the field is required.
+ * Label, hint and message around one form control (shared by Field,
+ * TextAreaField and selects, so all look and announce the same). The
+ * required marker is visual only (`aria-hidden`); the native `required`
+ * attribute already tells assistive technology the field is required. Every
+ * control is at least the 48px control height of DESIGN.md (`min-h-12`):
+ * a text input gets there from its 26px line, but a native `<select>`
+ * ignores the line height and would come out about 42px high.
  */
 export default function FieldFrame({
   label,
@@ -63,7 +66,7 @@ export default function FieldFrame({
         id: controlId,
         "aria-describedby": cx(hint && hintId, hasMessage && messageId, describedBy) || undefined,
         className: cx(
-          "w-full rounded-input border bg-bg px-3 py-control-y text-body text-fg transition-[border-color] placeholder:text-muted disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted",
+          "min-h-12 w-full rounded-input border bg-bg px-3 py-control-y text-body text-fg transition-[border-color] placeholder:text-muted disabled:cursor-not-allowed disabled:bg-surface disabled:text-muted",
           error
             ? "border-error"
             : success

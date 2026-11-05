@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import ItemEditorScreen from "@/app/admin/(panel)/catalog/items/item-editor-screen";
+import { ADMIN_CATALOG_PATH } from "@/config/admin";
 import { AUTH_LOCALE } from "@/config/auth-areas";
 import { listCatalogSections } from "@/services/admin/catalog-read";
 import { requireAdmin } from "@/services/auth/require-admin";
@@ -15,14 +16,15 @@ export async function generateMetadata(): Promise<Metadata> {
 
 /**
  * `/admin/catalog/items/new?category=<id>` ("Nyt element"): the item editor
- * for a new draft, in the section named by `category` (the first section
- * when the parameter names none). Images can be added once it is saved.
+ * for a new draft, in the section named by `category`. Without exactly one
+ * `category` that names a section, it redirects to the catalog overview
+ * instead of guessing a section. Images can be added once it is saved.
  */
 export default async function NewItemPage({ searchParams }: NewItemPageProps) {
   await requireAdmin();
   const [{ category }, sections] = await Promise.all([searchParams, listCatalogSections()]);
-  const section = sections.find((candidate) => candidate.id === category) ?? sections[0];
-  if (!section) notFound();
+  const section = typeof category === "string" ? sections.find((candidate) => candidate.id === category) : undefined;
+  if (!section) redirect(ADMIN_CATALOG_PATH);
 
   return (
     <ItemEditorScreen

@@ -15,7 +15,8 @@
  *   AC-CAT-10  — admin_set_category_status: P0002 category_not_found
  *   AC-CAT-11  — admin_save_item insert: draft, sort_order = max+10
  *   AC-CAT-12  — admin_save_item update: price/currency/links replaced when present (JSON null → null/'DKK'/'{}'),
- *                kept when absent; featured coalesced; category_id fixed. admin_save_category update: kind fixed,
+ *                kept when absent; featured coalesced; category_id MOVES the item (sort_order = target max+10) when it
+ *                differs (migration 20261105000100_catalog_item_move.sql). admin_save_category update: kind fixed,
  *                featured/nav_order coalesced
  *   AC-CAT-13  — admin_save_item: item_translations upserted
  *   AC-CAT-14  — admin_save_item media: alt/sort_order updated for item's own media
@@ -691,7 +692,7 @@ describe.skipIf(!DB_AVAILABLE)("RLS — catalog admin RPCs", () => {
     });
   }, 12_000);
 
-  it("AC-CAT-12: admin_save_item update replaces present keys, sets featured, and ignores category_id", async () => {
+  it("AC-CAT-12: admin_save_item update replaces present keys, sets featured, and MOVES item when category_id differs", async () => {
     await withTx(client, async (c) => {
       await seedAdmin(c);
       const catA = await seedCategory(c);
@@ -717,9 +718,10 @@ describe.skipIf(!DB_AVAILABLE)("RLS — catalog admin RPCs", () => {
         translations: { da: itemTranslation("item-replace-keys") },
       });
 
+      // A differing category_id moves the item to catB (migration 20261105000100_catalog_item_move.sql).
       expect(await storedItem(c, itemId)).toEqual([
         {
-          category_id: catA,
+          category_id: catB,
           featured: true,
           price_type: "fixed",
           price_amount: "999.99",

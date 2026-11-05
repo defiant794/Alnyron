@@ -172,9 +172,11 @@ const mediaEntrySchema = z.object({
 
 /**
  * An item save (`admin_save_item`): no `id` creates a draft item at the end
- * of `category_id` (required then; fixed afterwards). The price, currency and
- * links are always sent and replace the stored ones; `media` updates the alt
- * text and order of the item's own images.
+ * of `category_id` (required then). With an `id`, a `category_id` naming
+ * another section moves the item to the end of that section; absent or the
+ * same section keeps it in place. The price, currency and links are always
+ * sent and replace the stored ones; `media` updates the alt text and order of
+ * the item's own images.
  */
 export const saveItemSchema = z
   .object({

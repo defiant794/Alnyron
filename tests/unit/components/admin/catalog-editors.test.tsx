@@ -4,7 +4,8 @@
  * Journey: catalog-admin
  * Acceptance IDs: AC-CATADM-10, AC-CATADM-14, AC-CATADM-20, AC-CATADM-21,
  *                 AC-CATADM-22, AC-CATADM-23, AC-CATADM-24, AC-CATADM-25,
- *                 AC-CATADM-28, AC-CATADM-49
+ *                 AC-CATADM-28, AC-CATADM-49, AC-CATSEC-1, AC-CATSEC-2,
+ *                 AC-CATSEC-5, AC-CATSEC-6, AC-CATSEC-7
  *
  * Pins what the editors send to the Server Actions (the F2.1 write schemas):
  * slug prefill, the local DA-title check, price type/amount, links, media
@@ -25,6 +26,7 @@ import da from "../../../../messages/da.json";
 const CAT_ID = "550e8400-e29b-41d4-a716-446655440001";
 const ITEM_ID = "550e8400-e29b-41d4-a716-446655440002";
 const MEDIA_ID = "550e8400-e29b-41d4-a716-446655440003";
+const CAT2_ID = "550e8400-e29b-41d4-a716-446655440004";
 const m = da.Admin.catalog;
 
 const itemFields = (code: string) => ({
@@ -311,6 +313,112 @@ describe("AC-CATADM-24: ItemEditor, a slug error shows under the URL-slug of its
     expect(screen.getByLabelText("URL-slug (EN)")).not.toHaveAttribute("aria-invalid");
   });
 });
+
+// ── Helper: render with two sections ─────────────────────────────────────────
+
+function renderItemMultiSection(item: ItemEditorProps["item"]) {
+  return render(
+    <ItemEditor
+      item={item}
+      sections={[
+        { id: CAT_ID, title: "Apps" },
+        { id: CAT2_ID, title: "Hjemmesider" },
+      ]}
+      previewHref={null}
+      sectionHref={`/admin/catalog/categories/${CAT_ID}`}
+      save={save}
+      setStatus={setStatus}
+      remove={vi.fn()}
+      createUpload={vi.fn()}
+      attach={vi.fn()}
+      detach={vi.fn()}
+      labels={ITEM_LABELS}
+    />,
+  );
+}
+
+// ── AC-CATSEC-1 / AC-CATSEC-2: section select on new item ─────────────────────
+
+describe("AC-CATSEC-1/2: ItemEditor — new item section select", () => {
+  it("AC-CATSEC-1a: new item — section select defaults to item.categoryId", () => {
+    // NEW_ITEM.categoryId === CAT_ID ("Apps")
+    renderItemMultiSection(NEW_ITEM);
+    const select = screen.getByRole("combobox", { name: m.item.fields.section });
+    expect(select).toHaveValue(CAT_ID);
+  });
+
+  it("AC-CATSEC-2a: new item — selecting 2nd section and submitting sends that category_id to save", async () => {
+    const user = userEvent.setup();
+    save.mockResolvedValue({ ok: true, id: ITEM_ID });
+    renderItemMultiSection(NEW_ITEM);
+
+    // Change section select to Hjemmesider
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: m.item.fields.section }),
+      CAT2_ID,
+    );
+
+    // Fill a valid DA title then submit
+    await user.type(screen.getByLabelText("Titel (DA)"), "Hjemmeside Titel");
+    await user.click(screen.getByRole("button", { name: "Gem kladde" }));
+
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    expect(save.mock.calls[0]![0]).toMatchObject({ category_id: CAT2_ID });
+    // Must NOT send Apps
+    expect((save.mock.calls[0]![0] as Record<string, unknown>).category_id).not.toBe(CAT_ID);
+  });
+});
+
+// ── AC-CATSEC-5 / AC-CATSEC-6 / AC-CATSEC-7: section select on saved item ────
+
+describe("AC-CATSEC-5/6/7: ItemEditor — saved item section select", () => {
+  it("AC-CATSEC-5a: saved item — section select is ENABLED", () => {
+    renderItemMultiSection(SAVED_DRAFT);
+    const select = screen.getByRole("combobox", { name: m.item.fields.section });
+    // A saved item can be moved, so its section select is not disabled.
+    expect(select).not.toBeDisabled();
+  });
+
+  it("AC-CATSEC-5b: the section select has the 48px control height of the text fields beside it (design review F2)", () => {
+    renderItemMultiSection(SAVED_DRAFT);
+    // A native select ignores the 26px body line that makes a text input
+    // 48px high (DESIGN.md), so the shared control look sets the minimum.
+    expect(screen.getByRole("combobox", { name: m.item.fields.section })).toHaveClass("min-h-12");
+    expect(screen.getByLabelText("Titel (DA)")).toHaveClass("min-h-12");
+  });
+
+  it("AC-CATSEC-6a: saved item — changing section and submitting calls save with { id, category_id }", async () => {
+    const user = userEvent.setup();
+    save.mockResolvedValue({ ok: true, id: ITEM_ID });
+    renderItemMultiSection(SAVED_DRAFT);
+
+    // The select must be enabled for this to work
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: m.item.fields.section }),
+      CAT2_ID,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Gem kladde" }));
+
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    // The update payload carries the newly chosen section.
+    expect(save.mock.calls[0]![0]).toMatchObject({ id: ITEM_ID, category_id: CAT2_ID });
+  });
+
+  it("AC-CATSEC-7a: saved item — unchanged section still sends current category_id on save", async () => {
+    const user = userEvent.setup();
+    save.mockResolvedValue({ ok: true, id: ITEM_ID });
+    renderItemMultiSection(SAVED_DRAFT);
+
+    // Do not change the section — submit as-is
+    await user.click(screen.getByRole("button", { name: "Gem kladde" }));
+
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    // Every save of a saved item sends its section, even when it is unchanged.
+    expect(save.mock.calls[0]![0]).toMatchObject({ id: ITEM_ID, category_id: CAT_ID });
+  });
+});
+
 
 const sectionText = { title: "Apps", description: "", seo_title: "", seo_description: "" };
 
