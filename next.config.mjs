@@ -1,7 +1,9 @@
-import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
-import { MEDIA_BUCKET } from "./src/config/catalog";
+
+// Mirrors MEDIA_BUCKET in src/config/catalog.ts (kept in sync; this .mjs config
+// is loaded by Node directly and cannot import the TypeScript source).
+const MEDIA_BUCKET = "media";
 
 // Points next-intl's server APIs at the per-request config (locale + messages).
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
@@ -45,7 +47,8 @@ const csp = [
   "upgrade-insecure-requests",
 ].join("; ");
 
-const nextConfig: NextConfig = {
+/** @type {import("next").NextConfig} */
+const nextConfig = {
   poweredByHeader: false,
   images: { unoptimized: true },
   async headers() {
