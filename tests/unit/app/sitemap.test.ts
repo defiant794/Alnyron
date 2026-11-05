@@ -79,8 +79,8 @@ describe("AC-CATPUB-30: sitemap lists the system pages and every public catalog 
     await expect(sitemap()).rejects.toThrow(/catalog sitemap/);
   });
 
-  it("is refreshed hourly like the public pages", () => {
-    expect(revalidate).toBe(3600);
+  it("is refreshed within ~5 minutes like the public pages", () => {
+    expect(revalidate).toBe(300);
   });
 });
 

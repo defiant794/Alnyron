@@ -1,5 +1,5 @@
 /**
- * Unit tests: next.config.ts X-Robots-Tag for the MyLife host.
+ * Unit tests: next.config.mjs X-Robots-Tag for the MyLife host.
  * Journey: mylife-login  ML-AC19
  *
  * Header rules match the requested path, before the middleware rewrites it
@@ -19,7 +19,7 @@ import { isMyLifeHost } from "@/config/mylife";
 vi.mock("next-intl/plugin", () => ({ default: () => (config: NextConfig) => config }));
 vi.mock("@opennextjs/cloudflare", () => ({ initOpenNextCloudflareForDev: vi.fn() }));
 
-import nextConfig from "../../../next.config";
+import nextConfig from "../../../next.config.mjs";
 
 function requestOnHost(host: string): IncomingMessage {
   const request = new IncomingMessage(new Socket());

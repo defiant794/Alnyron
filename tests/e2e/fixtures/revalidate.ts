@@ -2,9 +2,9 @@
  * Makes the app show a DB fixture change (tests/e2e/fixtures/db-state.ts).
  *
  * A production build (`next start`) serves the public pages from the ISR
- * cache, refreshed hourly, so a fixture row only shows once the cache is
- * revalidated. Until admin publishing does that (F1.2), the test-only
- * `POST /api/test/revalidate` (src/app/api/test/revalidate/route.ts) does,
+ * cache, refreshed within ~5 minutes, so a fixture row only shows once the
+ * cache is revalidated. The test-only `POST /api/test/revalidate`
+ * (src/app/api/test/revalidate/route.ts) does that at once,
  * guarded by E2E_REVALIDATE_SECRET: set the same value in the shell
  * environment of both the server (`npm run start`) and the test run. It is
  * kept out of tests/.env.e2e on purpose: the dev server never has it.

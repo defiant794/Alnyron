@@ -8,8 +8,11 @@ import { getPublicCategories } from "@/services/content/categories";
 import { getHomePage, getPageMetadata } from "@/services/content/pages";
 import { getSiteSettings } from "@/services/content/settings";
 
-/** SSG + ISR (architecture §2): hourly self-healing refresh; publishing revalidates on demand. */
-export const revalidate = 3600;
+/**
+ * SSG + ISR (architecture §2): ~5-minute time-based refresh, like the layout.
+ * See the [locale] layout comment for the free-tier KV write-quota trade-off.
+ */
+export const revalidate = 300;
 
 type HomeProps = Readonly<{ params: Promise<{ locale: string }> }>;
 

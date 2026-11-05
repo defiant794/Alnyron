@@ -6,8 +6,11 @@ import { getPathname } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
 import { getCatalogSitemapEntries } from "@/services/content/catalog";
 
-/** Like the public pages: refreshed hourly, and with them whenever an admin change revalidates the site. */
-export const revalidate = 3600;
+/**
+ * Like the public pages: ~5-minute time-based refresh. See the [locale] layout
+ * comment for the free-tier KV write-quota trade-off.
+ */
+export const revalidate = 300;
 
 /**
  * `/sitemap.xml`: the system pages (home, contact, privacy) and every public

@@ -139,11 +139,11 @@ test.describe("Pages editor — needs DB", () => {
   }) => {
     await loginPagesAdmin(page, password);
     const nav = page.getByRole("navigation", { name: "Administration" });
-    await expect(nav.getByRole("link", { name: "Sider" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Sider" })).toHaveAttribute(
-      "href",
-      "/admin/pages",
-    );
+    // exact: name matching is substring by default, and the catalog group's
+    // "Hjemmesider" link also contains "sider".
+    const pagesLink = nav.getByRole("link", { name: "Sider", exact: true });
+    await expect(pagesLink).toBeVisible();
+    await expect(pagesLink).toHaveAttribute("href", "/admin/pages");
   });
 
   // ── AC-PAGES-E02: Sider list shows the three system pages ────────────────

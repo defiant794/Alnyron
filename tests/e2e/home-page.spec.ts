@@ -121,10 +121,10 @@ test("AC-HOME-09b: Footer on /en shows Privacy link to /en/privacy", async ({ pa
 // ── AC-HOME-12: ISR, locked by the build, not by an HTTP check ───────────────
 // GET 200 on / and /en already passes on the F0.3 placeholder; removed.
 // src/app/[locale]/layout.tsx exports `dynamic = "error"` (plus
-// `revalidate = 3600` and generateStaticParams), so a request-time API under
+// `revalidate = 300` and generateStaticParams), so a request-time API under
 // it fails `next build`. A child segment's own `dynamic`/`revalidate` export
 // can still override that, so the proof is the build's route table: /da and
-// /en listed under ● /[locale] (SSG, revalidate 1h), not ƒ.
+// /en listed under ● /[locale] (SSG, revalidate 5m), not ƒ.
 
 // ── AC-HOME-14/15: Keyboard + SkipLink ───────────────────────────────────────
 // SkipLink ships with F0.2; these verify the F0.5 page does not break it.
