@@ -13,6 +13,9 @@
     "contact": "Contact",
     "privacy": "Privacy"
   },
+  "Footer": {
+    "cvr": "CVR {cvr}"
+  },
   "LanguageSwitcher": {
     "label": "Language"
   },
@@ -28,7 +31,8 @@
   },
   "Contact": {
     "responseTime": "Response time",
-    "languages": "Languages"
+    "languages": "Languages",
+    "company": "Company"
   },
   "Catalog": {
     "price": {

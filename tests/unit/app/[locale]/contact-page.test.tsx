@@ -6,7 +6,7 @@
  *
  * Checks that:
  *  - The page calls getContactPage() with the request locale (not the placeholder).
- *  - The seeded DA title, lead and all three content fields render in the DOM.
+ *  - The seeded DA title, lead and all four content fields render in the DOM.
  *  - On EN locale with blank EN fields, the DA fallback values appear.
  *  - body_md with injected <script>/onerror is not present in the rendered DOM.
  *  - generateMetadata gives the canonical path and hreflang alternates
@@ -53,6 +53,7 @@ const DA_CONTENT = {
   eyebrow: "Kontakt",
   responseTime: "Typisk inden for 1-2 hverdage",
   languages: "Dansk / English",
+  company: "Alnyron · CVR 46887433",
 };
 
 const DA_RESOLVED = {
@@ -62,7 +63,7 @@ const DA_RESOLVED = {
 
 const EN_FALLBACK_RESOLVED = {
   value: { title: DA_TITLE, lead: DA_LEAD, content: DA_CONTENT, body_md: "" },
-  fallbackKeys: ["title", "lead", "content.eyebrow", "content.responseTime", "content.languages"],
+  fallbackKeys: ["title", "lead", "content.eyebrow", "content.responseTime", "content.languages", "content.company"],
 };
 
 async function renderContact(locale: string) {
@@ -119,6 +120,22 @@ describe("AC-PAGES-19: Contact page — DA content renders in the DOM", () => {
     await renderContact("da");
     expect(screen.getByText(DA_CONTENT.languages)).toBeInTheDocument();
   });
+
+  it("AC-CVR-03: company details row renders under its label with the CVR", async () => {
+    await renderContact("da");
+    const value = screen.getByText(DA_CONTENT.company);
+    expect(value.tagName).toBe("DD");
+    expect(value.previousElementSibling).toHaveTextContent("Virksomhed");
+  });
+
+  it("AC-CVR-03: a blank company row is left out", async () => {
+    vi.mocked(getContactPage).mockResolvedValue({
+      ...DA_RESOLVED,
+      value: { ...DA_RESOLVED.value, content: { ...DA_CONTENT, company: "" } },
+    });
+    await renderContact("da");
+    expect(screen.queryByText("Virksomhed")).not.toBeInTheDocument();
+  });
 });
 
 // ── AC-PAGES-20: EN locale DA fallback renders ────────────────────────────────
@@ -127,6 +144,13 @@ describe("AC-PAGES-20: Contact page — EN locale DA fallback values render", ()
   it("AC-PAGES-20: EN page with full DA fallback renders the DA title", async () => {
     await renderContact("en");
     expect(screen.getByRole("heading", { name: DA_TITLE })).toBeInTheDocument();
+  });
+
+  it("AC-CVR-03: EN page shows the Danish company row under the English label, marked lang=da", async () => {
+    await renderContact("en");
+    const value = screen.getByText(DA_CONTENT.company);
+    expect(value).toHaveAttribute("lang", "da");
+    expect(value.previousElementSibling).toHaveTextContent("Company");
   });
 });
 

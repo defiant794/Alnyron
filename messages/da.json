@@ -13,6 +13,9 @@
     "contact": "Kontakt",
     "privacy": "Privatliv"
   },
+  "Footer": {
+    "cvr": "CVR {cvr}"
+  },
   "LanguageSwitcher": {
     "label": "Sprog",
     "da": "Dansk",
@@ -30,7 +33,8 @@
   },
   "Contact": {
     "responseTime": "Svartid",
-    "languages": "Sprog"
+    "languages": "Sprog",
+    "company": "Virksomhed"
   },
   "Catalog": {
     "price": {
@@ -130,7 +134,7 @@
           "lead": "Lead",
           "leadHint": "Kort tekst under titlen. Kan være tom.",
           "body": "Indhold",
-          "bodyHint": "Markdown: ## Overskrift, **fed**, - punkt og [tekst](https://…). '{email}' bliver til kontaktadressen. HTML vises som almindelig tekst.",
+          "bodyHint": "Markdown: ## Overskrift, **fed**, - punkt og [tekst](https://…). '{email}' bliver til kontaktadressen og '{cvr}' til CVR-nummeret. HTML vises som almindelig tekst.",
           "seo": "SEO",
           "seoTitle": "SEO-titel",
           "seoTitleHint": "Vises i søgeresultater og i browserfanen. Tom: sidens navn.",
@@ -157,7 +161,8 @@
           "contact": {
             "eyebrow": "Overlinje",
             "responseTime": "Svartid",
-            "languages": "Sprog"
+            "languages": "Sprog",
+            "company": "Virksomhed"
           },
           "privacy": {
             "eyebrow": "Overlinje"
@@ -168,6 +173,9 @@
             "ctaBand": {
               "text": "{email} bliver til et link til kontaktadressen."
             }
+          },
+          "contact": {
+            "company": "{cvr} bliver til CVR-nummeret."
           }
         },
         "save": "Gem",

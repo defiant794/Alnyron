@@ -35,7 +35,7 @@ function readSchema<Schema extends z.ZodObject>(schema: Schema): ReadSchema<Sche
 /** `content` of the home page: the "what we do" intro and the CTA band (`ctaBand.text` may contain `{email}`). */
 const homeContentSchema = readSchema(PAGE_CONTENT_SCHEMAS.home);
 
-/** `content` of the contact page: the eyebrow over the title and the detail rows beside the lead. */
+/** `content` of the contact page: the eyebrow over the title and the detail rows beside the lead (`company` may contain `{cvr}`). */
 const contactContentSchema = readSchema(PAGE_CONTENT_SCHEMAS.contact);
 
 /** `content` of the privacy page: the eyebrow over the title (the policy itself is `body_md`). */
@@ -70,6 +70,9 @@ export interface PageMetadataTranslation {
 
 /** In seeded copy, stands for `site_settings.contact_email`. */
 const EMAIL_TOKEN = "{email}";
+
+/** In page copy, stands for `site_settings.cvr` as plain text (nothing while the CVR is not set). */
+const CVR_TOKEN = "{cvr}";
 
 /**
  * The Danish row and the `locale` row (absent for Danish, or when it was
@@ -115,21 +118,28 @@ export async function getHomePage(locale: Locale): Promise<ResolvedContent<HomeP
 
 /**
  * The contact system page (`/contact`, `/en/contact`) for `locale`, with the
- * same per-field Danish fallback as {@link getHomePage}.
+ * same per-field Danish fallback as {@link getHomePage}. Each `{cvr}` in the
+ * company details row (`content.company`) becomes `site_settings.cvr`.
  *
- * @throws like {@link getHomePage}.
+ * @throws like {@link getHomePage}, or when the site settings cannot be read.
  */
 export async function getContactPage(locale: Locale): Promise<ResolvedContent<ContactPageTranslation>> {
-  const { da, own } = await loadTranslations("contact", locale);
+  const [{ da, own }, settings] = await Promise.all([
+    loadTranslations("contact", locale),
+    getSiteSettings(),
+  ]);
   const toTranslation = bodyPageParser(contactContentSchema);
-  return resolveContent(toTranslation(da), own && toTranslation(own), locale);
+  const { value, fallbackKeys } = resolveContent(toTranslation(da), own && toTranslation(own), locale);
+  const company = value.content.company.replaceAll(CVR_TOKEN, settings.cvr ?? "");
+  return { value: { ...value, content: { ...value.content, company } }, fallbackKeys };
 }
 
 /**
  * The privacy system page (`/privacy`, `/en/privacy`) for `locale`, with
  * the same per-field Danish fallback as {@link getHomePage}. Each `{email}` in
- * `body_md` becomes a markdown autolink to `site_settings.contact_email`, so
- * the rendered policy links the current contact address.
+ * `body_md` becomes a markdown autolink to `site_settings.contact_email` and
+ * each `{cvr}` the plain `site_settings.cvr`, so the rendered policy names the
+ * current contact address and data controller.
  *
  * @throws like {@link getHomePage}, or when the site settings cannot be read.
  */
@@ -140,7 +150,9 @@ export async function getPrivacyPage(locale: Locale): Promise<ResolvedContent<Pr
   ]);
   const toTranslation = bodyPageParser(privacyContentSchema);
   const { value, fallbackKeys } = resolveContent(toTranslation(da), own && toTranslation(own), locale);
-  const body = value.body_md.replaceAll(EMAIL_TOKEN, `<${settings.contactEmail}>`);
+  const body = value.body_md
+    .replaceAll(EMAIL_TOKEN, `<${settings.contactEmail}>`)
+    .replaceAll(CVR_TOKEN, settings.cvr ?? "");
   return { value: { ...value, body_md: body }, fallbackKeys };
 }
 

@@ -28,10 +28,10 @@ export async function generateMetadata({ params }: ContactProps): Promise<Metada
 
 /**
  * Contact page (`/contact`, `/en/contact`; approved contact mock): eyebrow,
- * title and lead, then the response time and languages. All copy comes from
- * the contact system page in the DB (edited under Admin > Sider), with
- * Danish filling blank English fields (marked `lang="da"`). Blank fields are
- * left out.
+ * title and lead, then the response time, languages and company details
+ * (its `{cvr}` is `site_settings.cvr`). All copy comes from the contact
+ * system page in the DB (edited under Admin > Sider), with Danish filling
+ * blank English fields (marked `lang="da"`). Blank fields are left out.
  */
 export default async function Contact({ params }: ContactProps) {
   const { locale } = await params;
@@ -47,6 +47,7 @@ export default async function Contact({ params }: ContactProps) {
   const details = [
     { key: "content.responseTime", label: t("responseTime"), value: content.responseTime },
     { key: "content.languages", label: t("languages"), value: content.languages },
+    { key: "content.company", label: t("company"), value: content.company },
   ].filter((detail) => detail.value.trim() !== "");
 
   return (

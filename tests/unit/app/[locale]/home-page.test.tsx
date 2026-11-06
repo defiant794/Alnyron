@@ -68,6 +68,7 @@ beforeEach(() => {
   vi.mocked(getSiteSettings).mockResolvedValue({
     companyName: 'Alnyron',
     contactEmail: 'info@alnyron.dk',
+    cvr: '46887433',
   });
   vi.mocked(getPageMetadata).mockResolvedValue({ title: '', description: '' });
 });

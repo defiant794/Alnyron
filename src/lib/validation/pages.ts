@@ -32,7 +32,13 @@ export const PAGE_CONTENT_SCHEMAS = {
       text: z.string(),
     }),
   }),
-  contact: z.strictObject({ eyebrow: z.string(), responseTime: z.string(), languages: z.string() }),
+  contact: z.strictObject({
+    eyebrow: z.string(),
+    responseTime: z.string(),
+    languages: z.string(),
+    /** Company details row; may contain `{cvr}`, rendered as `site_settings.cvr`. */
+    company: z.string(),
+  }),
   privacy: z.strictObject({ eyebrow: z.string() }),
 } satisfies Record<SystemPageKey, z.ZodObject>;
 

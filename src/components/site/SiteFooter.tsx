@@ -15,14 +15,18 @@ const LINK =
 const yearFormat = new Intl.DateTimeFormat("da-DK", { year: "numeric", timeZone: "Europe/Copenhagen" });
 
 /**
- * Minimal footer (approved mock): `© {year} {company}`, the contact email
- * and the privacy link, nothing else (no logo, no language switcher).
- * Company and email come from `site_settings`. The privacy link carries
+ * Minimal footer (approved mock): `© {year} {company} · CVR {cvr}`, the
+ * contact email and the privacy link, nothing else (no logo, no language
+ * switcher). Company, CVR and email come from `site_settings`; the CVR part
+ * is left out while `site_settings.cvr` is not set. The middot is hidden
+ * from assistive technology and a visually hidden comma takes its place, so
+ * screen readers pause between company and CVR. The privacy link carries
  * `aria-current="page"` on the privacy page.
  */
 export default async function SiteFooter({ locale }: SiteFooterProps) {
-  const [{ companyName, contactEmail }, t] = await Promise.all([
+  const [{ companyName, contactEmail, cvr }, t, tNav] = await Promise.all([
     getSiteSettings(),
+    getTranslations({ locale, namespace: "Footer" }),
     getTranslations({ locale, namespace: "Nav" }),
   ]);
 
@@ -31,6 +35,13 @@ export default async function SiteFooter({ locale }: SiteFooterProps) {
       <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-8">
         <p className="text-small text-muted">
           © {yearFormat.format(new Date())} {companyName}
+          {cvr !== null && (
+            <>
+              <span aria-hidden="true"> · </span>
+              <span className="sr-only">, </span>
+              <span className="whitespace-nowrap">{t("cvr", { cvr })}</span>
+            </>
+          )}
         </p>
         <ul className="flex flex-wrap items-center gap-x-4">
           <li>
@@ -40,7 +51,7 @@ export default async function SiteFooter({ locale }: SiteFooterProps) {
           </li>
           <li>
             <NavLink href={getPathname({ href: "/privacy", locale })} className={LINK}>
-              {t("privacy")}
+              {tNav("privacy")}
             </NavLink>
           </li>
         </ul>

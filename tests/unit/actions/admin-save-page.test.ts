@@ -18,9 +18,10 @@
  *      "page_translations_da_title"    → CHECK on page_translations
  *  - missing_slugs / P0001 is in admin_set_page_status, NOT here.
  *
- * Contact page seeded content (20261101000300_seed_system_content.sql):
+ * Contact page seeded content (20261101000300_seed_system_content.sql, company
+ * row from 20261106000300_site_cvr.sql):
  *   content: { eyebrow: "Kontakt", responseTime: "Typisk inden for 1-2 hverdage",
- *              languages: "Dansk / English" }
+ *              languages: "Dansk / English", company: "Alnyron · CVR {cvr}" }
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -82,6 +83,7 @@ const CONTACT_FULL_CONTENT = {
   eyebrow: "Kontakt",
   responseTime: "Typisk inden for 1-2 hverdage",
   languages: "Dansk / English",
+  company: "Alnyron · CVR {cvr}",
 };
 
 /**

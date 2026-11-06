@@ -4,11 +4,12 @@
  *
  * Expected module: src/services/content/pages.ts  (new export alongside getHomePage)
  *
- * Seeded contact content (20261101000300_seed_system_content.sql):
+ * Seeded contact content (20261101000300_seed_system_content.sql, company row
+ * from 20261106000300_site_cvr.sql):
  *   DA title:   "Lad os tale om dit projekt"
  *   DA lead:    "Skriv til os, så vender vi hurtigt tilbage. Du kan også sende en mail direkte."
  *   DA content: { eyebrow: "Kontakt", responseTime: "Typisk inden for 1-2 hverdage",
- *                 languages: "Dansk / English" }
+ *                 languages: "Dansk / English", company: "Alnyron · CVR {cvr}" }
  *   EN:         title="", lead="", content={}  (full DA fallback)
  *
  * getContactPage(locale) follows the same DA-fallback pattern as getHomePage:
@@ -30,9 +31,13 @@ vi.mock("@/lib/supabase/public", () => ({
   getPublicClient: () => ({ from: mockFrom }),
 }));
 
+// getContactPage replaces {cvr} with site_settings.cvr (AC-CVR-03).
+vi.mock("@/services/content/settings", () => ({ getSiteSettings: vi.fn() }));
+
 // ── Module under test ─────────────────────────────────────────────────────────
 
 import { getContactPage } from "@/services/content/pages";
+import { getSiteSettings } from "@/services/content/settings";
 
 // ── Content type (mirrors the expected service shape) ─────────────────────────
 
@@ -40,6 +45,7 @@ interface ContactContent {
   eyebrow: string;
   responseTime: string;
   languages: string;
+  company: string;
 }
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -53,6 +59,7 @@ const DA_CONTACT = {
     eyebrow: "Kontakt",
     responseTime: "Typisk inden for 1-2 hverdage",
     languages: "Dansk / English",
+    company: "Alnyron · CVR {cvr}",
   } satisfies ContactContent,
   body_md: "",
   pages: { system_key: "contact" },
@@ -101,6 +108,11 @@ function mockPageTranslations(rows: Array<Omit<typeof DA_CONTACT, "content"> & {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(getSiteSettings).mockResolvedValue({
+    companyName: "Alnyron",
+    contactEmail: "info@alnyron.dk",
+    cvr: "46887433",
+  });
 });
 
 // ── AC-PAGES-19: DA locale returns DA translation ─────────────────────────────
@@ -129,13 +141,15 @@ describe("AC-PAGES-19: getContactPage('da') — returns DA translation from page
     );
   });
 
-  it("AC-PAGES-19c: returns the seeded content object with all three keys", async () => {
+  it("AC-PAGES-19c: returns the seeded content object with all four keys", async () => {
     mockPageTranslations([DA_CONTACT]);
     const result = await getContactPage("da");
-    const content = result.value.content as ContactContent;
-    expect(content.eyebrow).toBe("Kontakt");
-    expect(content.responseTime).toBe("Typisk inden for 1-2 hverdage");
-    expect(content.languages).toBe("Dansk / English");
+    expect(result.value.content).toEqual({
+      eyebrow: "Kontakt",
+      responseTime: "Typisk inden for 1-2 hverdage",
+      languages: "Dansk / English",
+      company: "Alnyron · CVR 46887433",
+    });
   });
 
   it("AC-PAGES-19d: throws when DA translation is missing (broken seed)", async () => {
@@ -192,5 +206,52 @@ describe("AC-PAGES-20: getContactPage('en') — DA fallback when EN translation 
     // eyebrow not in EN content → falls back to DA "Kontakt"
     expect(content.eyebrow).toBe("Kontakt");
     expect(result.fallbackKeys).toContainEqual(expect.stringMatching(/content.*eyebrow|eyebrow/));
+  });
+});
+
+// ── AC-CVR-03: {cvr} in the company row renders site_settings.cvr ─────────────
+
+describe("AC-CVR-03: getContactPage — {cvr} in content.company renders site_settings.cvr", () => {
+  it("AC-CVR-03a: DA company row shows the CVR from site_settings", async () => {
+    mockPageTranslations([DA_CONTACT]);
+    const result = await getContactPage("da");
+    expect(result.value.content.company).toBe("Alnyron · CVR 46887433");
+    expect(getSiteSettings).toHaveBeenCalled();
+  });
+
+  it("AC-CVR-03b: EN with a blank company row shows the Danish row with the CVR (marked as fallback)", async () => {
+    mockPageTranslations([DA_CONTACT, EN_CONTACT_BLANK]);
+    const result = await getContactPage("en");
+    expect(result.value.content.company).toBe("Alnyron · CVR 46887433");
+    expect(result.fallbackKeys).toContain("content.company");
+  });
+
+  it("AC-CVR-03c: EN's own company row gets the CVR too", async () => {
+    mockPageTranslations([DA_CONTACT, { ...EN_CONTACT_BLANK, content: { company: "Alnyron (CVR {cvr})" } }]);
+    const result = await getContactPage("en");
+    expect(result.value.content.company).toBe("Alnyron (CVR 46887433)");
+    expect(result.fallbackKeys).not.toContain("content.company");
+  });
+
+  it("AC-CVR-03d: follows site_settings.cvr, not a fixed number", async () => {
+    vi.mocked(getSiteSettings).mockResolvedValue({
+      companyName: "Alnyron",
+      contactEmail: "info@alnyron.dk",
+      cvr: "12345678",
+    });
+    mockPageTranslations([DA_CONTACT]);
+    const result = await getContactPage("da");
+    expect(result.value.content.company).toBe("Alnyron · CVR 12345678");
+  });
+
+  it("AC-CVR-03e: no raw {cvr} token reaches the page while the CVR is not set", async () => {
+    vi.mocked(getSiteSettings).mockResolvedValue({
+      companyName: "Alnyron",
+      contactEmail: "info@alnyron.dk",
+      cvr: null,
+    });
+    mockPageTranslations([DA_CONTACT]);
+    const result = await getContactPage("da");
+    expect(result.value.content.company).not.toContain("{cvr}");
   });
 });

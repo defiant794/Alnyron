@@ -15,14 +15,15 @@ import { getSiteSettings } from "@/services/content/settings";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const settingsRow = {
+const settingsRow: { company_name: string; contact_email: string; cvr: string | null } = {
   company_name: "Alnyron",
   contact_email: "info@alnyron.dk",
+  cvr: "46887433",
 };
 
 function mockSettingsRow(row: typeof settingsRow | null) {
-  // Chain: .from("site_settings").select("company_name, contact_email") resolves
-  // to the row list; the service reads the first row.
+  // Chain: .from("site_settings").select("company_name, contact_email, cvr")
+  // resolves to the row list; the service reads the first row.
   mockSelect.mockResolvedValue({
     data: row ? [row] : [],
     error: null,
@@ -54,12 +55,29 @@ describe("AC-HOME-SETTINGS-01: getSiteSettings — maps DB row to SiteSettings",
     expect(mockFrom).toHaveBeenCalledWith("site_settings");
   });
 
-  it("selects at minimum company_name and contact_email", async () => {
+  it("selects at minimum company_name, contact_email and cvr", async () => {
     mockSettingsRow(settingsRow);
     await getSiteSettings();
     const selectArg: string = mockSelect.mock.calls[0]![0] as string;
     expect(selectArg).toMatch(/company_name/);
     expect(selectArg).toMatch(/contact_email/);
+    expect(selectArg).toMatch(/\bcvr\b/);
+  });
+});
+
+// ── CVR: site_settings.cvr for the footer and the {cvr} content token ─────────
+
+describe("AC-CVR-01: getSiteSettings — returns site_settings.cvr", () => {
+  it("returns cvr from site_settings.cvr", async () => {
+    mockSettingsRow(settingsRow);
+    const result = await getSiteSettings();
+    expect(result.cvr).toBe("46887433");
+  });
+
+  it("returns cvr null while site_settings.cvr is not set", async () => {
+    mockSettingsRow({ ...settingsRow, cvr: null });
+    const result = await getSiteSettings();
+    expect(result.cvr).toBeNull();
   });
 });
 
