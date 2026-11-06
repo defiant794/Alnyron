@@ -3,16 +3,19 @@
  *
  * Covers F0.4 hardening (migration 20261101000400_hardening.sql), the F2.1 catalog
  * grants (migration 20261103000100_catalog_admin.sql), the F2.1 catalog hardening
- * (migration 20261103000300_catalog_hardening.sql) and the P3 MyLife role gate
- * (migration 20261105000400_mylife_role_gate.sql):
+ * (migration 20261103000300_catalog_hardening.sql), the P3 MyLife role gate
+ * (migration 20261105000400_mylife_role_gate.sql) and the P4 monitor role gate
+ * (migration 20261106000200_monitor_schema.sql):
  *   - a function newly created by postgres in `private` is not executable by PUBLIC,
  *     anon or authenticated (anon/authenticated hold USAGE on `private`, so a PUBLIC
  *     EXECUTE default would expose every future security-definer helper)
  *   - existing private functions: no PUBLIC EXECUTE; anon may run only the RLS visibility
- *     helpers, authenticated additionally is_owner(), is_mylife() (the mylife_* policies)
- *     and the CHECK / storage-policy helpers external_links_valid(), media_mime_type() and
- *     media_path_valid() (evaluated as the writer); the trigger functions media_limit_per_item() /
- *     stamp_updated_by() need no grant (triggers are not EXECUTE-checked when they fire)
+ *     helpers, authenticated additionally is_owner(), is_mylife() (the mylife_* policies),
+ *     is_monitor() (the monitors / monitor_events policies; expected only where the monitor
+ *     schema is applied) and the CHECK / storage-policy helpers external_links_valid(),
+ *     media_mime_type() and media_path_valid() (evaluated as the writer); the trigger functions
+ *     media_limit_per_item() / stamp_updated_by() need no grant (triggers are not EXECUTE-checked
+ *     when they fire)
  *   - admin RPCs (pages + catalog) are executable by authenticated, never by anon / PUBLIC
  *
  * Connection: postgres. The probe function is created inside a rolled-back transaction.
@@ -66,13 +69,19 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
     });
   }, 12_000);
 
-  it("existing private functions: no PUBLIC EXECUTE; anon only the visibility helpers; authenticated also is_owner, is_mylife and the CHECK/policy helpers", async () => {
+  it("existing private functions: no PUBLIC EXECUTE; anon only the visibility helpers; authenticated also is_owner, is_mylife, is_monitor and the CHECK/policy helpers", async () => {
     await withTx(client, async (c) => {
       const rows = await execPrivileges(c, "n.nspname = 'private'");
       const exposed = (key: "public_exec" | "anon_exec" | "authenticated_exec") =>
         rows.filter((r) => r[key]).map((r) => r.fn);
 
       expect(rows.length).toBeGreaterThan(0);
+      // private.is_monitor() arrives with 20261106000200_monitor_schema.sql: pin it where that
+      // migration is applied, so the exact list holds both before and after the apply.
+      const { rows: target } = await c.query<{ monitor_applied: boolean }>(
+        "SELECT to_regprocedure('private.is_monitor()') IS NOT NULL AS monitor_applied",
+      );
+      const monitorHelper = target[0]!.monitor_applied ? ["is_monitor()"] : [];
       expect(exposed("public_exec")).toEqual([]);
       expect(exposed("anon_exec")).toEqual([
         "category_is_public(p_id uuid)",
@@ -84,6 +93,7 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
         "category_is_public(p_id uuid)",
         "external_links_valid(p_links jsonb)",
         "is_admin()",
+        ...monitorHelper,
         "is_mylife()",
         "is_owner()",
         "item_is_public(p_id uuid)",

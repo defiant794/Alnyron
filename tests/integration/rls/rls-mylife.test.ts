@@ -10,8 +10,9 @@
  *   - spec step 6, user A cannot read user B: A cannot select, update or delete B's rows,
  *     cannot insert a row carrying B's user_id, cannot re-parent its own row to B, and an
  *     upsert on B's id is blocked. The owner role gives no read-all on health data.
- *   - a signed-in account without a MyLife role (admin, role = NULL, no profile row) is
- *     denied on both tables, its own rows included
+ *   - a signed-in account without a MyLife role (admin, monitor_user, role = NULL, no profile
+ *     row) is denied on both tables, its own rows included. monitor_user (20261106000100) must
+ *     be a committed app_role value on the target; until it is, its cases skip.
  *   - anon has no grant on either table and TRUNCATE is granted to nobody → 42501
  *   - exactly the eight mylife policies exist, permissive for authenticated, each gated
  *
@@ -52,6 +53,8 @@ interface Account {
   claims: JwtClaims;
   userId: string;
   seed: (c: PoolClient) => Promise<void>;
+  /** The seed assigns monitor_user, which the target must hold as a committed app_role value. */
+  requiresMonitorRole?: true;
 }
 
 const OWNER: Account = {
@@ -67,6 +70,11 @@ const MYLIFE: Account = {
   seed: (c) => seedAuthUser(c, MYLIFE_UUID, MYLIFE_EMAIL, "mylife_user"),
 };
 
+const MONITOR_UUID = "00000000-0000-0000-0000-000000000007";
+const MONITOR_EMAIL = "monitor@test.local";
+const MONITOR_ROLE_MISSING =
+  "app_role has no committed 'monitor_user' on the target: apply 20261106000100 first";
+
 /** The roles MyLife lets in. */
 const MYLIFE_ACCOUNTS: readonly Account[] = [OWNER, MYLIFE];
 
@@ -77,6 +85,18 @@ const NON_MYLIFE_ACCOUNTS: readonly Account[] = [
     claims: ADMIN_CLAIMS,
     userId: ADMIN_UUID,
     seed: (c) => seedAuthUser(c, ADMIN_UUID, ADMIN_EMAIL, "admin"),
+  },
+  {
+    // The page-change monitor's public sign-up role. seedAuthUser's AppRole predates it:
+    // allowlist it here and let on_auth_user_created copy it into the new profile.
+    label: "monitor_user",
+    claims: { sub: MONITOR_UUID, role: "authenticated", email: MONITOR_EMAIL },
+    userId: MONITOR_UUID,
+    requiresMonitorRole: true,
+    seed: async (c) => {
+      await c.query("INSERT INTO public.user_allowlist (email, role) VALUES ($1, 'monitor_user')", [MONITOR_EMAIL]);
+      await seedAuthUser(c, MONITOR_UUID, MONITOR_EMAIL);
+    },
   },
   {
     label: "profile role=null",
@@ -161,9 +181,16 @@ function unchanged(userId: string): StoredRows {
 
 describe.skipIf(!DB_AVAILABLE)("RLS — MyLife health data (mylife_profile + mylife_events)", () => {
   let client: PoolClient;
+  /** 'monitor_user' is a committed app_role value on the target (20261106000100 applied). */
+  let monitorRoleCommitted: boolean;
 
   beforeAll(async () => {
     client = await getClient();
+    const { rows } = await client.query<{ committed: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM pg_enum
+                       WHERE enumtypid = 'public.app_role'::regtype AND enumlabel = 'monitor_user') AS committed`,
+    );
+    monitorRoleCommitted = rows[0]!.committed;
   });
 
   afterAll(async () => {
@@ -408,7 +435,8 @@ describe.skipIf(!DB_AVAILABLE)("RLS — MyLife health data (mylife_profile + myl
 
   for (const who of NON_MYLIFE_ACCOUNTS) {
     describe(`no MyLife role (${who.label})`, () => {
-      it("cannot read, update or delete even its own rows", async () => {
+      it("cannot read, update or delete even its own rows", async ({ skip }) => {
+        skip(!!who.requiresMonitorRole && !monitorRoleCommitted, MONITOR_ROLE_MISSING);
         await withTx(client, async (c) => {
           await who.seed(c);
           const eventId = await seedMyLifeRows(c, who.userId);
@@ -428,7 +456,8 @@ describe.skipIf(!DB_AVAILABLE)("RLS — MyLife health data (mylife_profile + myl
         });
       }, 12_000);
 
-      it("cannot insert or upsert its own rows (42501)", async () => {
+      it("cannot insert or upsert its own rows (42501)", async ({ skip }) => {
+        skip(!!who.requiresMonitorRole && !monitorRoleCommitted, MONITOR_ROLE_MISSING);
         await withTx(client, async (c) => {
           await who.seed(c);
           await asRole(c, "authenticated", who.claims);

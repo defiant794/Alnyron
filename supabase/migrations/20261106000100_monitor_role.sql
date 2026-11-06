@@ -1,0 +1,11 @@
+-- P4 monitoring: the monitor_user role for public sign-ups to the page-change monitor.
+--
+-- Its own migration: a value added by ALTER TYPE ... ADD VALUE cannot be used in the
+-- transaction that adds it, and each migration file runs in one transaction. The monitor
+-- schema (20261106000200) casts 'monitor_user' in private.is_monitor(), so it needs this
+-- value committed first.
+--
+-- The existing gates name their roles explicitly (is_admin: owner/admin, is_owner: owner,
+-- is_mylife: owner/mylife_user), so a monitor_user profile gets no admin, access-management
+-- or MyLife access. No table, policy or data changes.
+alter type public.app_role add value if not exists 'monitor_user';
