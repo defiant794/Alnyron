@@ -110,3 +110,16 @@ describe("AC-CATPUB-31: sitemap alternates are absolute, with x-default = Danish
     });
   });
 });
+
+// ── AC-MONNAV-6: /monitor must NOT appear in the sitemap ─────────────────────
+// SYSTEM_PAGE_PATHNAMES holds monitor = "/monitor", but sitemap.ts lists only the
+// content pages (`isContentPage`): an app area is outside the locale routing, so
+// /monitor and /en/monitor would violate AC6. The exact "lists home, contact and
+// privacy" test above pins the list; this test pins the guard from the other direction.
+
+describe("AC-MONNAV-6: sitemap does not include /monitor or /en/monitor (area page, not in Next.js routing)", () => {
+  it("AC-MONNAV-6-sitemap: no sitemap URL contains '/monitor'", async () => {
+    const urls = (await sitemap()).map((candidate) => candidate.url);
+    expect(urls.some((url) => url.includes("/monitor"))).toBe(false);
+  });
+});

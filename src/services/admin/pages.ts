@@ -1,13 +1,15 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import type { Locale } from "next-intl";
-import type { SystemPageKey } from "@/config/system-pages";
+import type { ContentPageKey, SystemPageKey } from "@/config/system-pages";
 import { stringAt } from "@/lib/json-path";
 import { createServerClient } from "@/lib/supabase/server";
 import {
   contentFieldPaths,
   DA_TITLE_REQUIRED,
+  isContentPage,
   navOrderSchema,
   pageIdSchema,
+  pageNavSchema,
   pageStatusSchema,
   savePageSchema,
 } from "@/lib/validation/pages";
@@ -61,10 +63,10 @@ export interface AdminPageTranslation {
   content: Record<string, string>;
 }
 
-/** A system page loaded for the editor. */
+/** A system page with editable content, loaded for the editor. */
 export interface AdminPageDetail {
   id: string;
-  systemKey: SystemPageKey;
+  systemKey: ContentPageKey;
   showInNav: boolean;
   translations: Record<Locale, AdminPageTranslation>;
 }
@@ -106,7 +108,8 @@ export async function listSystemPages(): Promise<AdminPageSummary[]> {
 
 /**
  * A system page with both locales for the editor, or `null` when `id` names
- * no system page (custom pages are not editable yet). A missing locale row
+ * no system page (custom pages are not editable yet) or an app area (Monitor:
+ * no editable content, only its nav flag in the list). A missing locale row
  * reads as blank fields.
  *
  * @throws when the query fails.
@@ -123,7 +126,7 @@ export async function getSystemPageForEdit(id: string): Promise<AdminPageDetail 
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(`Failed to load the page: ${error.message}`);
-  if (!data?.system_key) return null;
+  if (!data?.system_key || !isContentPage(data.system_key)) return null;
 
   const paths = contentFieldPaths(data.system_key);
   const rows: TranslationRow[] = data.page_translations;
@@ -196,6 +199,19 @@ export async function saveNavOrder(pageIds: unknown): Promise<PageActionResult> 
   const supabase = await createServerClient();
   const { error } = await supabase.rpc("admin_reorder_nav", { p_page_ids: parsed.data });
   return error ? failure("admin_reorder_nav", error) : { ok: true };
+}
+
+/** Shows (`show = true`) or hides a page in the public nav through `admin_set_page_nav`. */
+export async function savePageNav(pageId: unknown, show: unknown): Promise<PageActionResult> {
+  const parsed = pageNavSchema.safeParse({ pageId, show });
+  if (!parsed.success) return { ok: false, error: "invalid" };
+
+  const supabase = await createServerClient();
+  const { error } = await supabase.rpc("admin_set_page_nav", {
+    p_page_id: parsed.data.pageId,
+    p_show: parsed.data.show,
+  });
+  return error ? failure("admin_set_page_nav", error) : { ok: true };
 }
 
 /**

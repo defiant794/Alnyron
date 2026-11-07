@@ -11,7 +11,8 @@
     "menu": "Menu",
     "home": "Forside",
     "contact": "Kontakt",
-    "privacy": "Privatliv"
+    "privacy": "Privatliv",
+    "monitor": "Monitor"
   },
   "Footer": {
     "cvr": "CVR {cvr}"
@@ -100,7 +101,11 @@
       },
       "menu": {
         "shown": "Vises i menuen",
-        "hidden": "Ikke i menuen"
+        "hidden": "Ikke i menuen",
+        "toggle": "Vis i menuen"
+      },
+      "area": {
+        "description": "Appområde på {path}, uden tekst at redigere"
       },
       "edit": "Rediger",
       "moveUp": "Flyt op",

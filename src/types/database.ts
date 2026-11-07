@@ -563,6 +563,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      admin_set_page_nav: {
+        Args: { p_page_id: string; p_show: boolean }
+        Returns: undefined
+      }
       admin_set_page_status: {
         Args: {
           p_page_id: string
@@ -578,7 +582,7 @@ export type Database = {
       content_status: "draft" | "published"
       locale_code: "da" | "en"
       price_type: "fixed" | "from" | "contact"
-      system_page_key: "home" | "contact" | "privacy"
+      system_page_key: "home" | "contact" | "privacy" | "monitor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -711,7 +715,7 @@ export const Constants = {
       content_status: ["draft", "published"],
       locale_code: ["da", "en"],
       price_type: ["fixed", "from", "contact"],
-      system_page_key: ["home", "contact", "privacy"],
+      system_page_key: ["home", "contact", "privacy", "monitor"],
     },
   },
 } as const

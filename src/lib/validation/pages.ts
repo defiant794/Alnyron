@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PAGE_TEXT_LIMITS, type SystemPageKey } from "@/config/system-pages";
+import { PAGE_TEXT_LIMITS, SYSTEM_PAGE_IS_AREA, type ContentPageKey, type SystemPageKey } from "@/config/system-pages";
 
 /**
  * Write schemas for the admin pages editor (F1.2).
@@ -19,9 +19,9 @@ export const DA_TITLE_REQUIRED = "da-title-required";
 export const pageIdSchema = z.guid();
 
 /**
- * `content` of each system page, every leaf a required string: the single
- * source of the content shape. The editor's fields and the public read
- * schemas are derived from it.
+ * `content` of each content system page, every leaf a required string: the
+ * single source of the content shape. The editor's fields and the public read
+ * schemas are derived from it. App areas ({@link isContentPage}) have none.
  */
 export const PAGE_CONTENT_SCHEMAS = {
   home: z.strictObject({
@@ -40,7 +40,16 @@ export const PAGE_CONTENT_SCHEMAS = {
     company: z.string(),
   }),
   privacy: z.strictObject({ eyebrow: z.string() }),
-} satisfies Record<SystemPageKey, z.ZodObject>;
+} satisfies Record<ContentPageKey, z.ZodObject>;
+
+/**
+ * Whether `key` names a page with editable content: not an app area
+ * (`SYSTEM_PAGE_IS_AREA`), so it has a content schema, an editor and a
+ * next-intl route.
+ */
+export function isContentPage(key: SystemPageKey): key is ContentPageKey {
+  return !SYSTEM_PAGE_IS_AREA[key];
+}
 
 /** One locale's text columns, limited like the `page_translations` CHECK constraints. */
 function translationSchema<Content extends z.ZodType>(content: Content, title: z.ZodString) {
@@ -62,7 +71,7 @@ const daTitleSchema = titleSchema.refine((title) => title.trim() !== "", { error
  * complete too, or `{}` (no English text: every field shows the Danish one).
  * Unknown keys (e.g. a `slug`: system pages have fixed routes) are dropped.
  */
-function systemPageSchema<Key extends SystemPageKey, Content extends z.ZodObject>(key: Key, content: Content) {
+function systemPageSchema<Key extends ContentPageKey, Content extends z.ZodObject>(key: Key, content: Content) {
   return z.object({
     id: pageIdSchema,
     system_key: z.literal(key),
@@ -87,6 +96,12 @@ export const pageStatusSchema = z.object({
   status: z.enum(["draft", "published"]),
 });
 
+/** Showing (`true`) or hiding a page in the public nav. */
+export const pageNavSchema = z.object({
+  pageId: pageIdSchema,
+  show: z.boolean(),
+});
+
 /** Page ids in their new nav order: at least one, no repeats. */
 export const navOrderSchema = z
   .array(pageIdSchema)
@@ -94,7 +109,7 @@ export const navOrderSchema = z
   .refine((ids) => new Set(ids).size === ids.length, { error: "duplicate-page-id" });
 
 /** Dotted paths of every content field of `key`'s page, in form order (`"whatWeDo.eyebrow"`, ...). */
-export function contentFieldPaths(key: SystemPageKey): string[] {
+export function contentFieldPaths(key: ContentPageKey): string[] {
   const walk = (schema: z.ZodObject, prefix: string): string[] =>
     Object.entries(schema.shape).flatMap(([name, child]) => {
       const path = prefix === "" ? name : `${prefix}.${name}`;

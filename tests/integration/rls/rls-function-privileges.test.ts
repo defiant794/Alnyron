@@ -149,6 +149,7 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
           anon_exec: false,
           authenticated_exec: true,
         },
+        { fn: "admin_set_page_nav(p_page_id uuid, p_show boolean)", public_exec: false, anon_exec: false, authenticated_exec: true },
         {
           fn: "admin_set_page_status(p_page_id uuid, p_status content_status)",
           public_exec: false,

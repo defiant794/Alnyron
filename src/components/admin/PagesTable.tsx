@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { unstable_rethrow } from "next/navigation";
+import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Link from "@/components/ui/Link";
 import Notice from "@/components/ui/Notice";
+import { SWITCH_CLASS } from "@/components/ui/switch-styles";
+import { cx } from "@/lib/cx";
 import type { PageActionError, PageActionResult, PageStatus } from "@/services/admin/pages";
 
 /** One page in the list, already labelled by the server. */
@@ -12,14 +15,25 @@ export type PagesTableRow = {
   id: string;
   /** Fixed name of the page ("Forside", "Kontakt"). */
   name: string;
-  /** Its Danish title, shown under the name. */
-  title: string;
   status: PageStatus;
   showInNav: boolean;
-  editHref: string;
   /** Always first in the public nav (the home page): no move controls. */
   pinned: boolean;
-};
+} & (
+  | {
+      /** A page with editable copy: an edit link. */
+      kind: "content";
+      /** Its Danish title, shown under the name. */
+      title: string;
+      editHref: string;
+    }
+  | {
+      /** An app area (Monitor): no editor, its nav switch sits in the row instead. */
+      kind: "area";
+      /** What the area is (it has no title), shown under the name ("Appområde på /monitor, …"). */
+      description: string;
+    }
+);
 
 export type PagesTableProps = {
   /** Rows in nav order, pinned rows first. */
@@ -28,6 +42,8 @@ export type PagesTableProps = {
   labelledBy: string;
   /** The `reorderNav` Server Action. */
   reorder: (pageIds: readonly string[]) => Promise<PageActionResult>;
+  /** The `setPageNav` Server Action, called by an area row's nav switch. */
+  setPageNav: (pageId: string, show: boolean) => Promise<PageActionResult>;
   labels: {
     page: string;
     status: string;
@@ -35,6 +51,8 @@ export type PagesTableProps = {
     statuses: Record<PageStatus, string>;
     shown: string;
     hidden: string;
+    /** Visible label of an area row's nav switch ("Vis i menuen"); its accessible name adds the page name. */
+    toggle: string;
     edit: string;
     moveUp: string;
     moveDown: string;
@@ -45,16 +63,38 @@ export type PagesTableProps = {
 type Direction = "up" | "down";
 
 /**
- * Admin list of the pages (approved admin mock: Titel / Status /
- * Handlinger): fixed name and Danish title, published and menu status, an
- * edit link and "Flyt op" / "Flyt ned" to change the nav order. A move is
- * saved at once (`reorder`); the server re-renders the list in its new
- * order, and the focus follows the moved page's button so keyboard users can
- * keep moving it. A failed move shows an alert and leaves the order as is.
+ * Runs a Server Action. A request that gets no answer (the network dropped)
+ * rejects: it is reported as a failed save, so the table's alert shows it
+ * instead of the route's error boundary. A redirect or not-found from the
+ * action (an expired session sent to the login page) is rethrown for the router.
  */
-export default function PagesTable({ rows, labelledBy, reorder, labels }: PagesTableProps) {
+async function attempt(action: () => Promise<PageActionResult>): Promise<PageActionResult> {
+  try {
+    return await action();
+  } catch (error) {
+    unstable_rethrow(error);
+    return { ok: false, error: "failed" };
+  }
+}
+
+/**
+ * Admin list of the pages (approved admin mock: Titel / Status /
+ * Handlinger): fixed name and Danish title (an app area: what it is),
+ * published and menu status, an edit link and "Flyt op" / "Flyt ned" to
+ * change the nav order. A move is saved at once (`reorder`); the server
+ * re-renders the list in its new order, and the focus follows the moved
+ * page's button so keyboard users can keep moving it. An app area (Monitor)
+ * has no editor: its row offers a nav switch instead of the edit link, saved
+ * at once (`setPageNav`) and shown in its new state while it saves (marked
+ * busy, further clicks ignored). A failed move or switch, a dropped request
+ * included, shows an alert and leaves the list as is.
+ */
+export default function PagesTable({ rows, labelledBy, reorder, setPageNav, labels }: PagesTableProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<PageActionError | null>(null);
+  // The nav switch being saved shows its new state until the save ends: then
+  // the row's own value takes over (refreshed list, or unchanged after a failure).
+  const [navChange, setNavChange] = useOptimistic<{ id: string; show: boolean } | null>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const focusAfterMove = useRef<{ id: string; direction: Direction } | null>(null);
   const movableIds = rows.filter((row) => !row.pinned).map((row) => row.id);
@@ -80,13 +120,22 @@ export default function PagesTable({ rows, labelledBy, reorder, labels }: PagesT
     const order = movableIds.toSpliced(from, 1).toSpliced(to, 0, id);
     focusAfterMove.current = { id, direction };
     startTransition(async () => {
-      const result = await reorder(order);
+      const result = await attempt(() => reorder(order));
       if (result.ok) {
         setError(null);
       } else {
         focusAfterMove.current = null;
         setError(result.error);
       }
+    });
+  }
+
+  function toggleNav(id: string, show: boolean) {
+    if (pending) return;
+    startTransition(async () => {
+      setNavChange({ id, show });
+      const result = await attempt(() => setPageNav(id, show));
+      setError(result.ok ? null : result.error);
     });
   }
 
@@ -134,10 +183,12 @@ export default function PagesTable({ rows, labelledBy, reorder, labels }: PagesT
           </thead>
           <tbody>
             {rows.map((row) => {
+              const showInNav = navChange?.id === row.id ? navChange.show : row.showInNav;
+              const subtitle = row.kind === "content" ? row.title : row.description;
               const status = (
                 <span className="flex flex-col items-start gap-1">
                   <Badge tone={row.status}>{labels.statuses[row.status]}</Badge>
-                  <span className="text-small text-muted">{row.showInNav ? labels.shown : labels.hidden}</span>
+                  <span className="text-small text-muted">{showInNav ? labels.shown : labels.hidden}</span>
                 </span>
               );
               return (
@@ -145,7 +196,7 @@ export default function PagesTable({ rows, labelledBy, reorder, labels }: PagesT
                   <th scope="row" className="py-4 pr-4 text-left font-normal">
                     <span className="flex flex-col gap-1">
                       <span className="font-semibold">{row.name}</span>
-                      {row.title.trim() !== "" && <span className="text-small text-muted">{row.title}</span>}
+                      {subtitle.trim() !== "" && <span className="text-small text-muted">{subtitle}</span>}
                       {/* Below 640px the status sits under the title instead of in its own column. */}
                       <span className="pt-1 sm:hidden">{status}</span>
                     </span>
@@ -153,10 +204,32 @@ export default function PagesTable({ rows, labelledBy, reorder, labels }: PagesT
                   <td className="hidden py-4 pr-4 sm:table-cell">{status}</td>
                   <td className="py-4">
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      <Link href={row.editHref} className="inline-flex min-h-11 items-center px-2">
-                        {labels.edit}
-                        <span className="sr-only"> {row.name}</span>
-                      </Link>
+                      {row.kind === "content" ? (
+                        <Link href={row.editHref} className="inline-flex min-h-11 items-center px-2">
+                          {labels.edit}
+                          <span className="sr-only">: {row.name}</span>
+                        </Link>
+                      ) : (
+                        <label
+                          className={cx(
+                            "inline-flex min-h-11 items-center gap-3 px-2",
+                            pending ? "cursor-wait opacity-60" : "cursor-pointer",
+                          )}
+                        >
+                          {labels.toggle}
+                          <span className="sr-only">: {row.name}</span>
+                          {/* Busy, not `disabled`, while a save runs: it keeps the keyboard focus. The
+                              attribute variant outranks SWITCH_CLASS's `cursor-pointer` (higher specificity). */}
+                          <input
+                            type="checkbox"
+                            role="switch"
+                            checked={showInNav}
+                            aria-disabled={pending || undefined}
+                            onChange={() => toggleNav(row.id, !showInNav)}
+                            className={cx(SWITCH_CLASS, "aria-disabled:cursor-wait")}
+                          />
+                        </label>
+                      )}
                       {!row.pinned && (
                         <>
                           {moveButton(row, "up")}

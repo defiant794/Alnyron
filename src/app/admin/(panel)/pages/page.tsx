@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { reorderNav } from "@/app/admin/(panel)/pages/actions";
+import { reorderNav, setPageNav } from "@/app/admin/(panel)/pages/actions";
 import PageHeader from "@/components/admin/PageHeader";
-import PagesTable from "@/components/admin/PagesTable";
+import PagesTable, { type PagesTableRow } from "@/components/admin/PagesTable";
 import Card from "@/components/ui/Card";
 import { ADMIN_PAGES_PATH } from "@/config/admin";
 import { AUTH_LOCALE } from "@/config/auth-areas";
+import { SYSTEM_PAGE_IS_AREA, SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
 import { loadMessages } from "@/i18n/messages";
 import { listSystemPages } from "@/services/admin/pages";
 import { requireAdmin } from "@/services/auth/require-admin";
@@ -19,8 +20,9 @@ const HEADING_ID = "pages-heading";
 
 /**
  * `/admin/pages` ("Sider"): the system pages with their status, a link to
- * edit each, and the nav order. Pages are named by their fixed nav label;
- * the Danish title is shown under it.
+ * edit each (an app area like Monitor has a nav switch instead), and the nav
+ * order. Pages are named by their fixed nav label; the Danish title is shown
+ * under it (an app area, which has none, says what it is).
  */
 export default async function AdminPagesPage() {
   await requireAdmin();
@@ -41,17 +43,25 @@ export default async function AdminPagesPage() {
           <p className="text-small text-muted">{t("orderHint")}</p>
         </div>
         <PagesTable
-          rows={pages.map((page) => ({
-            id: page.id,
-            name: tNav(page.systemKey),
-            title: page.title,
-            status: page.status,
-            showInNav: page.showInNav,
-            editHref: `${ADMIN_PAGES_PATH}/${page.id}`,
-            pinned: page.systemKey === "home",
-          }))}
+          rows={pages.map((page): PagesTableRow => {
+            const row = {
+              id: page.id,
+              name: tNav(page.systemKey),
+              status: page.status,
+              showInNav: page.showInNav,
+              pinned: page.systemKey === "home",
+            };
+            return SYSTEM_PAGE_IS_AREA[page.systemKey]
+              ? {
+                  ...row,
+                  kind: "area",
+                  description: t("area.description", { path: SYSTEM_PAGE_PATHNAMES[page.systemKey] }),
+                }
+              : { ...row, kind: "content", title: page.title, editHref: `${ADMIN_PAGES_PATH}/${page.id}` };
+          })}
           labelledBy={HEADING_ID}
           reorder={reorderNav}
+          setPageNav={setPageNav}
           labels={{
             page: t("table.page"),
             status: t("table.status"),
@@ -59,6 +69,7 @@ export default async function AdminPagesPage() {
             statuses: { published: t("status.published"), draft: t("status.draft") },
             shown: t("menu.shown"),
             hidden: t("menu.hidden"),
+            toggle: t("menu.toggle"),
             edit: t("edit"),
             moveUp: t("moveUp"),
             moveDown: t("moveDown"),

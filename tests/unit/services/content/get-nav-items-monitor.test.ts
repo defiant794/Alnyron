@@ -1,0 +1,182 @@
+// Unit tests — getNavItems monitor-nav slice (Slice B)
+// Journey: monitor-nav  AC-MONNAV-2, AC-MONNAV-3, AC-MONNAV-6
+//
+// Tests that:
+//   - A monitor page row (system_key='monitor', show_in_nav=true) produces a NavItem
+//   - The href is exactly "/monitor" on DA and EN (locale-agnostic, NOT getPathname)
+//   - On EN the monitor item carries hrefLang "da" (the area is Danish only); on DA none
+//   - The monitor item sits after categories (nav_order < 1000) in the final list
+//   - The monitor item key is "system-monitor"
+//
+// The query already filters show_in_nav=true before getNavItems receives data,
+// so the hide case is not tested here (it is covered by RLS + AC2 E2E).
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// ── vi.hoisted ─────────────────────────────────────────────────────────────────
+const { mockPagesQuery } = vi.hoisted(() => ({ mockPagesQuery: vi.fn() }));
+
+// ── Mocks ──────────────────────────────────────────────────────────────────────
+vi.mock("next-intl/server", async () =>
+  (await import("../../../helpers/next-intl-server")).nextIntlServerMock(),
+);
+// Chain: .from("pages").select(...).eq("status", ...).eq("show_in_nav", ...)
+vi.mock("@/lib/supabase/public", () => ({
+  getPublicClient: () => ({
+    from: () => ({ select: () => ({ eq: () => ({ eq: mockPagesQuery }) }) }),
+  }),
+}));
+vi.mock("@/services/content/categories", () => ({ getPublicCategories: vi.fn() }));
+
+import { getPublicCategories, type PublicCategory } from "@/services/content/categories";
+import { getNavItems } from "@/services/content/nav";
+
+// ── Fixtures ───────────────────────────────────────────────────────────────────
+
+const homeRow = {
+  id: "page-home-uuid",
+  system_key: "home",
+  nav_order: 0,
+  page_translations: [],
+  routes: [],
+};
+
+const contactRow = {
+  id: "page-contact-uuid",
+  system_key: "contact",
+  nav_order: 1000,
+  page_translations: [],
+  routes: [],
+};
+
+const monitorRow = {
+  id: "page-monitor-uuid",
+  system_key: "monitor",
+  nav_order: 1100,
+  page_translations: [], // Monitor has no body translations
+  routes: [],
+};
+
+const servicesCategory: PublicCategory = {
+  id: "cat-services-uuid",
+  kind: "services",
+  navOrder: 30,
+  title: "Ydelser",
+  description: "",
+  href: "/services",
+  fallbackKeys: [],
+};
+
+const appsCategory: PublicCategory = {
+  id: "cat-apps-uuid",
+  kind: "apps",
+  navOrder: 10,
+  title: "Apps",
+  description: "",
+  href: "/apps",
+  fallbackKeys: [],
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(getPublicCategories).mockResolvedValue([servicesCategory, appsCategory]);
+});
+
+// ── AC-MONNAV-2: monitor item included when show_in_nav=true ──────────────────
+
+describe("AC-MONNAV-2: getNavItems — monitor page row produces a NavItem", () => {
+  it("AC-MONNAV-2a: a monitor row in the pages query produces a NavItem with key 'system-monitor'", async () => {
+    mockPagesQuery.mockResolvedValue({ data: [homeRow, monitorRow], error: null });
+    const items = await getNavItems("da");
+    expect(items.some((item) => item.key === "system-monitor")).toBe(true);
+  });
+
+  it("AC-MONNAV-2b: monitor NavItem has isHome=false", async () => {
+    mockPagesQuery.mockResolvedValue({ data: [homeRow, monitorRow], error: null });
+    const items = await getNavItems("da");
+    const monitor = items.find((item) => item.key === "system-monitor");
+    expect(monitor?.isHome).toBe(false);
+  });
+});
+
+// ── AC-MONNAV-6: href is raw "/monitor" on DA and EN (locale-agnostic) ─────────
+
+describe("AC-MONNAV-6: getNavItems — monitor href is locale-agnostic '/monitor'", () => {
+  it("AC-MONNAV-6c: DA locale — monitor item href is exactly '/monitor', not getPathname result", async () => {
+    // getPathname for a locale-agnostic area path must NOT be called; the raw
+    // "/monitor" must be returned as-is so there is no locale prefix on DA.
+    mockPagesQuery.mockResolvedValue({ data: [homeRow, monitorRow], error: null });
+    const items = await getNavItems("da");
+    const monitor = items.find((item) => item.key === "system-monitor");
+    expect(monitor?.href).toBe("/monitor");
+  });
+
+  it("AC-MONNAV-6d: EN locale — monitor item href is exactly '/monitor', NOT '/en/monitor'", async () => {
+    // Key AC6 test: the href must be the same on /en as on /. If the nav builder
+    // incorrectly calls getPathname({href: '/monitor', locale: 'en'}), it would
+    // produce '/en/monitor' (or similar) — this test catches that regression.
+    mockPagesQuery.mockResolvedValue({ data: [homeRow, monitorRow], error: null });
+    const items = await getNavItems("en");
+    const monitor = items.find((item) => item.key === "system-monitor");
+    expect(monitor?.href).toBe("/monitor");
+  });
+});
+
+// ── AC-MONNAV-6e/f: the Danish-only Monitor area is marked hreflang="da" on EN ──
+
+describe("AC-MONNAV-6e/f: getNavItems — monitor hrefLang names the area's language when it differs from the page", () => {
+  it("AC-MONNAV-6e: EN locale — monitor item has hrefLang 'da' (the area is Danish only); system pages have none", async () => {
+    mockPagesQuery.mockResolvedValue({ data: [homeRow, contactRow, monitorRow], error: null });
+    const items = await getNavItems("en");
+    expect(items.find((item) => item.key === "system-monitor")?.hrefLang).toBe("da");
+    expect(items.find((item) => item.key === "system-home")?.hrefLang).toBeUndefined();
+    expect(items.find((item) => item.key === "system-contact")?.hrefLang).toBeUndefined();
+  });
+
+  it("AC-MONNAV-6f: DA locale — no item carries hrefLang (the area speaks the page's language)", async () => {
+    mockPagesQuery.mockResolvedValue({ data: [homeRow, contactRow, monitorRow], error: null });
+    const items = await getNavItems("da");
+    expect(items.find((item) => item.key === "system-monitor")).toBeDefined();
+    expect(items.every((item) => item.hrefLang === undefined)).toBe(true);
+  });
+});
+
+// ── AC-MONNAV-3: monitor sits after categories in the nav ──────────────────────
+
+describe("AC-MONNAV-3: getNavItems — monitor (nav_order 1100) sits after categories (nav_order < 1000)", () => {
+  it("AC-MONNAV-3a: monitor appears after all categories and before no-higher-order pages", async () => {
+    // categories: apps(10), services(30) — both < 1000; monitor(1100) > 1000
+    // expected order: home(0), apps(10), services(30), monitor(1100)
+    mockPagesQuery.mockResolvedValue({ data: [homeRow, monitorRow], error: null });
+    const items = await getNavItems("da");
+    const keys = items.map((i) => i.key);
+    const catAppsIdx = keys.indexOf("category-cat-apps-uuid");
+    const catServIdx = keys.indexOf("category-cat-services-uuid");
+    const monitorIdx = keys.indexOf("system-monitor");
+
+    expect(catAppsIdx).toBeGreaterThanOrEqual(0);
+    expect(catServIdx).toBeGreaterThanOrEqual(0);
+    expect(monitorIdx).toBeGreaterThan(catAppsIdx);
+    expect(monitorIdx).toBeGreaterThan(catServIdx);
+  });
+
+  it("AC-MONNAV-3b: monitor (1100) sits after contact (1000) when contact has lower nav_order", async () => {
+    // monitor nav_order=1100 > contact nav_order=1000
+    mockPagesQuery.mockResolvedValue({ data: [homeRow, contactRow, monitorRow], error: null });
+    const items = await getNavItems("da");
+    const keys = items.map((i) => i.key);
+    const contactIdx = keys.indexOf("system-contact");
+    const monitorIdx = keys.indexOf("system-monitor");
+    expect(monitorIdx).toBeGreaterThan(contactIdx);
+  });
+});
+
+// ── navOrder propagated ────────────────────────────────────────────────────────
+
+describe("getNavItems — monitor navOrder from DB row", () => {
+  it("monitor item navOrder matches the DB nav_order", async () => {
+    mockPagesQuery.mockResolvedValue({ data: [homeRow, monitorRow], error: null });
+    const items = await getNavItems("da");
+    const monitor = items.find((item) => item.key === "system-monitor");
+    expect(monitor?.navOrder).toBe(1100);
+  });
+});

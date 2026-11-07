@@ -1,10 +1,12 @@
 import type { Locale } from "next-intl";
 import { getTranslations } from "next-intl/server";
+import { AUTH_LOCALE } from "@/config/auth-areas";
 import { URL_SLUG_LOCALE } from "@/config/catalog";
 import { SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
 import { getPathname } from "@/i18n/navigation";
 import { resolveContent } from "@/lib/i18n/resolve-content";
 import { getPublicClient } from "@/lib/supabase/public";
+import { isContentPage } from "@/lib/validation/pages";
 import { getPublicCategories } from "./categories";
 
 /** One header navigation link. */
@@ -12,13 +14,18 @@ export interface NavItem {
   /** Stable identity (React key): `system-home`, `page-<id>`, `category-<id>`. */
   key: string;
   label: string;
-  /** Locale-aware path (`/`, `/en`, `/contact`, `/en/apps`); also the active-state key. */
+  /**
+   * Locale-aware path (`/`, `/en`, `/contact`, `/en/apps`); also the
+   * active-state key. An app area's raw path (`/monitor`) on every locale.
+   */
   href: string;
   navOrder: number;
   /** The home page, pinned first whatever its `nav_order`. */
   isHome: boolean;
   /** Set when the label's language differs from the page (Danish fallback on an English page). */
   lang?: Locale;
+  /** Set when the linked page's language differs from the page (the Danish-only Monitor area on an English page). */
+  hrefLang?: Locale;
 }
 
 /**
@@ -35,10 +42,12 @@ export function buildNavItems(items: readonly NavItem[]): NavItem[] {
 /**
  * Header navigation for `locale`: published pages with `show_in_nav` plus the
  * public categories, ordered by {@link buildNavItems}. System pages use the
- * fixed UI labels ("Forside", "Kontakt"); custom pages and categories use
- * their DB title with Danish fallback. Every link uses the English URL slug
- * (`URL_SLUG_LOCALE` route) on every locale; a custom page without one is
- * left out.
+ * fixed UI labels ("Forside", "Kontakt", "Monitor"); custom pages and
+ * categories use their DB title with Danish fallback. Every link uses the
+ * English URL slug (`URL_SLUG_LOCALE` route) on every locale; a custom page
+ * without one is left out. An app area (Monitor) lies outside the `[locale]`
+ * routing, so it links its raw path (`/monitor`) on every locale; it is
+ * Danish only (`AUTH_LOCALE`), which an English page's link says (`hrefLang`).
  *
  * @throws when a query fails, so a broken read never caches an empty nav.
  */
@@ -57,13 +66,17 @@ export async function getNavItems(locale: Locale): Promise<NavItem[]> {
   const items: NavItem[] = [];
   for (const page of pages.data ?? []) {
     if (page.system_key) {
-      items.push({
-        key: `system-${page.system_key}`,
-        label: t(page.system_key),
-        href: getPathname({ href: SYSTEM_PAGE_PATHNAMES[page.system_key], locale }),
-        navOrder: page.nav_order,
-        isHome: page.system_key === "home",
-      });
+      const key = page.system_key;
+      const item = { key: `system-${key}`, label: t(key), navOrder: page.nav_order, isHome: key === "home" };
+      items.push(
+        isContentPage(key)
+          ? { ...item, href: getPathname({ href: SYSTEM_PAGE_PATHNAMES[key], locale }) }
+          : {
+              ...item,
+              href: SYSTEM_PAGE_PATHNAMES[key],
+              hrefLang: locale === AUTH_LOCALE ? undefined : AUTH_LOCALE,
+            },
+      );
       continue;
     }
 

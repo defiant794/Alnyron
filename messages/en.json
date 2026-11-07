@@ -11,7 +11,8 @@
     "menu": "Menu",
     "home": "Home",
     "contact": "Contact",
-    "privacy": "Privacy"
+    "privacy": "Privacy",
+    "monitor": "Monitor"
   },
   "Footer": {
     "cvr": "CVR {cvr}"

@@ -1,0 +1,11 @@
+-- Monitor nav (slice B): the 'monitor' system page key.
+--
+-- Its own migration, like 20261106000100_monitor_role.sql: a value added by ALTER TYPE ... ADD
+-- VALUE cannot be used in the transaction that adds it, and each migration file runs in one
+-- transaction. 20261107000200_monitor_nav_page.sql seeds the Monitor page with this key, so the
+-- value must be committed first.
+--
+-- Monitor is an app area (alnyron.dk/monitor, outside the CMS), not editable copy: the key only
+-- gives it a pages row that carries the public nav flag and order. No table, policy or data
+-- changes here.
+alter type public.system_page_key add value if not exists 'monitor';

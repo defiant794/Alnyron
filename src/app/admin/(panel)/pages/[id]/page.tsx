@@ -13,7 +13,7 @@ import {
   MULTILINE_CONTENT_FIELDS,
   SYSTEM_PAGE_HAS_BODY,
   SYSTEM_PAGE_PATHNAMES,
-  type SystemPageKey,
+  type ContentPageKey,
 } from "@/config/system-pages";
 import { loadMessages } from "@/i18n/messages";
 import { getPathname } from "@/i18n/navigation";
@@ -33,7 +33,7 @@ export async function generateMetadata(): Promise<Metadata> {
 /**
  * `/admin/pages/[id]` ("Rediger side"): the editor for one system page, with
  * "Forhåndsvis" opening the published page (Danish) in a new tab. Ids that
- * name no system page are a 404.
+ * name no system page, or an app area without content (Monitor), are a 404.
  */
 export default async function EditPagePage({ params }: EditPageProps) {
   await requireAdmin();
@@ -102,7 +102,7 @@ export default async function EditPagePage({ params }: EditPageProps) {
  *
  * @throws when a field has no label, so a schema change cannot ship an unlabelled input.
  */
-function contentGroups(key: SystemPageKey): ContentFieldGroup[] {
+function contentGroups(key: ContentPageKey): ContentFieldGroup[] {
   const { content, contentHints } = loadMessages(AUTH_LOCALE).Admin.pages.editor;
   const groups: ContentFieldGroup[] = [];
   for (const path of contentFieldPaths(key)) {

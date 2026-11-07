@@ -9,7 +9,8 @@
 // - a link into the other locale is never current;
 // - on a catalog item page its section link is marked "true", never "page"
 //   (the item, in the breadcrumb, is the current page);
-// - `lang` (set on labels shown from Danish) and other props pass through.
+// - `lang` (set on labels shown from Danish), `hrefLang` (set on a link into
+//   the Danish-only Monitor area) and other props pass through.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
@@ -38,7 +39,7 @@ import NavLink from "@/components/site/NavLink";
 
 afterEach(cleanup);
 
-type Item = { href: string; label: string; lang?: string };
+type Item = { href: string; label: string; lang?: string; hrefLang?: string };
 
 /** Header nav per locale, as SiteHeader builds it (EN "Apps" label falls back to Danish). */
 const NAV: Record<Locale, Item[]> = {
@@ -74,7 +75,7 @@ function renderNav(
         <ul>
           {items.map((item) => (
             <li key={item.href}>
-              <NavLink href={item.href} lang={item.lang} className="text-muted">
+              <NavLink href={item.href} lang={item.lang} hrefLang={item.hrefLang} className="text-muted">
                 {item.label}
               </NavLink>
             </li>
@@ -179,6 +180,12 @@ describe("NavLink passes its props through to the anchor", () => {
     expect(screen.getByRole("link", { name: "Apps" })).toHaveAttribute("lang", "da");
     expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("lang");
     expect(screen.getByRole("link", { name: "Contact" })).not.toHaveAttribute("lang");
+  });
+
+  it('AC-MONNAV-6g: keeps hrefLang="da" on the link into the Danish-only Monitor area and adds none otherwise', () => {
+    renderNav("en", [], { items: [...NAV.en, { href: "/monitor", label: "Monitor", hrefLang: "da" }] });
+    expect(screen.getByRole("link", { name: "Monitor" })).toHaveAttribute("hreflang", "da");
+    expect(screen.getByRole("link", { name: "Contact" })).not.toHaveAttribute("hreflang");
   });
 
   it("renders the server-built href unchanged and keeps the caller's className", () => {
