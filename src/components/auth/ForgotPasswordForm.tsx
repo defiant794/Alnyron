@@ -8,9 +8,10 @@ import { useFormResultFocus } from "@/hooks/use-form-result-focus";
 import type { ResetPasswordState } from "@/services/auth/session";
 
 export type ForgotPasswordFormProps = {
-  /** The area's `requestPasswordReset` Server Action (admin or MyLife). */
+  /** The area's `requestPasswordReset` Server Action (admin, MyLife or Monitor). */
   action: (previous: ResetPasswordState, formData: FormData) => Promise<ResetPasswordState>;
-  labels: { email: string; submit: string; sent: string };
+  /** `sentTitle`: an optional first line of the confirmation ("Tjek din e-mail"). */
+  labels: { email: string; submit: string; sent: string; sentTitle?: string };
 };
 
 /**
@@ -30,6 +31,7 @@ export default function ForgotPasswordForm({ action, labels }: ForgotPasswordFor
       <div role="status" className="contents">
         {state.sent && (
           <Notice tone="success" tabIndex={-1} data-form-result>
+            {labels.sentTitle && <span className="block">{labels.sentTitle}</span>}
             {labels.sent}
           </Notice>
         )}

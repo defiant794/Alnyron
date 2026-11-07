@@ -82,6 +82,7 @@ import {
   expectPgError,
   seedAuthUser,
   seedDraftPage,
+  seedRolelessUser,
   seedSiteSettings,
   type JwtClaims,
   withTx,
@@ -168,7 +169,7 @@ const NULL_ROLE: Account = {
   label: "profile role=null",
   claims: NULL_ROLE_CLAIMS,
   userId: NULL_ROLE_UUID,
-  seed: (c) => seedAuthUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL),
+  seed: (c) => seedRolelessUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL),
 };
 const NO_PROFILE: Account = {
   // An auth user whose profiles row is gone (the owner may delete profiles): the FK to

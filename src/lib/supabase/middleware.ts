@@ -50,10 +50,10 @@ function withPathname(request: NextRequest, pathname: string): URL {
 }
 
 /**
- * Supabase SSR session handling for `/admin/*`, `/mylife/*`, `/auth/*` and
- * every request on the MyLife host (architecture §6, route protection layer
- * 1). Public `[locale]` routes never reach this, so they stay cookie-free and
- * cacheable.
+ * Supabase SSR session handling for `/admin/*`, `/mylife/*`, `/monitor` and
+ * `/monitor/*`, `/auth/*` and every request on the MyLife host (architecture
+ * §6, route protection layer 1). Public `[locale]` routes never reach this,
+ * so they stay cookie-free and cacheable.
  *
  * `rewritePath` (MyLife host) serves the request from that path instead
  * (`mylife.alnyron.dk/login` -> `/mylife/login`); the browser keeps its URL.
@@ -61,9 +61,10 @@ function withPathname(request: NextRequest, pathname: string): URL {
  * `getClaims()` verifies the access token and refreshes an expired session;
  * refreshed cookies go onto the request (for Server Components rendering
  * this request) and onto the response (for the browser), rewrite or not.
- * Without claims, every admin or MyLife route except its login and forgot
- * password pages redirects (307) to that area's login page. The role check is
- * not done here: `requireAdmin()` / `requireMyLife()` do it.
+ * Without claims, every area route except the area's public paths (login,
+ * forgot password; in Monitor also the landing page and signup) redirects
+ * (307) to that area's login page. The role check is not done here:
+ * `requireAdmin()` / `requireMyLife()` / `requireMonitor()` do it.
  */
 export async function updateSession(
   request: NextRequest,

@@ -440,5 +440,181 @@
       "lead": "Appen er under udvikling og åbner her, når den er klar.",
       "signedInAs": "Du er logget ind som {email}."
     }
+  },
+  "Monitor": {
+    "name": "Monitor",
+    "metaTitle": "Alnyron Monitor",
+    "landing": {
+      "metaTitle": "Få besked, når en webside ændrer sig",
+      "ctaLogin": "Log ind",
+      "ctaSignup": "Opret gratis",
+      "title": "Få besked, når en webside ændrer sig",
+      "lead": "Tilføj de sider, du vil holde øje med. Vi tjekker dem automatisk og sender dig en mail, når indholdet ændrer sig. Gratis for op til {limit} sider.",
+      "captureLabel": "Adressen på siden",
+      "capturePlaceholder": "https://eksempel.dk/side",
+      "captureSubmit": "Overvåg gratis",
+      "stepsTitle": "Sådan virker det",
+      "steps": {
+        "add": {
+          "title": "Tilføj en URL",
+          "body": "Indsæt adressen på siden, du vil overvåge, og vælg, hvor ofte vi skal tjekke den (timer eller dage)."
+        },
+        "watch": {
+          "title": "Vi holder øje",
+          "body": "Vi henter siden på dit interval og sammenligner teksten med sidste tjek."
+        },
+        "mail": {
+          "title": "Du får en mail",
+          "body": "Ændrer siden sig, får du en mail med, hvad der er ændret, og et link til siden."
+        }
+      },
+      "note": "Ingen betaling nu. Flere sider kommer som betalt plan senere."
+    },
+    "login": {
+      "lead": "Log ind for at se dine overvågninger.",
+      "linkInvalid": "Linket er ugyldigt eller udløbet. Opret dig igen med samme e-mail for at få et nyt bekræftelseslink, eller bed om et nyt link til at nulstille din adgangskode.",
+      "noAccount": "Har du ikke en konto?",
+      "signupLink": "Opret gratis"
+    },
+    "signup": {
+      "title": "Opret konto",
+      "lead": "Overvåg dine første sider gratis.",
+      "email": "E-mail",
+      "emailPlaceholder": "dig@eksempel.dk",
+      "password": "Adgangskode",
+      "passwordHint": "Mindst {min} tegn. Vi sender en bekræftelsesmail, før du kan logge ind.",
+      "submit": "Opret gratis",
+      "privacyNote": "Vi bruger din e-mail til login og til at give dig besked om ændringer.",
+      "privacyLinkText": "Læs privatlivspolitikken",
+      "haveAccount": "Har du allerede en konto?",
+      "loginLink": "Log ind",
+      "confirmationTitle": "Tjek din e-mail",
+      "confirmationBody": "Hvis {email} kan bruges til en ny konto, har vi sendt et link, der bekræfter adressen. Følg linket for at logge ind. Har du allerede en konto, kan du logge ind eller nulstille din adgangskode.",
+      "rateLimitedCopy": "For mange forsøg på kort tid. Vent et par minutter, og prøv igen.",
+      "unavailableCopy": "Oprettelse virker ikke lige nu. Prøv igen om lidt."
+    },
+    "forgotPassword": {
+      "confirmationTitle": "Tjek din e-mail",
+      "sent": "Hvis adressen hører til en konto, har vi sendt et link, hvor du kan vælge en ny adgangskode."
+    },
+    "noAccess": {
+      "body": "Kontoen {email} har ikke adgang til Monitor."
+    },
+    "notFound": {
+      "title": "Siden findes ikke",
+      "body": "Overvågningen eller siden findes ikke, eller den hører til en anden konto.",
+      "back": "Til dine overvågninger"
+    },
+    "shell": {
+      "navLabel": "Monitor",
+      "dashboard": "Overvågninger",
+      "settings": "Indstillinger",
+      "account": "Konto"
+    },
+    "dashboard": {
+      "metaTitle": "Overvågninger",
+      "title": "Dine overvågninger",
+      "lead": "Vi tjekker siderne og sender dig en mail, når noget ændrer sig.",
+      "addButton": "Tilføj overvågning",
+      "listLabel": "Dine overvågninger",
+      "usage": "{count} / {limit} overvågninger brugt",
+      "usageUnlimited": "{count, plural, one {# overvågning} other {# overvågninger}}",
+      "upgradeNote": "Opgradér for flere (snart)",
+      "limitReached": "Du har brugt alle dine overvågninger. Slet en, før du tilføjer en ny.",
+      "emptyTitle": "Tilføj den første side, du vil holde øje med",
+      "emptyBody": "Indsæt adressen, så tjekker vi siden og sender dig en mail, når den ændrer sig.",
+      "emptyUrlLabel": "Adressen på siden",
+      "emptySubmit": "Fortsæt",
+      "intervalLabel": "Interval",
+      "statusLabel": "Status",
+      "changed": "Ændret {when}",
+      "noChanges": "Ingen ændringer"
+    },
+    "status": {
+      "active": "Aktiv",
+      "paused": "På pause",
+      "error": "Kunne ikke hentes"
+    },
+    "interval": {
+      "hour": "hver time",
+      "hours": "hver {count}. time",
+      "day": "hver dag",
+      "days": "hver {count}. dag",
+      "minutes": "hvert {count}. minut"
+    },
+    "monitors": {
+      "add": {
+        "metaTitle": "Tilføj overvågning",
+        "title": "Tilføj overvågning",
+        "lead": "Vi tjekker siden på dit interval og mailer dig, når indholdet ændrer sig.",
+        "submit": "Tilføj overvågning"
+      },
+      "edit": {
+        "metaTitle": "Rediger overvågning",
+        "title": "Rediger overvågning",
+        "lead": "Skifter du adressen, sammenligner vi fremover med den nye side.",
+        "submit": "Gem ændringer"
+      }
+    },
+    "form": {
+      "back": "Tilbage til oversigt",
+      "url": "URL",
+      "urlPlaceholder": "https://eksempel.dk/side",
+      "urlHint": "Offentlige sider. Interne og lokale adresser afvises automatisk.",
+      "label": "Navn (valgfrit)",
+      "labelPlaceholder": "fx Prisliste",
+      "interval": "Tjek hvor ofte",
+      "intervalValue": "Antal",
+      "intervalUnit": "Enhed",
+      "units": {
+        "hours": "timer",
+        "days": "dage"
+      },
+      "cancel": "Annullér",
+      "limitReached": "Du har nået grænsen for, hvor mange sider du kan overvåge. Slet en overvågning, før du tilføjer en ny.",
+      "errors": {
+        "urlRequired": "Skriv adressen på siden.",
+        "urlInvalid": "Skriv en gyldig adresse, fx https://eksempel.dk/side.",
+        "urlScheme": "Adressen skal begynde med http:// eller https://.",
+        "urlCredentials": "Adressen må ikke indeholde brugernavn eller adgangskode.",
+        "urlPort": "Brug en adresse uden portnummer (eller med port 80 eller 443).",
+        "urlBlockedHost": "Vi kan kun overvåge offentlige sider. Interne og lokale adresser afvises.",
+        "urlTooLong": "Adressen er for lang. Den må højst være på {urlMax} tegn.",
+        "labelTooLong": "Navnet må højst være på {labelMax} tegn.",
+        "intervalInvalid": "Vælg et helt antal timer eller dage.",
+        "intervalHoursRange": "Vælg mellem {hoursMin} og {hoursMax} timer.",
+        "intervalDaysRange": "Vælg mellem {daysMin} og {daysMax} dage."
+      }
+    },
+    "detail": {
+      "back": "Tilbage til oversigt",
+      "checksEvery": "tjekkes {interval}",
+      "lastChecked": "sidst tjekket {when}",
+      "notCheckedYet": "Ikke tjekket endnu",
+      "actionsLabel": "Handlinger",
+      "pause": "Pause",
+      "resume": "Genoptag",
+      "edit": "Rediger",
+      "delete": "Slet",
+      "deleteTitle": "Slet overvågningen?",
+      "deleteBody": "{name} og dens ændringshistorik slettes. Det kan ikke fortrydes.",
+      "deleteConfirm": "Slet overvågning",
+      "deleteCancel": "Annullér",
+      "historyTitle": "Ændringer",
+      "changedEntry": "Indhold ændret",
+      "createdEntry": "Overvågning oprettet",
+      "noChanges": "Ingen ændringer endnu",
+      "noChangesBody": "Når siden ændrer sig, kan du se det her, og du får en mail."
+    },
+    "settings": {
+      "metaTitle": "Indstillinger",
+      "title": "Indstillinger",
+      "notificationsTitle": "Notifikationer",
+      "notificationsTo": "Notifikationer sendes til {email}",
+      "notificationsNote": "Beskeder om ændringer går til den e-mail, du logger ind med.",
+      "passwordTitle": "Skift adgangskode",
+      "passwordLead": "Vælg den adgangskode, du vil logge ind med fremover.",
+      "passwordConfirm": "Gentag ny kode"
+    }
   }
 }

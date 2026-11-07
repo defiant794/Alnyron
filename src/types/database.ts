@@ -232,6 +232,92 @@ export type Database = {
           },
         ]
       }
+      monitor_events: {
+        Row: {
+          detected_at: string
+          emailed_at: string | null
+          id: string
+          monitor_id: string
+          new_hash: string | null
+          old_hash: string | null
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          detected_at?: string
+          emailed_at?: string | null
+          id?: string
+          monitor_id: string
+          new_hash?: string | null
+          old_hash?: string | null
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          detected_at?: string
+          emailed_at?: string | null
+          id?: string
+          monitor_id?: string
+          new_hash?: string | null
+          old_hash?: string | null
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monitor_events_monitor_owner_fkey"
+            columns: ["monitor_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "monitors"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      monitors: {
+        Row: {
+          consecutive_errors: number
+          created_at: string
+          id: string
+          interval_minutes: number
+          label: string | null
+          last_checked_at: string | null
+          last_hash: string | null
+          last_snapshot: string | null
+          status: string
+          updated_at: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          consecutive_errors?: number
+          created_at?: string
+          id?: string
+          interval_minutes: number
+          label?: string | null
+          last_checked_at?: string | null
+          last_hash?: string | null
+          last_snapshot?: string | null
+          status?: string
+          updated_at?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          consecutive_errors?: number
+          created_at?: string
+          id?: string
+          interval_minutes?: number
+          label?: string | null
+          last_checked_at?: string | null
+          last_hash?: string | null
+          last_snapshot?: string | null
+          status?: string
+          updated_at?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       page_translations: {
         Row: {
           body_md: string
@@ -316,6 +402,7 @@ export type Database = {
         Row: {
           created_at: string
           email: string
+          monitor_limit: number | null
           role: Database["public"]["Enums"]["app_role"] | null
           updated_at: string
           user_id: string
@@ -323,6 +410,7 @@ export type Database = {
         Insert: {
           created_at?: string
           email: string
+          monitor_limit?: number | null
           role?: Database["public"]["Enums"]["app_role"] | null
           updated_at?: string
           user_id: string
@@ -330,6 +418,7 @@ export type Database = {
         Update: {
           created_at?: string
           email?: string
+          monitor_limit?: number | null
           role?: Database["public"]["Enums"]["app_role"] | null
           updated_at?: string
           user_id?: string
@@ -484,7 +573,7 @@ export type Database = {
       hook_before_user_created: { Args: { event: Json }; Returns: Json }
     }
     Enums: {
-      app_role: "owner" | "admin" | "mylife_user"
+      app_role: "owner" | "admin" | "mylife_user" | "monitor_user"
       catalog_kind: "apps" | "websites" | "services" | "models3d"
       content_status: "draft" | "published"
       locale_code: "da" | "en"
@@ -617,7 +706,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["owner", "admin", "mylife_user"],
+      app_role: ["owner", "admin", "mylife_user", "monitor_user"],
       catalog_kind: ["apps", "websites", "services", "models3d"],
       content_status: ["draft", "published"],
       locale_code: ["da", "en"],

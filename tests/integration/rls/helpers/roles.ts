@@ -11,7 +11,8 @@
  * Key rules:
  * - seedAuthUser inserts user_allowlist (optional) + auth.users; the on_auth_user_created
  *   trigger creates the profiles row. Never insert profiles directly — that would
- *   collide with the trigger-created row on the same PK.
+ *   collide with the trigger-created row on the same PK. Without an allowlist role the
+ *   new profile is a monitor_user (20261106000400); seedRolelessUser gives role = NULL.
  * - Non-admin authenticated tests iterate NON_ADMIN_FIXTURES: a `sub` with no profiles
  *   row, a profile with role = NULL, and a profile with role = 'mylife_user'. The last
  *   two catch an is_admin() regression to "has a profile" / "role is not null".
@@ -94,7 +95,7 @@ export const NON_ADMIN_FIXTURES: readonly NonAdminFixture[] = [
   {
     label: "profile role=null",
     claims: NULL_ROLE_CLAIMS,
-    seed: (c) => seedAuthUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL),
+    seed: (c) => seedRolelessUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL),
   },
   {
     label: "profile role=mylife_user",
@@ -152,8 +153,10 @@ export async function asRole(
  * Seed an authenticated user by inserting into auth.users.
  * The on_auth_user_created trigger fires and inserts into public.profiles with the role
  * drawn from user_allowlist. If appRole is given, a user_allowlist row is created first
- * so the trigger assigns that role. Without appRole, the trigger creates a profiles row
- * with role = NULL (not an admin).
+ * so the trigger assigns that role. Without appRole there is no allowlist row, and since
+ * 20261106000400 the trigger gives the new profile role = 'monitor_user' (a public
+ * monitor sign-up), NOT role = NULL. A role = NULL profile needs the explicit clear in
+ * seedRolelessUser.
  *
  * Never insert into profiles directly — that would collide on the PK when the trigger
  * also inserts.
@@ -176,8 +179,9 @@ export async function seedAuthUser(
       [email, appRole],
     );
   }
-  // Trigger on_auth_user_created: INSERT INTO public.profiles (user_id, email, role)
-  // VALUES (new.id, lower(new.email), (SELECT role FROM user_allowlist WHERE email = lower(new.email)))
+  // Trigger on_auth_user_created (private.handle_new_user): INSERT INTO public.profiles
+  // (user_id, email, role) VALUES (new.id, lower(btrim(new.email)),
+  // coalesce((SELECT role FROM user_allowlist WHERE email = lower(btrim(new.email))), 'monitor_user'))
   await client.query(
     `INSERT INTO auth.users
        (id, aud, role, email, email_confirmed_at, created_at, updated_at,
@@ -186,6 +190,20 @@ export async function seedAuthUser(
              '{}'::jsonb, '{}'::jsonb, false, '')`,
     [userId, email],
   );
+}
+
+/**
+ * Seed an account whose profiles row has role = NULL: a staff account whose allowlist row
+ * was deleted (the allowlist sync clears its role). seedAuthUser without an allowlist role
+ * yields a monitor_user since 20261106000400, which is no stand-in for it — allowlist
+ * writes for a monitor_user's email raise P0001 instead of granting (rls-monitor-signup)
+ * and its login email changes keep the role — so the role is cleared right after creation.
+ * Throws unless exactly one profiles row was cleared, so the fixture cannot drift silently.
+ */
+export async function seedRolelessUser(client: pg.PoolClient, userId: string, email: string): Promise<void> {
+  await seedAuthUser(client, userId, email);
+  const cleared = await client.query("UPDATE public.profiles SET role = NULL WHERE user_id = $1", [userId]);
+  if (cleared.rowCount !== 1) throw new Error(`role=null setup: no profiles row to clear for ${userId}`);
 }
 
 /**

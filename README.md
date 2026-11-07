@@ -27,3 +27,7 @@ Website for Alnyron: Next.js 15 (App Router), React 19, Tailwind CSS v4 and Type
 - Tokens (colour, type, spacing, radius, shadow, motion) live in `src/styles/globals.css` as a Tailwind `@theme` and mirror the project's DESIGN.md, which is the source of truth.
 - Font: Inter, self-hosted at build time by `next/font` (`src/styles/fonts.ts`).
 - UI primitives are in `src/components/ui/`, the logo in `src/components/brand/`.
+
+## Runbooks
+
+- [Give someone admin or MyLife access](docs/runbooks/area-user-onboarding.md): allowlist row, `admin.createUser`, then an invite link (the signup hook refuses allowlisted emails since migration 0400, which opens public Monitor signup).

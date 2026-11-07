@@ -76,6 +76,17 @@ const nextConfig = {
         source: "/mylife/:path*",
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
+      // Monitor, its public landing page included. The two sources name the
+      // landing and the pages under it separately, like every other area rule
+      // names its prefix.
+      {
+        source: "/monitor",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
+        source: "/monitor/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
       {
         source: "/auth/:path*",
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],

@@ -43,6 +43,7 @@ import {
   asRole,
   expectPgError,
   seedAuthUser,
+  seedRolelessUser,
   type JwtClaims,
   withTx,
 } from "./helpers/roles.js";
@@ -102,7 +103,7 @@ const NON_MYLIFE_ACCOUNTS: readonly Account[] = [
     label: "profile role=null",
     claims: NULL_ROLE_CLAIMS,
     userId: NULL_ROLE_UUID,
-    seed: (c) => seedAuthUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL),
+    seed: (c) => seedRolelessUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL),
   },
   {
     // An auth user whose profiles row is gone (the owner may delete profiles): the FK to

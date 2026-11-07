@@ -20,9 +20,11 @@ beforeAll(() => {
 });
 
 describe('package.json scripts (AC-CACHE-19)', () => {
-  it('AC-CACHE-19: cf:build starts with SWC_NATIVE_BINDING_CACHE_SKIP_SECURITY_CHECK=1', () => {
+  it('AC-CACHE-19: cf:build starts with SWC_NATIVE_BINDING_CACHE_SKIP_SECURITY_CHECK=1 (via cross-env)', () => {
     expect(scripts['cf:build']).toBeDefined();
-    expect(scripts['cf:build']).toMatch(/^SWC_NATIVE_BINDING_CACHE_SKIP_SECURITY_CHECK=1/);
+    // `cross-env` sets the variable on Windows too (commit 5f9742e); the bare
+    // POSIX `VAR=1 cmd` form stays accepted.
+    expect(scripts['cf:build']).toMatch(/^(?:cross-env )?SWC_NATIVE_BINDING_CACHE_SKIP_SECURITY_CHECK=1 /);
   });
 
   it('AC-CACHE-19: cf:build runs opennextjs-cloudflare build', () => {
@@ -40,5 +42,12 @@ describe('package.json scripts (AC-CACHE-19)', () => {
 
   it('AC-CACHE-19: no deploy:preview script exists (straight to prod, no preview Worker)', () => {
     expect(scripts['deploy:preview']).toBeUndefined();
+  });
+});
+
+describe('package.json scripts (MON-AC68)', () => {
+  it('MON-AC68: test:integration:e2e-project script exists and runs the e2e-project script', () => {
+    expect(scripts['test:integration:e2e-project']).toBeDefined();
+    expect(scripts['test:integration:e2e-project']).toContain('scripts/vitest-e2e-project.mjs');
   });
 });

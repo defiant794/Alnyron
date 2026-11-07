@@ -35,6 +35,7 @@ import {
   asRole,
   expectPgError,
   seedAuthUser,
+  seedRolelessUser,
   type AppRole,
   type JwtClaims,
   withTx,
@@ -47,7 +48,7 @@ const SEEDED_ALLOWLIST = [OWNER_EMAIL, ADMIN_EMAIL, MYLIFE_EMAIL];
 async function seedUsers(c: PoolClient): Promise<void> {
   await seedAuthUser(c, OWNER_UUID, OWNER_EMAIL, "owner");
   await seedAuthUser(c, ADMIN_UUID, ADMIN_EMAIL, "admin");
-  await seedAuthUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL);
+  await seedRolelessUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL);
   await seedAuthUser(c, MYLIFE_UUID, MYLIFE_EMAIL, "mylife_user");
 }
 

@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:integration:e2e-project": "node scripts/vitest-e2e-project.mjs",
     "test:e2e": "playwright test",
     "db:push": "supabase db push --linked",
     "db:types": "supabase gen types typescript --project-id xmgpixhxecamtryohgmk --schema public > src/types/database.ts",

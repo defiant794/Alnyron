@@ -14,7 +14,8 @@ const eslintConfig = [
   {
     ignores: [
       "node_modules/**",
-      ".next/**",
+      // `.next` and any copy of it (`.next.bak.*`), like the `/.next*/` rule in .gitignore.
+      ".next*/**",
       ".open-next/**",
       ".wrangler/**",
       "out/**",

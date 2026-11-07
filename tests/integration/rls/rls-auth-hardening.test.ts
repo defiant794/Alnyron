@@ -42,6 +42,7 @@ import {
   asRole,
   expectPgError,
   seedAuthUser,
+  seedRolelessUser,
   type AppRole,
   type JwtClaims,
   withTx,
@@ -168,7 +169,7 @@ describe.skipIf(!DB_AVAILABLE)("Auth hardening — allowlist, last owner, spoofe
       await withTx(client, async (c) => {
         await seedSoleOwner(c);
         await seedAuthUser(c, ADMIN_UUID, ADMIN_EMAIL, "admin");
-        await seedAuthUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL);
+        await seedRolelessUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL);
         await asRole(c, "authenticated", OWNER_CLAIMS);
 
         const update = await c.query("UPDATE public.user_allowlist SET email = $1 WHERE email = $2", [
@@ -231,7 +232,7 @@ describe.skipIf(!DB_AVAILABLE)("Auth hardening — allowlist, last owner, spoofe
         await seedSoleOwner(c);
         await seedAuthUser(c, ADMIN_UUID, ADMIN_EMAIL, "admin");
         await seedAuthUser(c, MYLIFE_UUID, MYLIFE_EMAIL, "mylife_user");
-        await seedAuthUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL);
+        await seedRolelessUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL);
 
         await c.query("DELETE FROM public.user_allowlist WHERE email = $1", [ADMIN_EMAIL]);
         await c.query("UPDATE public.user_allowlist SET role = 'admin' WHERE email = $1", [MYLIFE_EMAIL]);
@@ -290,6 +291,7 @@ describe.skipIf(!DB_AVAILABLE)("Auth hardening — allowlist, last owner, spoofe
       }, 12_000);
     }
 
+    /** seedRole: the account's allowlist role before the move; undefined = a role-less account. */
     const OLD_ADDRESS_WRITES: ReadonlyArray<{ label: string; seedRole?: AppRole; sql: string }> = [
       {
         label: "INSERT of the old address",
@@ -306,7 +308,8 @@ describe.skipIf(!DB_AVAILABLE)("Auth hardening — allowlist, last owner, spoofe
       it(`after a change, an allowlist write for the old address grants the moved account nothing (${write.label})`, async () => {
         await withTx(client, async (c) => {
           await seedSoleOwner(c);
-          await seedAuthUser(c, ADMIN_UUID, ADMIN_EMAIL, write.seedRole);
+          if (write.seedRole) await seedAuthUser(c, ADMIN_UUID, ADMIN_EMAIL, write.seedRole);
+          else await seedRolelessUser(c, ADMIN_UUID, ADMIN_EMAIL);
           await c.query(CHANGE_LOGIN_EMAIL, [ADMIN_UUID, MOVED_EMAIL]);
           expect(await profileOf(c, ADMIN_UUID)).toEqual({ email: MOVED_EMAIL, role: null });
           await asRole(c, "authenticated", OWNER_CLAIMS);
@@ -338,7 +341,7 @@ describe.skipIf(!DB_AVAILABLE)("Auth hardening — allowlist, last owner, spoofe
     it("a change to another account's address in different case → 23505 profiles_email_key", async () => {
       await withTx(client, async (c) => {
         await seedAuthUser(c, ADMIN_UUID, ADMIN_EMAIL, "admin");
-        await seedAuthUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL);
+        await seedRolelessUser(c, NULL_ROLE_UUID, NULL_ROLE_EMAIL);
 
         // auth.users keeps emails unique case-sensitively only; profiles.email is normalised.
         await expectPgError(
@@ -471,7 +474,7 @@ describe.skipIf(!DB_AVAILABLE)("Auth hardening — allowlist, last owner, spoofe
     it("moving the sole owner's allowlist entry to another existing account transfers ownership", async () => {
       await withTx(client, async (c) => {
         await seedSoleOwner(c);
-        await seedAuthUser(c, SECOND_OWNER_UUID, SECOND_OWNER_EMAIL);
+        await seedRolelessUser(c, SECOND_OWNER_UUID, SECOND_OWNER_EMAIL);
         await asRole(c, "authenticated", OWNER_CLAIMS);
 
         const move = await c.query("UPDATE public.user_allowlist SET email = $1 WHERE email = $2", [

@@ -20,9 +20,10 @@ const handleI18n = createMiddleware(routing);
  *   and any path with a dot, e.g. `/favicon.ico`) never reach the
  *   middleware, so they are not rewritten: they are served as on the main
  *   host.
- * - Admin, MyLife and auth routes on the main host (outside `[locale]`) go
- *   through the Supabase session refresh and the unauthenticated-area
- *   redirect, the only place cookies are set.
+ * - Admin, MyLife, Monitor (its public landing page included) and auth
+ *   routes on the main host (outside `[locale]`) go through the Supabase
+ *   session refresh and the unauthenticated-area redirect, the only place
+ *   cookies are set.
  * - Public routes go through next-intl only (locale-prefix rewrites
  *   (`/contact` -> `/da/contact`), `/da/*` -> unprefixed redirect). With
  *   `localeCookie: false` and `localeDetection: false` that branch sets no

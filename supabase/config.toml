@@ -265,6 +265,13 @@ content_path = "./supabase/templates/invite.html"
 subject = "Nulstil din adgangskode"
 content_path = "./supabase/templates/recovery.html"
 
+# Monitor signup confirmation (public signup, slice A). Always the Site URL link with
+# next=/monitor/dashboard: /auth/confirm keeps a type=signup link inside /monitor/. Signup stays
+# off here and in production until slice C (enable_signup above).
+[auth.email.template.confirmation]
+subject = "Bekræft din e-mail til Alnyron Monitor"
+content_path = "./supabase/templates/confirmation.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true
@@ -294,7 +301,10 @@ max_frequency = "5s"
 # inactivity_timeout = "8h"
 
 # This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
-# Rejects any email not on public.user_allowlist (migration 20261101000100_core.sql).
+# Since migration 20261106000400_monitor_public_signup.sql it REJECTS every email on
+# public.user_allowlist (admin/MyLife accounts are created with admin.createUser, which skips the
+# hook: docs/runbooks/area-user-onboarding.md) and admits every other email as a public Monitor
+# signup (monitor_user).
 # Production: set the same hook, signup-off, password length and secure password change in the
 # dashboard (F1.1/F1.7).
 [auth.hook.before_user_created]

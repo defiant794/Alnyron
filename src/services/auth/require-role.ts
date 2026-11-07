@@ -104,3 +104,19 @@ export function getMyLifeAccess(): Promise<MyLifeAccess> {
 export function requireMyLife(): Promise<MyLifeUser> {
   return requireArea("mylife");
 }
+
+export type MonitorUser = AreaUser<"monitor">;
+export type MonitorAccess = AreaAccess<"monitor">;
+
+/** `getAreaAccess("monitor")`: the owner and `monitor_user` are allowed. */
+export function getMonitorAccess(): Promise<MonitorAccess> {
+  return getAreaAccess("monitor");
+}
+
+/**
+ * `requireArea("monitor")`: the guard for every Monitor panel page and Server
+ * Action, and the source of the user id the monitors service writes with.
+ */
+export function requireMonitor(): Promise<MonitorUser> {
+  return requireArea("monitor");
+}

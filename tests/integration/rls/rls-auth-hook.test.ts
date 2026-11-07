@@ -1,38 +1,40 @@
 /**
- * Integration tests — Before-User-Created hook and on_auth_user_created trigger.
+ * Integration tests — Before-User-Created hook (0400 semantics) and
+ * on_auth_user_created trigger (0400 semantics).
  *
- * Covers F0.4 acceptance:
- *   - hook rejects a non-allowlisted email (returns 403 error jsonb)
- *   - hook accepts an allowlisted email (returns empty jsonb {}), also when the incoming
- *     email differs in case / surrounding whitespace (matched on lower(btrim(email)))
- *   - only supabase_auth_admin can execute the hook (anon / authenticated / PUBLIC cannot)
- *     and supabase_auth_admin can read user_allowlist through RLS
- *   - trigger assigns role from user_allowlist when an auth.users row is inserted
- *     (case-insensitively), and role = NULL when the email is not allowlisted
+ * Migration 20261106000400_monitor_public_signup.sql changes the hook and trigger
+ * semantics from F0.4 (allowlist = admit; non-allowlist = reject) to 0400
+ * (allowlist = REJECT on every hook path; non-allowlist = ADMIT as monitor_user).
+ *
+ * These tests are RED until migration 0400 is applied to the target DB.
+ * Run against the isolated e2e project via:
+ *   npm run test:integration:e2e-project -- tests/integration/rls/rls-auth-hook.test.ts
+ *
+ * The supabase_auth_admin privilege checks are unchanged (the hook still requires
+ * the same EXECUTE / schema USAGE / table SELECT grants and the same RLS policy).
  *
  * Why supabase_auth_admin is checked through the catalog: GoTrue calls the hook as
  * supabase_auth_admin, but on Supabase cloud `postgres` is not a superuser and
- * membership in supabase_auth_admin is reserved (GRANT → 42501 "role memberships are
- * reserved, only superusers can grant them"), so `SET ROLE supabase_auth_admin` is
- * impossible from a test connection. The hook is SECURITY INVOKER, so the role's
- * effective privileges (EXECUTE, schema USAGE, table SELECT, a permissive RLS policy —
- * the role has no BYPASSRLS) are the complete authorisation chain and are asserted
- * against the real role below. The hook's matching logic runs as postgres.
+ * membership in supabase_auth_admin is reserved, so `SET ROLE supabase_auth_admin`
+ * is impossible from a test connection. The hook is SECURITY INVOKER, so the role's
+ * effective privileges are the complete authorisation chain and are asserted via
+ * the catalog below.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DB_AVAILABLE, getClient, type PoolClient } from "./helpers/db.js";
 import { withTx } from "./helpers/roles.js";
 
-// Unique emails prevent cross-test collisions inside rolled-back transactions
+// Unique emails prevent cross-test collisions inside rolled-back transactions.
+// Under 0400: LISTED_EMAIL (in user_allowlist) → REJECTED; UNLISTED_EMAIL → ADMITTED.
 const LISTED_EMAIL = "listed-hook-test@test.local";
 const UNLISTED_EMAIL = "unlisted-hook-test@test.local";
 const HOOK = "public.hook_before_user_created(jsonb)";
 
-async function callHook(c: PoolClient, email: string): Promise<Record<string, unknown>> {
+async function callHook(c: PoolClient, email: string, userMeta: Record<string, unknown> = {}, appMeta: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
   const { rows } = await c.query<{ result: Record<string, unknown> }>(
     "SELECT public.hook_before_user_created($1::jsonb) AS result",
-    [JSON.stringify({ user: { email } })],
+    [JSON.stringify({ user: { email, user_metadata: userMeta, app_metadata: appMeta } })],
   );
   return rows[0]!.result;
 }
@@ -46,7 +48,7 @@ async function insertAuthUser(c: PoolClient, id: string, email: string): Promise
   );
 }
 
-describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger", () => {
+describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger (0400 semantics)", () => {
   let client: PoolClient;
 
   beforeAll(async () => {
@@ -58,34 +60,69 @@ describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger", () 
   });
 
   // --------------------------------------------------------------------------
-  // hook_before_user_created — matching logic
+  // MON-AC52: hook rejects ALLOWLISTED emails — including with metadata spoofs
   // --------------------------------------------------------------------------
 
-  it("hook: non-allowlisted email returns error jsonb with http_code 403", async () => {
+  it("MON-AC52a: hook rejects an allowlisted email with http_code 403", async () => {
+    await withTx(client, async (c) => {
+      await c.query("INSERT INTO public.user_allowlist (email, role) VALUES ($1, 'admin')", [LISTED_EMAIL]);
+      const result = await callHook(c, LISTED_EMAIL);
+      expect(result).toMatchObject({ error: { http_code: 403 } });
+    });
+  }, 12_000);
+
+  it("MON-AC52b: hook rejects allowlisted email with area:'admin' metadata spoof", async () => {
+    await withTx(client, async (c) => {
+      await c.query("INSERT INTO public.user_allowlist (email, role) VALUES ($1, 'admin')", [LISTED_EMAIL]);
+      const result = await callHook(c, LISTED_EMAIL, { area: "admin" });
+      expect(result).toMatchObject({ error: { http_code: 403 } });
+    });
+  }, 12_000);
+
+  it("MON-AC52c: hook rejects allowlisted email with invited:true metadata spoof", async () => {
+    await withTx(client, async (c) => {
+      await c.query("INSERT INTO public.user_allowlist (email, role) VALUES ($1, 'admin')", [LISTED_EMAIL]);
+      const result = await callHook(c, LISTED_EMAIL, { invited: true });
+      expect(result).toMatchObject({ error: { http_code: 403 } });
+    });
+  }, 12_000);
+
+  it("MON-AC52e: hook rejects allowlisted email with app_metadata spoof {role:'admin'}", async () => {
+    await withTx(client, async (c) => {
+      await c.query("INSERT INTO public.user_allowlist (email, role) VALUES ($1, 'admin')", [LISTED_EMAIL]);
+      const result = await callHook(c, LISTED_EMAIL, {}, { role: "admin" });
+      expect(result).toMatchObject({ error: { http_code: 403 } });
+    });
+  }, 12_000);
+
+  it("MON-AC52d: hook rejects allowlisted email in upper case / whitespace (generic message)", async () => {
+    await withTx(client, async (c) => {
+      await c.query("INSERT INTO public.user_allowlist (email, role) VALUES ($1, 'admin')", [LISTED_EMAIL]);
+      const result = await callHook(c, "  Listed-Hook-TEST@Test.Local  ");
+      expect(result).toMatchObject({ error: { http_code: 403 } });
+    });
+  }, 12_000);
+
+  // --------------------------------------------------------------------------
+  // MON-AC53: hook ADMITS non-allowlisted emails (public monitor signup)
+  // --------------------------------------------------------------------------
+
+  it("MON-AC53a: hook admits a non-allowlisted email (returns {})", async () => {
     await withTx(client, async (c) => {
       const result = await callHook(c, UNLISTED_EMAIL);
-      expect(result).toEqual({
-        error: { http_code: 403, message: "Adgang kræver en invitation." },
-      });
+      expect(result).toEqual({});
     });
   }, 12_000);
 
-  it("hook: allowlisted email returns empty jsonb {}", async () => {
+  it("MON-AC53b: hook admits unlisted email even with metadata payload", async () => {
     await withTx(client, async (c) => {
-      await c.query("INSERT INTO public.user_allowlist (email, role) VALUES ($1, 'admin')", [LISTED_EMAIL]);
-      expect(await callHook(c, LISTED_EMAIL)).toEqual({});
-    });
-  }, 12_000);
-
-  it("hook: allowlisted email in upper case with surrounding whitespace returns {}", async () => {
-    await withTx(client, async (c) => {
-      await c.query("INSERT INTO public.user_allowlist (email, role) VALUES ($1, 'admin')", [LISTED_EMAIL]);
-      expect(await callHook(c, "  Listed-Hook-TEST@Test.Local  ")).toEqual({});
+      const result = await callHook(c, UNLISTED_EMAIL, { area: "admin", invited: true });
+      expect(result).toEqual({});
     });
   }, 12_000);
 
   // --------------------------------------------------------------------------
-  // hook_before_user_created — who may run it (see header for the catalog approach)
+  // hook privilege assertions (unchanged from F0.4)
   // --------------------------------------------------------------------------
 
   it("hook: anon, authenticated and PUBLIC cannot execute it", async () => {
@@ -110,8 +147,8 @@ describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger", () 
         rls_enabled: boolean;
         role_bypasses_rls: boolean;
       }>(
-        `SELECT has_function_privilege('supabase_auth_admin', $1::regprocedure, 'EXECUTE')   AS can_execute,
-                has_schema_privilege('supabase_auth_admin', 'public', 'USAGE')               AS schema_usage,
+        `SELECT has_function_privilege('supabase_auth_admin', $1::regprocedure, 'EXECUTE')    AS can_execute,
+                has_schema_privilege('supabase_auth_admin', 'public', 'USAGE')                AS schema_usage,
                 has_table_privilege('supabase_auth_admin', 'public.user_allowlist', 'SELECT') AS table_select,
                 (SELECT prosecdef FROM pg_proc WHERE oid = $1::regprocedure)                  AS security_definer,
                 (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.user_allowlist'::regclass) AS rls_enabled,
@@ -122,12 +159,11 @@ describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger", () 
         can_execute: true,
         schema_usage: true,
         table_select: true,
-        security_definer: false, // runs with the caller's (supabase_auth_admin's) privileges
+        security_definer: false,
         rls_enabled: true,
-        role_bypasses_rls: false, // so a policy for the role is required …
+        role_bypasses_rls: false,
       });
 
-      // … and it exists: a permissive SELECT policy for supabase_auth_admin that admits every row.
       const policies = await c.query<{ policyname: string; permissive: string; cmd: string; qual: string }>(
         `SELECT policyname, permissive, cmd, qual FROM pg_policies
           WHERE schemaname = 'public' AND tablename = 'user_allowlist'
@@ -140,13 +176,39 @@ describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger", () 
   }, 12_000);
 
   // --------------------------------------------------------------------------
-  // on_auth_user_created trigger
+  // MON-AC53: on_auth_user_created trigger → role = 'monitor_user' for unlisted
   // --------------------------------------------------------------------------
 
-  it("trigger: creates profiles row with correct role when email is in user_allowlist", async () => {
+  it("MON-AC53c: trigger creates profiles row with role='monitor_user' for non-allowlisted email", async () => {
     await withTx(client, async (c) => {
-      const userId = "00000000-0000-0000-aaaa-000000000010";
-      // Seed allowlist BEFORE inserting auth user (trigger reads it)
+      const userId = "00000000-0000-0000-aaaa-000000000020";
+      await insertAuthUser(c, userId, UNLISTED_EMAIL);
+
+      const { rows } = await c.query<{ role: string | null }>(
+        "SELECT role FROM public.profiles WHERE user_id = $1",
+        [userId],
+      );
+      expect(rows).toEqual([{ role: "monitor_user" }]);
+    });
+  }, 12_000);
+
+  it("MON-AC53d: trigger sets monitor_limit to column default (5) for monitor_user", async () => {
+    await withTx(client, async (c) => {
+      const userId = "00000000-0000-0000-aaaa-000000000021";
+      await insertAuthUser(c, userId, UNLISTED_EMAIL);
+
+      const { rows } = await c.query<{ monitor_limit: number | null }>(
+        "SELECT monitor_limit FROM public.profiles WHERE user_id = $1",
+        [userId],
+      );
+      expect(rows).toEqual([{ monitor_limit: 5 }]);
+    });
+  }, 12_000);
+
+  it("MON-AC57a: trigger still assigns allowlist role for a seeded allowlist email (admin.createUser path)", async () => {
+    await withTx(client, async (c) => {
+      const userId = "00000000-0000-0000-aaaa-000000000022";
+      // Seed allowlist first (admin.createUser doesn't fire the hook, but handle_new_user reads allowlist)
       await c.query("INSERT INTO public.user_allowlist (email, role) VALUES ($1, 'admin')", [LISTED_EMAIL]);
       await insertAuthUser(c, userId, LISTED_EMAIL);
 
@@ -158,9 +220,9 @@ describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger", () 
     });
   }, 12_000);
 
-  it("trigger: matches the allowlist case-insensitively and stores the email lower-cased", async () => {
+  it("MON-AC57b: trigger matches the allowlist case-insensitively and stores email lower-cased (admin path)", async () => {
     await withTx(client, async (c) => {
-      const userId = "00000000-0000-0000-aaaa-000000000012";
+      const userId = "00000000-0000-0000-aaaa-000000000023";
       await c.query("INSERT INTO public.user_allowlist (email, role) VALUES ($1, 'admin')", [LISTED_EMAIL]);
       await insertAuthUser(c, userId, "Listed-Hook-TEST@Test.Local");
 
@@ -169,19 +231,6 @@ describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger", () 
         [userId],
       );
       expect(rows).toEqual([{ email: LISTED_EMAIL, role: "admin" }]);
-    });
-  }, 12_000);
-
-  it("trigger: creates profiles row with role=NULL when email is not in user_allowlist", async () => {
-    await withTx(client, async (c) => {
-      const userId = "00000000-0000-0000-aaaa-000000000011";
-      await insertAuthUser(c, userId, UNLISTED_EMAIL);
-
-      const { rows } = await c.query<{ role: string | null }>(
-        "SELECT role FROM public.profiles WHERE user_id = $1",
-        [userId],
-      );
-      expect(rows).toEqual([{ role: null }]);
     });
   }, 12_000);
 });

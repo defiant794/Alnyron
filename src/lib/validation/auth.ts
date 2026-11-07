@@ -35,16 +35,19 @@ export const signInSchema = z.object({
 /** Forgot-password form. */
 export const resetPasswordSchema = z.object({ email });
 
+/** A password being chosen: the length rule Supabase Auth enforces, checked first. */
+const newPassword = z
+  .string(issue("passwordTooShort"))
+  .min(MIN_PASSWORD_LENGTH, issue("passwordTooShort"))
+  .refine(
+    (value) => new TextEncoder().encode(value).length <= MAX_PASSWORD_BYTES,
+    issue("passwordTooLong"),
+  );
+
 /** Set-password form (invite and recovery links): length rule plus a matching repeat. */
 export const setPasswordSchema = z
   .object({
-    password: z
-      .string(issue("passwordTooShort"))
-      .min(MIN_PASSWORD_LENGTH, issue("passwordTooShort"))
-      .refine(
-        (value) => new TextEncoder().encode(value).length <= MAX_PASSWORD_BYTES,
-        issue("passwordTooLong"),
-      ),
+    password: newPassword,
     confirm: z.string(issue("passwordMismatch")),
   })
   .refine((data) => data.password === data.confirm, {
@@ -52,5 +55,9 @@ export const setPasswordSchema = z
     path: ["confirm"],
   });
 
+/** Monitor signup form: email plus a new password (one field, no repeat, per the signup mock). */
+export const signUpSchema = z.object({ email, password: newPassword });
+
 export type SignInInput = z.infer<typeof signInSchema>;
 export type SetPasswordInput = z.infer<typeof setPasswordSchema>;
+export type SignUpInput = z.infer<typeof signUpSchema>;

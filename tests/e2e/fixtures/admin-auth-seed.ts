@@ -198,7 +198,8 @@ export async function sweepE2eTestUsers(client: pg.PoolClient): Promise<void> {
 
 // ── generate_link via Supabase admin REST API ─────────────────────────────────
 
-export type GenerateLinkType = "recovery" | "invite";
+/** "signup" creates/confirms the user via generate_link (monitor public-signup e2e). */
+export type GenerateLinkType = "recovery" | "invite" | "signup";
 
 interface GenerateLinkResponse {
   action_link: string;
@@ -218,22 +219,29 @@ interface GenerateLinkResponse {
  *   token_hash and type are appended from the generate_link response, matching the DA email
  *   template. NOT forwarded to GoTrue as `options.redirectTo`.
  *
- * For 'invite': seeds the allowlist first so hook_before_user_created passes.
- * For 'recovery': the user must already exist (call seedE2eAdmin first).
+ * For 'invite' (new 0400 runbook): seeds the allowlist, then calls
+ *   POST /auth/v1/admin/users { email } (no hook fired),
+ *   then generate_link(type=invite) on the existing unconfirmed user.
+ *   See docs/runbooks/area-user-onboarding.md.
+ *
+ * For 'signup': calls generate_link(type=signup, email, password) directly
+ *   (monitor public-signup flow; hook admits non-allowlisted email).
+ *   The password param is included so GoTrue can set it on the new user.
+ *
+ * For 'recovery': the user must already exist.
  */
 export async function generateAuthLink(
   type: GenerateLinkType,
   email: string,
   confirmUrl: string,
   role: "admin" | "mylife_user" = "admin",
+  password?: string,
 ): Promise<string> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SECRET_KEY!;
 
   if (type === "invite") {
-    // Seed allowlist before generating the invite so the before_user_created
-    // hook allows the new account. The role determines which area the user
-    // enters; callers default to 'admin' so existing usages are unchanged.
+    // New 0400 runbook: allowlist row → admin.createUser (no hook) → generate_link(invite)
     const client = await getClient();
     try {
       await client.query(
@@ -245,6 +253,26 @@ export async function generateAuthLink(
     } finally {
       client.release();
     }
+    // Create the user via admin API (no before_user_created hook fires here)
+    const createResp = await fetch(`${url}/auth/v1/admin/users`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+        apikey: key,
+      },
+      body: JSON.stringify({ email }),
+    });
+    if (!createResp.ok) {
+      const text = await createResp.text();
+      throw new Error(`admin.createUser failed (${createResp.status}): ${text}`);
+    }
+    // Now generate_link(invite) on the existing unconfirmed user; hook not re-fired.
+  }
+
+  const body: Record<string, string> = { type, email };
+  if (type === "signup" && password) {
+    body["password"] = password;
   }
 
   const response = await fetch(`${url}/auth/v1/admin/generate_link`, {
@@ -254,7 +282,7 @@ export async function generateAuthLink(
       Authorization: `Bearer ${key}`,
       apikey: key,
     },
-    body: JSON.stringify({ type, email }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
