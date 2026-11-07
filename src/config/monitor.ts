@@ -19,6 +19,15 @@ export const MONITOR_DASHBOARD_PATH = "/monitor/dashboard";
 export const MONITOR_NEW_PATH = "/monitor/monitors/new";
 export const MONITOR_SETTINGS_PATH = "/monitor/settings";
 
+/**
+ * The main site's frontpage: where the ALNYRON lockup leads outside the panel
+ * (the landing page and the auth card; inside the panel it leads to the
+ * dashboard). Relative while Monitor is served under `/monitor` on the main
+ * host; the monitor host slice must make it the main site's absolute URL,
+ * because on monitor.alnyron.dk `/` would be the Monitor landing.
+ */
+export const MONITOR_SITE_HOME_HREF = "/";
+
 /** Detail page (header, actions, change history) of one monitor. */
 export function monitorDetailPath(id: string): string {
   return `/monitor/monitors/${encodeURIComponent(id)}`;
@@ -46,10 +55,11 @@ export const MONITOR_ROBOTS = "noindex, nofollow";
 
 /**
  * Monitors a new account may hold: the `profiles.monitor_limit` column
- * default (migration 20261106000200), enforced by the
- * `monitors_limit_per_user` trigger. The landing page quotes it.
+ * default (migration 20261107000300, lowered from 5; accounts created
+ * before it keep their own cap), enforced by the `monitors_limit_per_user`
+ * trigger. The landing page quotes it.
  */
-export const MONITOR_FREE_LIMIT = 5;
+export const MONITOR_FREE_LIMIT = 2;
 
 /** Units the check interval is entered in. */
 export const MONITOR_INTERVAL_UNITS = ["hours", "days"] as const;

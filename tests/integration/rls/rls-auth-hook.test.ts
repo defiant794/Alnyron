@@ -6,7 +6,8 @@
  * semantics from F0.4 (allowlist = admit; non-allowlist = reject) to 0400
  * (allowlist = REJECT on every hook path; non-allowlist = ADMIT as monitor_user).
  *
- * These tests are RED until migration 0400 is applied to the target DB.
+ * These tests need migration 0400 on the target DB. MCH-AC5c / MON-AC53d also needs
+ * 20261107000300 (column default 2) and skips while the target lacks it.
  * Run against the isolated e2e project via:
  *   npm run test:integration:e2e-project -- tests/integration/rls/rls-auth-hook.test.ts
  *
@@ -23,6 +24,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DB_AVAILABLE, getClient, type PoolClient } from "./helpers/db.js";
+import { FREE_LIMIT_SKIP_REASON, freeLimitApplied } from "./helpers/monitor-limit.js";
 import { withTx } from "./helpers/roles.js";
 
 // Unique emails prevent cross-test collisions inside rolled-back transactions.
@@ -50,9 +52,12 @@ async function insertAuthUser(c: PoolClient, id: string, email: string): Promise
 
 describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger (0400 semantics)", () => {
   let client: PoolClient;
+  /** profiles.monitor_limit defaults to 2 on the target (20261107000300 applied). */
+  let freeLimitOnTarget: boolean;
 
   beforeAll(async () => {
     client = await getClient();
+    freeLimitOnTarget = await freeLimitApplied(client);
   });
 
   afterAll(async () => {
@@ -122,7 +127,7 @@ describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger (0400
   }, 12_000);
 
   // --------------------------------------------------------------------------
-  // hook privilege assertions (unchanged from F0.4)
+  // hook privilege assertions
   // --------------------------------------------------------------------------
 
   it("hook: anon, authenticated and PUBLIC cannot execute it", async () => {
@@ -192,7 +197,8 @@ describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger (0400
     });
   }, 12_000);
 
-  it("MON-AC53d: trigger sets monitor_limit to column default (5) for monitor_user", async () => {
+  it("MCH-AC5c / MON-AC53d: trigger sets monitor_limit to column default (2) for monitor_user", async ({ skip }) => {
+    skip(!freeLimitOnTarget, FREE_LIMIT_SKIP_REASON);
     await withTx(client, async (c) => {
       const userId = "00000000-0000-0000-aaaa-000000000021";
       await insertAuthUser(c, userId, UNLISTED_EMAIL);
@@ -201,7 +207,7 @@ describe.skipIf(!DB_AVAILABLE)("RLS — Before-User-Created hook + trigger (0400
         "SELECT monitor_limit FROM public.profiles WHERE user_id = $1",
         [userId],
       );
-      expect(rows).toEqual([{ monitor_limit: 5 }]);
+      expect(rows).toEqual([{ monitor_limit: 2 }]);
     });
   }, 12_000);
 

@@ -50,6 +50,7 @@ import {
 } from "./fixtures/monitor-seed";
 import { getClient, type PoolClient } from "../integration/rls/helpers/db";
 import messages from "../../messages/da.json";
+import { MONITOR_FREE_LIMIT } from "../../src/config/monitor";
 
 const { Auth, Monitor } = messages;
 
@@ -92,8 +93,10 @@ test.describe("MON-AC1: /monitor landing page", () => {
     await expect(page.getByRole("link", { name: Monitor.landing.ctaSignup })).toBeVisible();
     // Login link
     await expect(page.getByRole("link", { name: Monitor.landing.ctaLogin })).toBeVisible();
-    // Free cap copy (5)
-    await expect(page.locator("body")).toContainText("5");
+    // Free-cap copy: the hero lead in <main> quotes MONITOR_FREE_LIMIT as {limit}.
+    await expect(
+      page.getByRole("main").getByText(Monitor.landing.lead.replace("{limit}", String(MONITOR_FREE_LIMIT)), { exact: true }),
+    ).toBeVisible();
     // noindex meta
     const robots = await page.locator('meta[name="robots"]').getAttribute("content");
     expect(robots).toContain("noindex");
@@ -206,7 +209,7 @@ test.describe("MON-AC15: /monitor/login page structure", () => {
     await expect(page.getByRole("button", { name: Auth.login.submit })).toBeVisible();
     const nulstil = page.getByRole("link", { name: Auth.login.resetPassword });
     await expect(nulstil).toBeVisible();
-    await expect(nulstil).toHaveAttribute("href", expect.stringContaining("/monitor/forgot-password"));
+    await expect(nulstil).toHaveAttribute("href", "/monitor/forgot-password");
     // noindex meta
     const robots = await page.locator('meta[name="robots"]').getAttribute("content");
     expect(robots).toContain("noindex");

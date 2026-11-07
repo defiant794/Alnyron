@@ -22,7 +22,7 @@
  *   - monitor_events: users hold no INSERT or UPDATE privilege (42501); the service role (the
  *     cron) inserts events and writes the cron columns; an event's user_id is always its
  *     monitor's owner (23503) and deleting the monitor deletes its events
- *   - monitors_limit_per_user: the default cap of 5 refuses a 6th monitor (P0001
+ *   - monitors_limit_per_user: the default cap of 2 refuses a 3rd monitor (P0001
  *     monitor_limit_reached), for the service role too; NULL is unlimited, 0 allows none, a
  *     negative cap is refused (23514); the owner role is unlimited whatever its cap, so a
  *     promoted owner is too and a demoted one falls back to its cap; a user cannot lift its own
@@ -51,6 +51,11 @@
  * Once both migrations are on production, the plain `npm run test:integration` runs it there,
  * without DDL.
  *
+ * The column default of profiles.monitor_limit (the free cap) is 2 on a target holding
+ * 20261107000300 and 5 on one holding only 20261106000200. The test of the default cap of 2
+ * skips while the target lacks 20261107000300; the other tests compare with whatever default
+ * the target (or the in-transaction 20261106000200) gives.
+ *
  * The concurrency test needs two connections to share the schema and one user, and neither
  * sees what the other's open transaction wrote. It therefore runs only on the e2e project once
  * 20261106000200 is committed there, and commits its own fixture user (removed before and after).
@@ -62,6 +67,8 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DB_AVAILABLE, getClient, type PoolClient } from "./helpers/db.js";
+import { transactionControlStatements } from "./helpers/migration-sql.js";
+import { FREE_LIMIT_SKIP_REASON, freeLimitApplied, monitorLimitDefault } from "./helpers/monitor-limit.js";
 import {
   ADMIN_CLAIMS,
   ADMIN_EMAIL,
@@ -94,23 +101,6 @@ const SCHEMA_MIGRATION_SQL = fs.readFileSync(
   "utf-8",
 );
 
-/** Statement keywords that start, end or nest a transaction. */
-const TRANSACTION_CONTROL = /^(begin|start\s+transaction|commit|end|abort|rollback|savepoint|release|prepare\s+transaction)\b/i;
-
-/**
- * The statements of `sql` that control the transaction. Comments and dollar-quoted bodies are
- * removed first, so neither a `-- commit` remark nor a function's `end;` counts.
- */
-function transactionControlStatements(sql: string): string[] {
-  return sql
-    .replace(/\$([A-Za-z_]\w*)?\$[\s\S]*?\$\1\$/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/--[^\n]*/g, "")
-    .split(";")
-    .map((statement) => statement.trim())
-    .filter((statement) => TRANSACTION_CONTROL.test(statement));
-}
-
 /** What the target DB already holds, read as postgres outside any transaction. */
 interface TargetSchema {
   /** 'monitor_user' is a committed app_role value (20261106000100 applied). */
@@ -119,6 +109,8 @@ interface TargetSchema {
   schemaApplied: boolean;
   /** The MyLife tables and private.is_mylife() exist (20261105000300 / 0400 applied). */
   myLifeApplied: boolean;
+  /** profiles.monitor_limit defaults to 2 (20261107000300 applied). */
+  freeLimitApplied: boolean;
 }
 
 /** db.ts connects to the isolated e2e project exactly when SUPABASE_E2E_REF is set; else production. */
@@ -346,6 +338,17 @@ async function monitorLimit(c: PoolClient, userId: string): Promise<number | nul
   return rows[0]!.monitor_limit;
 }
 
+/**
+ * The monitor_limit a new profile gets in `c`'s transaction, read as postgres (leaves the
+ * caller's role): the column default, 2 with 20261107000300 and 5 with only 20261106000200.
+ */
+async function defaultCap(c: PoolClient): Promise<number> {
+  await c.query("RESET ROLE");
+  const columnDefault = await monitorLimitDefault(c);
+  expect(columnDefault).toMatch(/^\d+$/);
+  return Number(columnDefault);
+}
+
 /** How many monitors `userId` holds, read as postgres (leaves the caller's role). */
 async function monitorCount(c: PoolClient, userId: string): Promise<number> {
   await c.query("RESET ROLE");
@@ -403,6 +406,7 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
       roleCommitted: rows[0]!.role_committed,
       schemaApplied: rows[0]!.schema_applied,
       myLifeApplied: rows[0]!.mylife_applied,
+      freeLimitApplied: await freeLimitApplied(client),
     };
     if (target.schemaApplied && !target.roleCommitted) {
       throw new Error("public.monitors exists but app_role has no committed 'monitor_user'");
@@ -886,6 +890,7 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
   it("a monitor_user gets no admin or owner access: is_admin() and is_owner() are false, drafts and the allowlist stay hidden, admin-only writes are refused", async () => {
     await withTx(client, async (c) => {
       await prepare(c, [MONITOR]);
+      const cap = await defaultCap(c);
       const draftId = await seedDraftPage(c);
       await seedSiteSettings(c);
       await asRole(c, "authenticated", MONITOR_CLAIMS);
@@ -916,7 +921,7 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
 
       await c.query("RESET ROLE");
       const profile = await c.query("SELECT role, monitor_limit FROM public.profiles WHERE user_id = $1", [MONITOR_UUID]);
-      expect(profile.rows).toEqual([{ role: "monitor_user", monitor_limit: 5 }]);
+      expect(profile.rows).toEqual([{ role: "monitor_user", monitor_limit: cap }]);
       const draft = await c.query("SELECT status FROM public.pages WHERE id = $1", [draftId]);
       expect(draft.rows).toEqual([{ status: "draft" }]);
     });
@@ -1035,24 +1040,27 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
   // monitors_limit_per_user
   // --------------------------------------------------------------------------
 
-  it("the default cap of 5 refuses a 6th monitor (P0001 monitor_limit_reached), for the service role too; a user cannot lift its own cap", async () => {
+  it("MCH-AC5f: the default cap of 2 refuses a 3rd monitor (P0001 monitor_limit_reached), for the service role too; a user cannot lift its own cap", async ({
+    skip,
+  }) => {
+    skip(!target.freeLimitApplied, FREE_LIMIT_SKIP_REASON);
     await withTx(client, async (c) => {
       await prepare(c, [MONITOR]);
-      expect(await monitorLimit(c, MONITOR_UUID)).toBe(5);
+      expect(await monitorLimit(c, MONITOR_UUID)).toBe(2);
       await asRole(c, "authenticated", MONITOR_CLAIMS);
 
       const ids: string[] = [];
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 2; i++) {
         ids.push((await c.query<{ id: string }>(INSERT_MONITOR, [MONITOR_UUID])).rows[0]!.id);
       }
-      await expectPgError(c, () => c.query(INSERT_MONITOR, [MONITOR_UUID]), "P0001", "6th monitor", {
+      await expectPgError(c, () => c.query(INSERT_MONITOR, [MONITOR_UUID]), "P0001", "3rd monitor", {
         messageIncludes: "monitor_limit_reached",
       });
 
       // The cap counts the monitors held now: deleting one frees a slot.
       expect((await c.query("DELETE FROM public.monitors WHERE id = $1", [ids[0]])).rowCount).toBe(1);
       expect((await c.query(INSERT_MONITOR, [MONITOR_UUID])).rowCount).toBe(1);
-      await expectPgError(c, () => c.query(INSERT_MONITOR, [MONITOR_UUID]), "P0001", "6th monitor after refill", {
+      await expectPgError(c, () => c.query(INSERT_MONITOR, [MONITOR_UUID]), "P0001", "3rd monitor after refill", {
         messageIncludes: "monitor_limit_reached",
       });
 
@@ -1061,12 +1069,12 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
       expect(lift.rowCount).toBe(0);
 
       await asServiceRole(c);
-      await expectPgError(c, () => c.query(INSERT_MONITOR, [MONITOR_UUID]), "P0001", "service role 6th monitor", {
+      await expectPgError(c, () => c.query(INSERT_MONITOR, [MONITOR_UUID]), "P0001", "service role 3rd monitor", {
         messageIncludes: "monitor_limit_reached",
       });
 
-      expect(await monitorCount(c, MONITOR_UUID)).toBe(5);
-      expect(await monitorLimit(c, MONITOR_UUID)).toBe(5);
+      expect(await monitorCount(c, MONITOR_UUID)).toBe(2);
+      expect(await monitorLimit(c, MONITOR_UUID)).toBe(2);
     });
   }, 20_000);
 
@@ -1098,10 +1106,13 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
     });
   }, 20_000);
 
-  it("the owner role is unlimited whatever monitor_limit holds: an owner with the default cap holds more than 5, a promoted owner too, and a demoted one falls back to its cap", async () => {
+  it("MCH-AC5g: the owner role is unlimited whatever monitor_limit holds: an owner with the default cap holds more than that cap, a promoted owner too, and a demoted one falls back to its cap", async () => {
     await withTx(client, async (c) => {
       await prepare(c, [OWNER, MONITOR]);
-      expect(await monitorLimit(c, OWNER_UUID)).toBe(5);
+      // Both accounts start at the target's default cap, below the 7 and 8 monitors held below.
+      const cap = await defaultCap(c);
+      expect(cap).toBeLessThan(7);
+      expect(await monitorLimit(c, OWNER_UUID)).toBe(cap);
       await asRole(c, "authenticated", OWNER_CLAIMS);
       for (let i = 0; i < 8; i++) {
         expect((await c.query(INSERT_MONITOR, [OWNER_UUID])).rowCount).toBe(1);
@@ -1115,7 +1126,7 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
         expect((await c.query(INSERT_MONITOR, [MONITOR_UUID])).rowCount).toBe(1);
       }
 
-      // Demoted again (OWNER stays, so the last-owner guard passes): its own cap of 5 applies.
+      // Demoted again (OWNER stays, so the last-owner guard passes): its own default cap applies.
       await c.query("RESET ROLE");
       await c.query("UPDATE public.profiles SET role = 'monitor_user' WHERE user_id = $1", [MONITOR_UUID]);
       await asRole(c, "authenticated", MONITOR_CLAIMS);
@@ -1123,7 +1134,7 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
         messageIncludes: "monitor_limit_reached",
       });
       expect(await monitorCount(c, MONITOR_UUID)).toBe(7);
-      expect(await monitorLimit(c, MONITOR_UUID)).toBe(5);
+      expect(await monitorLimit(c, MONITOR_UUID)).toBe(cap);
     });
   }, 20_000);
 

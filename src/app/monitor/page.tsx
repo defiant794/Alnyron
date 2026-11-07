@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import MonitorBrand from "@/components/monitor/MonitorBrand";
+import SiteFooter from "@/components/site/SiteFooter";
 import Button from "@/components/ui/Button";
 import Link from "@/components/ui/Link";
 import LinkButton from "@/components/ui/LinkButton";
@@ -11,9 +12,9 @@ import {
   MONITOR_NEW_PATH,
   MONITOR_ROBOTS,
   MONITOR_SIGNUP_PATH,
+  MONITOR_SITE_HOME_HREF,
   MONITOR_URL_MAX_LENGTH,
 } from "@/config/monitor";
-import { SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Monitor.landing" });
@@ -23,21 +24,22 @@ export async function generateMetadata(): Promise<Metadata> {
 const STEPS = ["add", "watch", "mail"] as const;
 
 /**
- * `/monitor`: the public landing page (approved landing mock). The header
- * offers "Log ind" and "Opret gratis"; the hero states the promise and the
- * free cap (`MONITOR_FREE_LIMIT`, the database default) and takes a URL
- * straight away: it opens the add form with the URL filled in (signed-out
- * visitors pass the login page first, which keeps it and links to signup).
- * Three steps explain how it works.
+ * `/monitor`: the public landing page (approved landing mock), framed like
+ * the main site: the ALNYRON lockup in the header links to the frontpage
+ * (`MONITOR_SITE_HOME_HREF`), and the site footer (Danish) closes the page.
+ * The header offers "Log ind" and "Opret gratis"; the hero states the
+ * promise and the free cap (`MONITOR_FREE_LIMIT`, the database default) and
+ * takes a URL straight away: it opens the add form with the URL filled in
+ * (signed-out visitors pass the login page first, which keeps it and links
+ * to signup). Three steps explain how it works.
  */
 export default async function MonitorLandingPage() {
   const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Monitor" });
-  const tNav = await getTranslations({ locale: AUTH_LOCALE, namespace: "Nav" });
 
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="mx-auto flex w-full max-w-content flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-4">
-        <MonitorBrand name={t("name")} />
+        <MonitorBrand href={MONITOR_SITE_HOME_HREF} />
         <nav aria-label={t("shell.navLabel")} className="flex items-center gap-4">
           <Link href={MONITOR_LOGIN_PATH} className="inline-flex min-h-11 items-center">
             {t("landing.ctaLogin")}
@@ -97,13 +99,7 @@ export default async function MonitorLandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-content justify-center px-6 py-4">
-          <Link href={SYSTEM_PAGE_PATHNAMES.privacy} className="inline-flex min-h-11 items-center text-small">
-            {tNav("privacy")}
-          </Link>
-        </div>
-      </footer>
+      <SiteFooter locale={AUTH_LOCALE} />
     </div>
   );
 }

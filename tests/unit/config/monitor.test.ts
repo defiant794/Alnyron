@@ -16,6 +16,7 @@ import {
   MONITOR_DASHBOARD_PATH,
   MONITOR_NEW_PATH,
   MONITOR_SETTINGS_PATH,
+  MONITOR_SITE_HOME_HREF,
   MONITOR_FREE_LIMIT,
   MONITOR_PUBLIC_PATHS,
   monitorDetailPath,
@@ -61,8 +62,12 @@ describe("MONITOR_* path constants — MON-AC58/MON-AC67", () => {
     expect(MONITOR_SETTINGS_PATH).toBe("/monitor/settings");
   });
 
-  it("MON-AC67: MONITOR_FREE_LIMIT is 5", () => {
-    expect(MONITOR_FREE_LIMIT).toBe(5);
+  it("MCH-AC1b / MCH-AC4b: MONITOR_SITE_HOME_HREF is /", () => {
+    expect(MONITOR_SITE_HOME_HREF).toBe("/");
+  });
+
+  it("MCH-AC5a / MON-AC67: MONITOR_FREE_LIMIT is 2", () => {
+    expect(MONITOR_FREE_LIMIT).toBe(2);
   });
 
   it("MON-AC58j: monitorDetailPath returns /monitor/monitors/<id>", () => {

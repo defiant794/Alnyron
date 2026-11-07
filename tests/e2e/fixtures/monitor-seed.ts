@@ -59,6 +59,11 @@ export const E2E_MONITOR_SIGNUP_EMAIL = `e2e-monitor-signup@${E2E_EMAIL_DOMAIN}`
 export const E2E_MONITOR_OTHER_EMAIL = `e2e-monitor-other@${E2E_EMAIL_DOMAIN}`;
 export const E2E_MONITOR_OTHER_UUID = "00000000-0000-0000-e2e0-000000000025";
 
+/** monitor_user seeded WITHOUT an explicit monitor_limit — relies on the column
+ *  default (2, set by migration 20261107000300). Used exclusively by MCH-E10. */
+export const E2E_MONITOR_CAP2_EMAIL = `e2e-monitor-cap2@${E2E_EMAIL_DOMAIN}`;
+export const E2E_MONITOR_CAP2_UUID = "00000000-0000-0000-e2e0-000000000026";
+
 // ── Shared insert helper ───────────────────────────────────────────────────────
 
 async function insertUser(
@@ -67,12 +72,19 @@ async function insertUser(
   email: string,
   role: "admin" | "mylife_user" | "owner" | "monitor_user",
   password: string,
+  /** When false, skip the explicit monitor_limit upsert so the trigger-created
+   *  profile retains the column default. Only meaningful for monitor_user. */
+  explicitLimit = true,
 ): Promise<void> {
   await client.query("BEGIN");
   try {
     if (role === "monitor_user") {
-      // No allowlist row for monitor_user (public signup path)
-      // The profile row is created by the trigger with role='monitor_user'
+      // No allowlist row for monitor_user (public signup path).
+      // handle_new_user (migration 0400) fires an AFTER INSERT trigger on
+      // auth.users and inserts the profile row with role='monitor_user' and
+      // no explicit monitor_limit — the column default applies.
+      // When explicitLimit=true (the default) the upsert below overrides the
+      // default to 5; when false the trigger-created row is left untouched.
     } else {
       await client.query(
         `INSERT INTO public.user_allowlist (email, role)
@@ -111,13 +123,14 @@ async function insertUser(
       [id, id, email],
     );
 
-    // For monitor_user: insert profile directly with role='monitor_user' (handle_new_user does this;
-    // in e2e we seed directly since the hook is applied to e2e project only)
-    if (role === "monitor_user") {
+    // For monitor_user: upsert profile with explicit monitor_limit = 5 (the
+    // seeded cap used by most e2e tests). Pass explicitLimit=false to let the
+    // trigger-created profile keep the column default instead (MCH-E10).
+    if (role === "monitor_user" && explicitLimit) {
       await client.query(
         `INSERT INTO public.profiles (user_id, email, role, monitor_limit)
          VALUES ($1, $2, 'monitor_user', 5)
-         ON CONFLICT (user_id) DO NOTHING`,
+         ON CONFLICT (user_id) DO UPDATE SET monitor_limit = 5`,
         [id, email],
       );
     }
@@ -142,6 +155,23 @@ export async function seedE2eMonitorUser(client: pg.PoolClient, password: string
 
 export async function cleanupE2eMonitorUser(client: pg.PoolClient): Promise<void> {
   await deleteUser(client, E2E_MONITOR_UUID, E2E_MONITOR_EMAIL);
+}
+
+// ── monitor_user with column-default cap (MCH-E10) ───────────────────────────
+
+/** Seed a monitor_user without an explicit monitor_limit so handle_new_user's
+ *  trigger-created profile keeps the column default (2, set by migration
+ *  20261107000300). If the trigger did not fire the test will fail fast — no
+ *  fallback insert, by design. */
+export async function seedE2eMonitorCap2User(
+  client: pg.PoolClient,
+  password: string,
+): Promise<void> {
+  await insertUser(client, E2E_MONITOR_CAP2_UUID, E2E_MONITOR_CAP2_EMAIL, "monitor_user", password, false);
+}
+
+export async function cleanupE2eMonitorCap2User(client: pg.PoolClient): Promise<void> {
+  await deleteUser(client, E2E_MONITOR_CAP2_UUID, E2E_MONITOR_CAP2_EMAIL);
 }
 
 // ── monitor_user for reset flow ───────────────────────────────────────────────

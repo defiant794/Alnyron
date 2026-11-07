@@ -33,6 +33,11 @@ vi.mock("@/services/monitor/monitors", () => ({
   listMonitorEvents: mockListMonitorEvents,
 }));
 vi.mock("@/app/monitor/(auth)/actions", () => ({ signOut: vi.fn() }));
+vi.mock("@/components/site/SiteFooter", () => ({
+  default: ({ locale }: { locale: string }) => (
+    <footer data-testid="site-footer" data-locale={locale} />
+  ),
+}));
 
 import MonitorDetailPage from "@/app/monitor/(panel)/monitors/[id]/page";
 import { loadMessages } from "@/i18n/messages";

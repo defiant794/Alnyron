@@ -38,9 +38,14 @@ function fillTemplate(template: string, params: RouteParams): string {
  * `/en/[slug]` until hydration. The segments are the same on the server and
  * in the browser.
  *
- * Client components rendered by the `[locale]` layout only (site header and
+ * Client components rendered by the `[locale]` layout (site header and
  * footer): `useSelectedLayoutSegments` is relative to the calling layout, so
- * inside a page it would miss the page's own segments.
+ * inside a page it would miss the page's own segments. One caller renders
+ * outside `[locale]`: SiteFooter's privacy `NavLink` under the raw `/monitor`
+ * area (the landing page and `MonitorShell`), with the locale from the
+ * monitor layout's `NextIntlClientProvider`. There the route is built from
+ * Monitor's own segments, and no Monitor route equals `/privacy`, so the
+ * footer's current-page mark stays inert.
  */
 export function useCurrentRoute(): RouteHref {
   const params = useParams<RouteParams>();
@@ -55,7 +60,9 @@ export function useCurrentRoute(): RouteHref {
 /**
  * Locale-aware path of the current page (`/`, `/en`, `/contact`,
  * `/en/apps`): the same form as server-built nav hrefs, so equality marks the
- * current page. Client components rendered by the `[locale]` layout only.
+ * current page. Client components rendered by the `[locale]` layout, plus
+ * SiteFooter's `NavLink` under `/monitor`, where it never marks (see
+ * {@link useCurrentRoute}).
  */
 export function useCurrentPath(): string {
   const href = useCurrentRoute();

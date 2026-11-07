@@ -28,6 +28,11 @@ vi.mock("@/services/auth/require-role", () => ({ requireMonitor: mockRequireMoni
 // The change-password form posts to the area's updatePassword action (the
 // SetPasswordForm pattern of /monitor/reset); "Log ud" posts to signOut.
 vi.mock("@/app/monitor/(auth)/actions", () => ({ signOut: vi.fn(), updatePassword: vi.fn() }));
+vi.mock("@/components/site/SiteFooter", () => ({
+  default: ({ locale }: { locale: string }) => (
+    <footer data-testid="site-footer" data-locale={locale} />
+  ),
+}));
 
 import SettingsPage from "@/app/monitor/(panel)/settings/page";
 import { loadMessages } from "@/i18n/messages";

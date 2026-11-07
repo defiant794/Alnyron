@@ -6,7 +6,8 @@
  * sync_profile_email_from_auth keeping role='monitor_user' on email change,
  * and monitor_user RLS isolation from admin/MyLife tables.
  *
- * These tests are RED until migration 0400 is applied to the target DB.
+ * These tests need migration 0400 on the target DB. MCH-AC5d / MON-AC53f also needs
+ * 20261107000300 (column default 2) and skips while the target lacks it.
  * Run against the isolated e2e project via:
  *   npm run test:integration:e2e-project -- tests/integration/rls/rls-monitor-signup.test.ts
  *
@@ -15,6 +16,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DB_AVAILABLE, getClient, type PoolClient } from "./helpers/db.js";
+import { FREE_LIMIT_SKIP_REASON, freeLimitApplied } from "./helpers/monitor-limit.js";
 import {
   ADMIN_UUID,
   ADMIN_EMAIL,
@@ -62,9 +64,12 @@ const ALLOWLISTED_EMAIL = "admin-squatter@test.local";
 
 describe.skipIf(!DB_AVAILABLE)("RLS — monitor public-signup (0400 semantics)", () => {
   let client: PoolClient;
+  /** profiles.monitor_limit defaults to 2 on the target (20261107000300 applied). */
+  let freeLimitOnTarget: boolean;
 
   beforeAll(async () => {
     client = await getClient();
+    freeLimitOnTarget = await freeLimitApplied(client);
   });
 
   afterAll(async () => {
@@ -87,14 +92,15 @@ describe.skipIf(!DB_AVAILABLE)("RLS — monitor public-signup (0400 semantics)",
       });
     }, 12_000);
 
-    it("MON-AC53f: unlisted email → monitor_limit = 5 (column default)", async () => {
+    it("MCH-AC5d / MON-AC53f: unlisted email → monitor_limit = 2 (column default)", async ({ skip }) => {
+      skip(!freeLimitOnTarget, FREE_LIMIT_SKIP_REASON);
       await withTx(client, async (c) => {
         await insertAuthUserRaw(c, MONITOR_SIGNUP_UUID, MONITOR_SIGNUP_EMAIL);
         const { rows } = await c.query<{ monitor_limit: number | null }>(
           "SELECT monitor_limit FROM public.profiles WHERE user_id = $1",
           [MONITOR_SIGNUP_UUID],
         );
-        expect(rows).toEqual([{ monitor_limit: 5 }]);
+        expect(rows).toEqual([{ monitor_limit: 2 }]);
       });
     }, 12_000);
   });

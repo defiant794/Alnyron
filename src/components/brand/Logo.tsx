@@ -8,9 +8,12 @@ const MARK = { src: "/brand/logo-mark.png", width: 235, height: 175 } as const;
 export type LogoProps = {
   /** Show the ALNYRON wordmark to the right of the mark. */
   wordmark?: boolean;
-  /** Wrap the logo in a link to the home page. */
+  /** Wrap the logo in a link to `href`. */
   asLink?: boolean;
-  /** Home URL of the page's locale (`/` or `/en`) used by `asLink`. Defaults to `/`. */
+  /**
+   * Link target used by `asLink`: the locale's home on the site (`/` or
+   * `/en`), or an area's home such as the Monitor dashboard. Defaults to `/`.
+   */
   href?: string;
   /** Preload the mark, for the above-the-fold header instance. */
   priority?: boolean;
@@ -18,7 +21,7 @@ export type LogoProps = {
 };
 
 /**
- * Alnyron logo: the A-mark, optionally with the wordmark, optionally linked to the home page.
+ * Alnyron logo: the A-mark, optionally with the wordmark, optionally linked to `href`.
  * Either way it is announced once as "Alnyron": the mark alone carries the alt
  * text; with the wordmark the lockup is one labelled image and the mark itself
  * is decorative.

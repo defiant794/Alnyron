@@ -27,30 +27,13 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DB_AVAILABLE, getClient, type PoolClient } from "../rls/helpers/db.js";
+import { transactionControlStatements } from "../rls/helpers/migration-sql.js";
 import { seedCategory, seedDraftPage, seedRoute, withTx } from "../rls/helpers/roles.js";
 
 const MIGRATION_SQL = fs.readFileSync(
   path.resolve("supabase/migrations/20261105000200_english_route_slugs.sql"),
   "utf-8",
 );
-
-/** Statement keywords that start, end or nest a transaction. */
-const TRANSACTION_CONTROL = /^(begin|start\s+transaction|commit|end|abort|rollback|savepoint|release|prepare\s+transaction)\b/i;
-
-/**
- * The statements of `sql` that control the transaction. Comments and
- * dollar-quoted bodies are removed first, so neither a `-- commit` remark nor
- * a function's `end;` counts.
- */
-function transactionControlStatements(sql: string): string[] {
-  return sql
-    .replace(/\$([A-Za-z_]\w*)?\$[\s\S]*?\$\1\$/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/--[^\n]*/g, "")
-    .split(";")
-    .map((statement) => statement.trim())
-    .filter((statement) => TRANSACTION_CONTROL.test(statement));
-}
 
 describe.skipIf(!DB_AVAILABLE)("english-slugs migration: DA route slugs equal EN route slugs", () => {
   let client: PoolClient;

@@ -447,7 +447,6 @@
     }
   },
   "Monitor": {
-    "name": "Monitor",
     "metaTitle": "Alnyron Monitor",
     "landing": {
       "metaTitle": "Få besked, når en webside ændrer sig",

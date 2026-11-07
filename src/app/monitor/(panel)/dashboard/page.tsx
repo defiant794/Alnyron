@@ -30,7 +30,7 @@ const DOT: Record<MonitorHealth, string> = {
  * `/monitor/dashboard` (approved dashboard mock): the user's monitors as one
  * card of rows (status dot, name and URL, interval or pause, last change),
  * each row opening the monitor; "Tilføj overvågning"; the usage pill
- * ("2 / 5 overvågninger brugt", or just the count when uncapped). Without
+ * ("1 / 2 overvågninger brugt", or just the count when uncapped). Without
  * monitors a first-run card takes a URL and opens the add form with it.
  * Owner and `monitor_user` only; RLS returns only the user's own monitors.
  */

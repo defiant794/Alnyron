@@ -44,6 +44,11 @@ vi.mock("@/services/monitor/monitors", () => ({
   getMonitorUsage: mockGetMonitorUsage,
 }));
 vi.mock("@/app/monitor/(auth)/actions", () => ({ signOut: vi.fn() }));
+vi.mock("@/components/site/SiteFooter", () => ({
+  default: ({ locale }: { locale: string }) => (
+    <footer data-testid="site-footer" data-locale={locale} />
+  ),
+}));
 
 import DashboardPage from "@/app/monitor/(panel)/dashboard/page";
 import { loadMessages } from "@/i18n/messages";
