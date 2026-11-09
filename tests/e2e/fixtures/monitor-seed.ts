@@ -64,6 +64,10 @@ export const E2E_MONITOR_OTHER_UUID = "00000000-0000-0000-e2e0-000000000025";
 export const E2E_MONITOR_CAP2_EMAIL = `e2e-monitor-cap2@${E2E_EMAIL_DOMAIN}`;
 export const E2E_MONITOR_CAP2_UUID = "00000000-0000-0000-e2e0-000000000026";
 
+/** monitor_user of the monitor-ship-routing spec (Monitor-host 404s, recovery on the Monitor host). */
+export const E2E_MONITOR_SHIP_EMAIL = `e2e-monitor-ship@${E2E_EMAIL_DOMAIN}`;
+export const E2E_MONITOR_SHIP_UUID = "00000000-0000-0000-e2e0-000000000027";
+
 // ── Shared insert helper ───────────────────────────────────────────────────────
 
 async function insertUser(
@@ -182,6 +186,16 @@ export async function seedE2eMonitorResetUser(client: pg.PoolClient, password: s
 
 export async function cleanupE2eMonitorResetUser(client: pg.PoolClient): Promise<void> {
   await deleteUser(client, E2E_MONITOR_RESET_UUID, E2E_MONITOR_RESET_EMAIL);
+}
+
+// ── monitor_user for the monitor-ship-routing spec ────────────────────────────
+
+export async function seedE2eMonitorShipUser(client: pg.PoolClient, password: string): Promise<void> {
+  await insertUser(client, E2E_MONITOR_SHIP_UUID, E2E_MONITOR_SHIP_EMAIL, "monitor_user", password);
+}
+
+export async function cleanupE2eMonitorShipUser(client: pg.PoolClient): Promise<void> {
+  await deleteUser(client, E2E_MONITOR_SHIP_UUID, E2E_MONITOR_SHIP_EMAIL);
 }
 
 // ── second monitor_user (another account's monitors) ──────────────────────────

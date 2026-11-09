@@ -1,11 +1,14 @@
+import { allowlistedOrigin, type HostSchemes } from "@/lib/host-origin";
+
 /**
  * Monitor: the public website-change monitor. A route group outside
  * `[locale]` (like the admin and MyLife), Danish only (`AUTH_LOCALE` in
- * `config/auth-areas`), served at `/monitor/*`. Unlike the other areas its
- * home is a public landing page and anyone may sign up; the signed-in panel
- * starts at the dashboard. Every link is built from these constants, so the
- * monitor host rewrite (monitor.alnyron.dk, a later slice) needs no page
- * changes.
+ * `config/auth-areas`), served at the root of the Monitor host (the
+ * middleware rewrites `monitor.alnyron.dk/login` to `/monitor/login` and
+ * serves `/monitor/*` there as it is); the main host's `/monitor*` redirects
+ * there. Unlike the other areas its home is a public landing page and anyone
+ * may sign up; the signed-in panel starts at the dashboard. Every in-area
+ * link is built from these constants.
  */
 export const MONITOR_HOME_PATH = "/monitor";
 export const MONITOR_LOGIN_PATH = "/monitor/login";
@@ -20,13 +23,63 @@ export const MONITOR_NEW_PATH = "/monitor/monitors/new";
 export const MONITOR_SETTINGS_PATH = "/monitor/settings";
 
 /**
- * The main site's frontpage: where the ALNYRON lockup leads outside the panel
- * (the landing page and the auth card; inside the panel it leads to the
- * dashboard). Relative while Monitor is served under `/monitor` on the main
- * host; the monitor host slice must make it the main site's absolute URL,
- * because on monitor.alnyron.dk `/` would be the Monitor landing.
+ * The Monitor hostnames and the scheme each is served over: production behind
+ * Cloudflare (HTTPS) and the local dev/e2e host (HTTP). Nothing else is a
+ * Monitor host.
  */
-export const MONITOR_SITE_HOME_HREF = "/";
+const MONITOR_HOST_SCHEMES: HostSchemes = {
+  "monitor.alnyron.dk": "https",
+  "monitor.localhost": "http",
+};
+
+/**
+ * Origin of the Monitor host named by a `Host` header value (case-insensitive,
+ * any port, with or without the trailing FQDN dot), or `null` when it is not
+ * a Monitor host. The origin is built from the allowlist above, never echoed
+ * from the header (`allowlistedOrigin`): `monitor.alnyron.dk:443` and
+ * `monitor.alnyron.dk.` -> `https://monitor.alnyron.dk`,
+ * `monitor.localhost:3000` -> `http://monitor.localhost:3000`. Those two
+ * origins are exactly the `.RedirectTo` values the DA recovery template pins
+ * its Monitor link to (`supabase/templates/recovery.html`); any other port
+ * gets the Site URL link.
+ */
+export function monitorOrigin(host: string | null): string | null {
+  return allowlistedOrigin(host, MONITOR_HOST_SCHEMES);
+}
+
+/**
+ * Whether a `Host` header value names the Monitor host (`monitor.alnyron.dk`,
+ * `monitor.localhost`, any port, with or without the trailing FQDN dot).
+ */
+export function isMonitorHost(host: string | null): boolean {
+  return monitorOrigin(host) !== null;
+}
+
+/**
+ * Origin of the Monitor host that belongs to the main site at `siteUrl`
+ * (`NEXT_PUBLIC_SITE_URL`, read by the caller at call time): `monitor.` in
+ * front of its host, same scheme and port (`https://alnyron.dk` ->
+ * `https://monitor.alnyron.dk`, `http://localhost:3000` ->
+ * `http://monitor.localhost:3000`). The main host's `/monitor*` redirects
+ * there, the site nav links there and `/auth/confirm` forwards Monitor links
+ * there, so no separate Monitor URL variable can drift from the site's.
+ *
+ * @throws when the result is not exactly what {@link monitorOrigin} builds for
+ *   that host (a site URL such as `https://www.alnyron.dk` or a preview host),
+ *   so a wrong site URL fails loudly instead of sending visitors and one-time
+ *   tokens to a host this app does not serve as Monitor.
+ */
+export function monitorSiteOrigin(siteUrl: string): string {
+  const site = new URL(siteUrl);
+  const host = `monitor.${site.host}`;
+  const origin = `${site.protocol}//${host}`;
+  if (monitorOrigin(host) !== origin) {
+    throw new Error(
+      "The site URL does not map to a Monitor host (https://monitor.alnyron.dk, http://monitor.localhost[:port])",
+    );
+  }
+  return origin;
+}
 
 /** Detail page (header, actions, change history) of one monitor. */
 export function monitorDetailPath(id: string): string {
@@ -48,8 +101,9 @@ export const MONITOR_PUBLIC_PATHS: ReadonlySet<string> = new Set([
 
 /**
  * Robots directive of every Monitor page (also sent as an `X-Robots-Tag`
- * header for `/monitor` and `/monitor/*`, next.config.mjs): the public
- * landing and signup pages included, nothing in the area is indexed.
+ * header for `/monitor`, `/monitor/*` and every path on the Monitor host,
+ * next.config.mjs): the public landing and signup pages included, nothing in
+ * the area is indexed.
  */
 export const MONITOR_ROBOTS = "noindex, nofollow";
 
@@ -171,5 +225,5 @@ export const MONITOR_SUMMARY_MAX_LINE_CHARS = 160;
 /** Characters in a whole change summary, line breaks included. */
 export const MONITOR_SUMMARY_MAX_CHARS = 1000;
 
-/** User-Agent of every page request the checker makes. */
-export const MONITOR_FETCH_USER_AGENT = "AlnyronMonitor/1.0 (+https://alnyron.dk/monitor)";
+/** User-Agent of every page request the checker makes; its URL is the Monitor landing page. */
+export const MONITOR_FETCH_USER_AGENT = "AlnyronMonitor/1.0 (+https://monitor.alnyron.dk)";

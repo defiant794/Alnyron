@@ -161,10 +161,12 @@ site_url = "http://localhost:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-# The MyLife password-reset action passes its own origin as redirectTo (never user input); the DA
-# templates build the link from {{ .RedirectTo }} only when it is exactly https://mylife.alnyron.dk or
-# http://mylife.localhost:3000. Production: add https://mylife.alnyron.dk.
-additional_redirect_urls = ["http://mylife.localhost:3000"]
+# The MyLife and Monitor password-reset actions pass their host's origin as redirectTo (never user
+# input); the DA recovery template builds the link from {{ .RedirectTo }} only when it is exactly
+# https://mylife.alnyron.dk / http://mylife.localhost:3000 or https://monitor.alnyron.dk /
+# http://monitor.localhost:3000. GoTrue's allow-list glob `https://x/**` does not match a bare
+# `https://x`, so production lists both exact origins (docs/runbooks/monitor-go-live.md step 3).
+additional_redirect_urls = ["http://mylife.localhost:3000", "http://monitor.localhost:3000"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -176,8 +178,10 @@ enable_refresh_token_rotation = true
 # Allows refresh tokens to be reused after expiry, up to the specified interval in seconds.
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
-# Allow/disallow new user signups to your project. Off: admins are invited (allowlist + hook).
-enable_signup = false
+# Allow/disallow new user signups to your project. On here (local stack only): public Monitor
+# signup; the before-user-created hook refuses every allowlisted (admin/MyLife) address.
+# Production keeps signup off until the go-live flip (docs/runbooks/monitor-go-live.md step 8).
+enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
@@ -200,7 +204,8 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+# 10/h, the production value set by the go-live runbook: open signup shares the Resend quota.
+email_sent = 10
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
@@ -221,8 +226,9 @@ web3 = 30
 # secret = ""
 
 [auth.email]
-# Allow/disallow new user signups via email to your project. Off: invite only.
-enable_signup = false
+# Allow/disallow new user signups via email to your project. On here (local stack only), like
+# enable_signup above; production flips it with the go-live runbook.
+enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
@@ -248,15 +254,17 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# DA templates (F1.1, MyLife). Links go to <origin>/auth/confirm with the token hash (verifyOtp),
-# never to {{ .ConfirmationURL }}. The MyLife branch is pinned to the two exact MyLife origins:
-# a MyLife reset (redirectTo = https://mylife.alnyron.dk or http://mylife.localhost:3000, allowlisted
-# above) links {{ .RedirectTo }}/...&next=/mylife/set-password. Every other {{ .RedirectTo }} (the
-# Site URL GoTrue fills in when no redirectTo is sent, as for admin resets and dashboard invites, or
-# any other allowlisted URL) gets {{ .SiteURL }}/...&next=/admin/set-password, so no other origin
-# ever receives a token link. /auth/confirm redirects by role either way.
-# Production: paste the same subject + HTML into the dashboard and set Site URL to the public
-# origin (F1.7).
+# DA templates (F1.1, MyLife, Monitor). Links go to <origin>/auth/confirm with the token hash
+# (verifyOtp), never to {{ .ConfirmationURL }}. The MyLife branch is pinned to the two exact MyLife
+# origins: a MyLife reset (redirectTo = https://mylife.alnyron.dk or http://mylife.localhost:3000,
+# allowlisted above) links {{ .RedirectTo }}/...&next=/mylife/set-password. The recovery template's
+# Monitor branch likewise pins https://monitor.alnyron.dk and http://monitor.localhost:3000 and links
+# {{ .RedirectTo }}/...&next=/monitor/reset. Every other {{ .RedirectTo }} (the Site URL GoTrue fills
+# in when no redirectTo is sent, as for admin resets and dashboard invites, or any other allowlisted
+# URL) gets {{ .SiteURL }}/...&next=/admin/set-password, so no other origin ever receives a token
+# link. /auth/confirm redirects by role either way.
+# Production: paste the same subject + HTML into the dashboard (or the go-live PATCH) and set Site
+# URL to the public origin (F1.7).
 [auth.email.template.invite]
 subject = "Du er inviteret til Alnyron"
 content_path = "./supabase/templates/invite.html"
@@ -265,9 +273,9 @@ content_path = "./supabase/templates/invite.html"
 subject = "Nulstil din adgangskode"
 content_path = "./supabase/templates/recovery.html"
 
-# Monitor signup confirmation (public signup, slice A). Always the Site URL link with
-# next=/monitor/dashboard: /auth/confirm keeps a type=signup link inside /monitor/. Signup stays
-# off here and in production until slice C (enable_signup above).
+# Monitor signup confirmation (public signup). Always the Site URL link with next=/monitor/dashboard:
+# /auth/confirm forwards a type=signup link from the main host to the Monitor host before verifying
+# it, so the session lands there. Production pastes the same subject + HTML in the go-live PATCH.
 [auth.email.template.confirmation]
 subject = "Bekræft din e-mail til Alnyron Monitor"
 content_path = "./supabase/templates/confirmation.html"
@@ -305,8 +313,9 @@ max_frequency = "5s"
 # public.user_allowlist (admin/MyLife accounts are created with admin.createUser, which skips the
 # hook: docs/runbooks/area-user-onboarding.md) and admits every other email as a public Monitor
 # signup (monitor_user).
-# Production: set the same hook, signup-off, password length and secure password change in the
-# dashboard (F1.1/F1.7).
+# Production: set the same hook, password length and secure password change in the dashboard
+# (F1.1/F1.7); signup stays off there until the hook is verified and the go-live flip
+# (docs/runbooks/monitor-go-live.md steps 0a-8).
 [auth.hook.before_user_created]
 enabled = true
 uri = "pg-functions://postgres/public/hook_before_user_created"

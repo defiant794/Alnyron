@@ -1,6 +1,9 @@
 /**
- * Unit tests — middleware: monitor route protection.
+ * Unit tests — middleware: monitor route protection on the Monitor host.
  * Journey: monitor-web-area  MON-AC44, MON-AC50, MON-AC61
+ *
+ * Tests run against the canonical Monitor host (monitor.localhost:3000).
+ * Main-host /monitor* → 308 behavior is covered in middleware-monitor-subdomain.test.ts.
  *
  * Verifies:
  *   - Unauthenticated GET /monitor/dashboard → 307 to /monitor/login?next=...
@@ -8,8 +11,7 @@
  *   - Public paths (/monitor, /monitor/login, /monitor/signup,
  *     /monitor/forgot-password) pass through without 307; getClaims is called
  *     (updateSession runs — session refresh).
- *   - /monitor/* goes through updateSession, never handleI18n (/da/monitor
- *     never occurs: MON-AC50/MON-AC61).
+ *   - /monitor/* goes through updateSession, never handleI18n (MON-AC50/MON-AC61).
  *
  * Mirrors tests/integration/admin-auth/middleware-protection.test.ts.
  */
@@ -46,12 +48,16 @@ vi.mock("@/config/env", () => ({
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "test-publishable-key",
     NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
   })),
+  parseSiteEnv: vi.fn(() => ({
+    NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
+  })),
 }));
 
 import middleware from "@/middleware";
 
 function monitorRequest(pathname: string): NextRequest {
-  return new NextRequest(new URL(pathname, "http://localhost:3000"));
+  const url = new URL(pathname, "http://monitor.localhost:3000");
+  return new NextRequest(url, { headers: { host: "monitor.localhost:3000" } });
 }
 
 describe("middleware — MON-AC44/MON-AC50/MON-AC61: monitor route protection", () => {

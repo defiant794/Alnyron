@@ -1,6 +1,11 @@
 /**
- * Unit tests: /auth/confirm route — type=signup branch for monitor area.
+ * Unit tests: /auth/confirm route — type=signup branch on the Monitor host.
  * Journey: monitor-web-area  MON-AC11, MON-AC12, MON-AC13, MON-AC62, MON-AC63
+ *
+ * Tests run against the canonical Monitor host (monitor.localhost:3000).
+ * On the Monitor host, type=signup is handled directly (pinnedArea=monitor,
+ * no forwarding). Main-host forwarding is covered in
+ * confirm-route-monitor-forward.test.ts.
  *
  * Verifies:
  *   MON-AC11: type=signup + valid token + next=/monitor/dashboard
@@ -47,7 +52,7 @@ import { CONFIRM_TYPES } from "@/app/auth/confirm/confirm-types";
 const SIGNUP_TOKEN = { token_hash: "abc123", type: "signup" };
 const TEST_USER_ID = "00000000-0000-0000-0000-000000000099";
 
-function confirmReq(params: Record<string, string>, host = "localhost:3000"): NextRequest {
+function confirmReq(params: Record<string, string>, host = "monitor.localhost:3000"): NextRequest {
   const url = new URL("/auth/confirm", `http://${host}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   return new NextRequest(url, { headers: { host } });

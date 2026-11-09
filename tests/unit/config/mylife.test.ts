@@ -219,9 +219,19 @@ describe("Email templates: ML-AC30 only the exact MyLife origins as RedirectTo l
     "ML-AC30: %s.html builds the MyLife link from RedirectTo only when it is exactly a pinned origin",
     (type) => {
       const template = readFileSync(resolve(process.cwd(), `supabase/templates/${type}.html`), "utf-8");
+      // recovery.html also has the Monitor branch (SHIP-AC5d/e), pinned the same way to the two
+      // exact Monitor origins and placed before the Site URL fallback.
+      const monitorBranch =
+        type === "recovery"
+          ? [
+              `{{ else if or (eq .RedirectTo "https://monitor.alnyron.dk") (eq .RedirectTo "http://monitor.localhost:3000") }}`,
+              `<a href="{{ .RedirectTo }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery&amp;next=/monitor/reset">`,
+            ]
+          : [];
       const parts = [
         `{{ if or (eq .RedirectTo "${PROD_ORIGIN}") (eq .RedirectTo "${LOCAL_ORIGIN}") }}`,
         `<a href="{{ .RedirectTo }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=${type}&amp;next=/mylife/set-password">`,
+        ...monitorBranch,
         "{{ else }}",
         `<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=${type}&amp;next=/admin/set-password">`,
         "{{ end }}",
@@ -231,8 +241,9 @@ describe("Email templates: ML-AC30 only the exact MyLife origins as RedirectTo l
       expect(positions).not.toContain(-1);
       expect(positions).toEqual([...positions].sort((a, b) => a - b));
       expect(template.match(/\{\{ if /g)).toHaveLength(1);
-      // RedirectTo is printed only in the pinned branch's link.
-      expect(template.match(/\{\{ \.RedirectTo \}\}/g)).toHaveLength(1);
+      expect(template.match(/\{\{ else if /g) ?? []).toHaveLength(monitorBranch.length > 0 ? 1 : 0);
+      // RedirectTo is printed only in the pinned branches' links (one per pinned branch).
+      expect(template.match(/\{\{ \.RedirectTo \}\}/g)).toHaveLength(monitorBranch.length > 0 ? 2 : 1);
     },
   );
 });

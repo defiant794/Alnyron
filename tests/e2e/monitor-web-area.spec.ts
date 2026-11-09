@@ -48,13 +48,14 @@ import {
   randomE2ePassword,
   generateAuthLink,
 } from "./fixtures/monitor-seed";
+import { firstResponse } from "./fixtures/first-response";
 import { getClient, type PoolClient } from "../integration/rls/helpers/db";
 import messages from "../../messages/da.json";
 import { MONITOR_FREE_LIMIT } from "../../src/config/monitor";
 
 const { Auth, Monitor } = messages;
 
-const BASE = "http://localhost:3000";
+const BASE = "http://monitor.localhost:3000";
 
 // ── Shared page helpers ───────────────────────────────────────────────────────
 
@@ -88,7 +89,7 @@ async function signInToDashboard(page: Page, email: string, password: string): P
 
 test.describe("MON-AC1: /monitor landing page", () => {
   test("MON-AC1a: renders with signup CTA, login link, free-cap copy, noindex", async ({ page }) => {
-    await page.goto(`${BASE}/monitor`);
+    const response = await firstResponse(page, `${BASE}/monitor`);
     // CTA to signup
     await expect(page.getByRole("link", { name: Monitor.landing.ctaSignup })).toBeVisible();
     // Login link
@@ -101,8 +102,7 @@ test.describe("MON-AC1: /monitor landing page", () => {
     const robots = await page.locator('meta[name="robots"]').getAttribute("content");
     expect(robots).toContain("noindex");
     // X-Robots-Tag header
-    const response = await page.request.get(`${BASE}/monitor`);
-    expect(response.headers()["x-robots-tag"]).toContain("noindex");
+    expect(await response.headerValue("x-robots-tag")).toContain("noindex");
   });
 });
 
@@ -303,8 +303,10 @@ test.describe("MON-AC20/MON-AC21/MON-AC43: set a new password", () => {
 
   test("MON-AC20a+MON-AC21a: recovery link → /monitor/reset → new password → /monitor/dashboard", async ({ page }) => {
     test.skip(!SECRET_KEY_AVAILABLE, "Requires SUPABASE_SECRET_KEY");
-    // The DA recovery link carries next=/admin/set-password; /auth/confirm lands a
-    // monitor_user on Monitor's reset page instead (role-aware landing).
+    // A link opened on the Monitor host is pinned to Monitor: the cross-area next the Site URL
+    // template carries (/admin/set-password) is ignored and a reset lands on /monitor/reset there,
+    // where the session was just set. (Verified on the main host, the same link would land on
+    // /monitor/reset by role but without a Monitor-host session: see monitor-go-live.md.)
     const link = await generateAuthLink("recovery", E2E_MONITOR_RESET_EMAIL, `${BASE}/auth/confirm?next=/admin/set-password`);
     await page.goto(link);
     await expect(page).toHaveURL(/\/monitor\/reset$/);
@@ -755,15 +757,15 @@ test.describe("MON-AC42: /monitor/settings", () => {
 
 test.describe("MON-AC44: unauthenticated → redirect to login", () => {
   test("MON-AC44a: GET /monitor/dashboard unauthenticated → 307 to /monitor/login?next=...", async ({ page }) => {
-    const response = await page.request.get(`${BASE}/monitor/dashboard`, { maxRedirects: 0 });
+    const response = await firstResponse(page, `${BASE}/monitor/dashboard`);
     expect(response.status()).toBe(307);
-    expect(response.headers()["location"]).toMatch(/\/monitor\/login/);
-    expect(response.headers()["location"]).toContain("next=");
+    expect(await response.headerValue("location")).toMatch(/\/monitor\/login/);
+    expect(await response.headerValue("location")).toContain("next=");
   });
 
   test("MON-AC50a: GET /monitor/dashboard does not redirect to /da/monitor", async ({ page }) => {
-    const response = await page.request.get(`${BASE}/monitor/dashboard`, { maxRedirects: 0 });
-    expect(response.headers()["location"] ?? "").not.toContain("/da/monitor");
+    const response = await firstResponse(page, `${BASE}/monitor/dashboard`);
+    expect((await response.headerValue("location")) ?? "").not.toContain("/da/monitor");
   });
 });
 
@@ -819,16 +821,39 @@ test.describe("MON-AC45/MON-AC46/MON-AC47/MON-AC48/MON-AC49: privilege bleed", (
     await expect(page).toHaveURL(/\/monitor\/dashboard/);
   });
 
-  test("MON-AC48a: monitor_user visits /admin → /admin/no-access", async ({ page }) => {
-    await signInToDashboard(page, E2E_MONITOR_EMAIL, monitorPwd);
-    await page.goto(`${BASE}/admin`);
+  test("MON-AC48a: monitor_user signed in on main host visits /admin → /admin/no-access", async ({ page }) => {
+    // Sign in on the main host so the session cookie is on localhost, not monitor.localhost
+    await page.goto("http://localhost:3000/admin/login");
+    await page.getByLabel(/e-mail/i).fill(E2E_MONITOR_EMAIL);
+    await page.getByLabel(/adgangskode/i).fill(monitorPwd);
+    await page.getByRole("button", { name: Auth.login.submit }).click();
+    await page.waitForURL((url) => url.pathname !== "/admin/login");
+    await page.goto("http://localhost:3000/admin");
     await expect(page).toHaveURL(/\/admin\/no-access/);
   });
 
-  test("MON-AC49a: monitor_user visits /mylife → /mylife/no-access", async ({ page }) => {
-    await signInToDashboard(page, E2E_MONITOR_EMAIL, monitorPwd);
-    await page.goto(`${BASE}/mylife`);
+  test("MON-AC49a: monitor_user signed in on main host visits /mylife → /mylife/no-access", async ({ page }) => {
+    // Sign in on the main host so the session cookie is on localhost, not monitor.localhost
+    await page.goto("http://localhost:3000/admin/login");
+    await page.getByLabel(/e-mail/i).fill(E2E_MONITOR_EMAIL);
+    await page.getByLabel(/adgangskode/i).fill(monitorPwd);
+    await page.getByRole("button", { name: Auth.login.submit }).click();
+    await page.waitForURL((url) => url.pathname !== "/admin/login");
+    await page.goto("http://localhost:3000/mylife");
     await expect(page).toHaveURL(/\/mylife\/no-access/);
+  });
+
+  test("MON-AC48b: monitor host /admin → 404 (admin area not served on Monitor host)", async ({ page }) => {
+    // On monitor.localhost, /admin is rewritten to /monitor/admin, a protected Monitor path:
+    // without a session it redirects to /monitor/login (SHIP-AC1f-int1); with one it is a 404
+    // (SHIP-AC1f-int2), never the admin panel.
+    const anonymous = await firstResponse(page, `${BASE}/admin`);
+    expect(anonymous.status()).toBe(307);
+    expect((await anonymous.headerValue("location")) ?? "").toContain("/monitor/login");
+
+    await signInToDashboard(page, E2E_MONITOR_EMAIL, monitorPwd);
+    const signedIn = await firstResponse(page, `${BASE}/admin`);
+    expect(signedIn.status()).toBe(404);
   });
 });
 

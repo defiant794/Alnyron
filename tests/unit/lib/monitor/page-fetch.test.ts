@@ -575,7 +575,7 @@ describe("fetchMonitorPage — ENG-AC5: page request headers", () => {
     await fetchMonitorPage("https://example.com/", { fetchImpl });
     const page = capturePageCall(calls);
     expect(getHeader(page!, "user-agent")).toBe(MONITOR_FETCH_USER_AGENT);
-    expect(MONITOR_FETCH_USER_AGENT).toBe("AlnyronMonitor/1.0 (+https://alnyron.dk/monitor)");
+    expect(MONITOR_FETCH_USER_AGENT).toBe("AlnyronMonitor/1.0 (+https://monitor.alnyron.dk)");
   });
 
   it("ENG-AC5s: page request includes accept-language: da", async () => {

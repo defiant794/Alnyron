@@ -6,6 +6,12 @@ import { getSiteSettings } from "@/services/content/settings";
 
 export interface SiteFooterProps {
   locale: Locale;
+  /**
+   * The main site's origin, given where the footer is rendered on another
+   * host (Monitor): the privacy link is then absolute, as a path would
+   * resolve against that host. Without it the link is a path.
+   */
+  siteOrigin?: string;
 }
 
 const LINK =
@@ -23,12 +29,13 @@ const yearFormat = new Intl.DateTimeFormat("da-DK", { year: "numeric", timeZone:
  * screen readers pause between company and CVR. The privacy link carries
  * `aria-current="page"` on the privacy page.
  */
-export default async function SiteFooter({ locale }: SiteFooterProps) {
+export default async function SiteFooter({ locale, siteOrigin }: SiteFooterProps) {
   const [{ companyName, contactEmail, cvr }, t, tNav] = await Promise.all([
     getSiteSettings(),
     getTranslations({ locale, namespace: "Footer" }),
     getTranslations({ locale, namespace: "Nav" }),
   ]);
+  const privacyPath = getPathname({ href: "/privacy", locale });
 
   return (
     <footer className="border-t border-border">
@@ -50,7 +57,7 @@ export default async function SiteFooter({ locale }: SiteFooterProps) {
             </a>
           </li>
           <li>
-            <NavLink href={getPathname({ href: "/privacy", locale })} className={LINK}>
+            <NavLink href={siteOrigin ? new URL(privacyPath, siteOrigin).href : privacyPath} className={LINK}>
               {tNav("privacy")}
             </NavLink>
           </li>

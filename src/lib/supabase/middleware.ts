@@ -50,13 +50,14 @@ function withPathname(request: NextRequest, pathname: string): URL {
 }
 
 /**
- * Supabase SSR session handling for `/admin/*`, `/mylife/*`, `/monitor` and
- * `/monitor/*`, `/auth/*` and every request on the MyLife host (architecture
- * §6, route protection layer 1). Public `[locale]` routes never reach this,
- * so they stay cookie-free and cacheable.
+ * Supabase SSR session handling for `/admin/*`, `/mylife/*`, `/auth/*` on
+ * the main host and every request on the MyLife and Monitor hosts
+ * (architecture §6, route protection layer 1). Public `[locale]` routes never
+ * reach this, so they stay cookie-free and cacheable.
  *
- * `rewritePath` (MyLife host) serves the request from that path instead
- * (`mylife.alnyron.dk/login` -> `/mylife/login`); the browser keeps its URL.
+ * `rewritePath` (MyLife and Monitor hosts) serves the request from that path
+ * instead (`mylife.alnyron.dk/login` -> `/mylife/login`,
+ * `monitor.alnyron.dk/login` -> `/monitor/login`); the browser keeps its URL.
  *
  * `getClaims()` verifies the access token and refreshes an expired session;
  * refreshed cookies go onto the request (for Server Components rendering

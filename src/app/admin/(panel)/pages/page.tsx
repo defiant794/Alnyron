@@ -6,8 +6,10 @@ import PagesTable, { type PagesTableRow } from "@/components/admin/PagesTable";
 import Card from "@/components/ui/Card";
 import { ADMIN_PAGES_PATH } from "@/config/admin";
 import { AUTH_LOCALE } from "@/config/auth-areas";
-import { SYSTEM_PAGE_IS_AREA, SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
+import { parseSiteEnv } from "@/config/env";
+import { SYSTEM_PAGE_AREA_ORIGIN } from "@/config/system-pages";
 import { loadMessages } from "@/i18n/messages";
+import { isContentPage } from "@/lib/validation/pages";
 import { listSystemPages } from "@/services/admin/pages";
 import { requireAdmin } from "@/services/auth/require-admin";
 
@@ -22,7 +24,8 @@ const HEADING_ID = "pages-heading";
  * `/admin/pages` ("Sider"): the system pages with their status, a link to
  * edit each (an app area like Monitor has a nav switch instead), and the nav
  * order. Pages are named by their fixed nav label; the Danish title is shown
- * under it (an app area, which has none, says what it is).
+ * under it (an app area, which has none, says what it is and the host it is
+ * served on, `monitor.alnyron.dk`).
  */
 export default async function AdminPagesPage() {
   await requireAdmin();
@@ -51,13 +54,15 @@ export default async function AdminPagesPage() {
               showInNav: page.showInNav,
               pinned: page.systemKey === "home",
             };
-            return SYSTEM_PAGE_IS_AREA[page.systemKey]
-              ? {
+            return isContentPage(page.systemKey)
+              ? { ...row, kind: "content", title: page.title, editHref: `${ADMIN_PAGES_PATH}/${page.id}` }
+              : {
                   ...row,
                   kind: "area",
-                  description: t("area.description", { path: SYSTEM_PAGE_PATHNAMES[page.systemKey] }),
-                }
-              : { ...row, kind: "content", title: page.title, editHref: `${ADMIN_PAGES_PATH}/${page.id}` };
+                  description: t("area.description", {
+                    host: new URL(SYSTEM_PAGE_AREA_ORIGIN[page.systemKey](parseSiteEnv().NEXT_PUBLIC_SITE_URL)).host,
+                  }),
+                };
           })}
           labelledBy={HEADING_ID}
           reorder={reorderNav}

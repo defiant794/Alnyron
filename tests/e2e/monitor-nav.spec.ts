@@ -237,43 +237,48 @@ test.describe("Monitor nav — needs DB", () => {
     await expect(header.getByRole("link", { name: MONITOR, exact: true })).toBeVisible();
   });
 
-  // ── AC-MONNAV-E04/AC6: href is /monitor on / (DA) ────────────────────────
+  // ── AC-MONNAV-E04/AC6: href is absolute Monitor subdomain URL on / (DA) ───
 
-  test("AC-MONNAV-E04: Monitor link on / has href '/monitor' (no locale prefix, AC6) and no hreflang", async ({
+  test("AC-MONNAV-E04: Monitor link on / has absolute Monitor subdomain href (AC6) and no hreflang", async ({
     page,
   }) => {
     // Monitor was toggled on by the previous test (serial block).
     await page.goto("/");
     const header = page.getByRole("banner");
     const link = header.getByRole("link", { name: MONITOR, exact: true });
-    await expect(link).toHaveAttribute("href", "/monitor");
+    // href is now the absolute Monitor subdomain URL, not a relative path
+    await expect(link).toHaveAttribute("href", "http://monitor.localhost:3000/");
     // The Danish page links the Danish area: no language change to announce.
     await expect(link).not.toHaveAttribute("hreflang");
   });
 
-  // ── AC-MONNAV-E05/AC6: href is /monitor on /en (EN) ──────────────────────
 
-  test("AC-MONNAV-E05: Monitor link on /en has href '/monitor', NOT '/en/monitor' (AC6), and hreflang 'da'", async ({
+  // ── AC-MONNAV-E05/AC6: href is absolute Monitor subdomain URL on /en ──────
+
+  test("AC-MONNAV-E05: Monitor link on /en has absolute Monitor subdomain href (AC6) and hreflang 'da'", async ({
     page,
   }) => {
     await page.goto("/en");
     const header = page.getByRole("banner");
     const link = header.getByRole("link", { name: MONITOR, exact: true });
     await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute("href", "/monitor");
+    // href is absolute, not '/monitor' or '/en/monitor'
+    await expect(link).toHaveAttribute("href", "http://monitor.localhost:3000/");
     // The Monitor area is Danish only: the English page's link says so.
     await expect(link).toHaveAttribute("hreflang", "da");
   });
 
-  // ── AC-MONNAV-E06: clicking Monitor link navigates to /monitor ────────────
+  // ── AC-MONNAV-E06: clicking Monitor link opens the Monitor area ──────────
 
-  test("AC-MONNAV-E06: clicking Monitor link on / navigates to /monitor", async ({
+  test("AC-MONNAV-E06: clicking Monitor link on / opens the Monitor landing on the Monitor host", async ({
     page,
   }) => {
     await page.goto("/");
     const header = page.getByRole("banner");
     await header.getByRole("link", { name: MONITOR, exact: true }).click();
-    await expect(page).toHaveURL((url) => url.pathname === "/monitor");
+    // Slice C: the area lives at the Monitor host's root (its `/` is the /monitor landing).
+    await expect(page).toHaveURL("http://monitor.localhost:3000/");
+    await expect(page.getByRole("heading", { level: 1, name: messages.Monitor.landing.title, exact: true })).toBeVisible();
   });
 
   // ── AC-MONNAV-E07: toggle off → Monitor gone from header ─────────────────
@@ -339,7 +344,8 @@ test.describe("Monitor nav — needs DB", () => {
     const hrefs = await nav.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("href")));
     const categoryAt = hrefs.flatMap((href, index) => (href !== null && categoryHrefs.has(href) ? [index] : []));
     expect(categoryAt.length, `the published ${PUBLIC_CATEGORY_KIND} category must be linked in the nav`).toBeGreaterThan(0);
-    expect(hrefs.indexOf("/monitor"), "Monitor must appear after every category link in the nav").toBeGreaterThan(
+    // Slice C: the Monitor item links the Monitor host's root (AC-MONNAV-E04).
+    expect(hrefs.indexOf("http://monitor.localhost:3000/"), "Monitor must appear after every category link in the nav").toBeGreaterThan(
       Math.max(...categoryAt),
     );
   });

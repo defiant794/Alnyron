@@ -102,6 +102,15 @@ const nextConfig = {
         has: [{ type: "host", value: "mylife\\.(?:alnyron\\.dk|localhost)\\.?" }],
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
+      // The Monitor host likewise, every page there (the public landing and
+      // signup included): monitor.alnyron.dk/login is /login here, before the
+      // middleware rewrites it into /monitor/login. Same host forms as
+      // `isMonitorHost` and the same value as MONITOR_ROBOTS (`config/monitor.ts`).
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "monitor\\.(?:alnyron\\.dk|localhost)\\.?" }],
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
       // Keep the *.workers.dev preview out of search indexes. Every X-Robots-Tag
       // rule uses the same "noindex, nofollow" value, so none weakens another
       // where they overlap (a later matching header rule wins on a shared key).

@@ -2,7 +2,7 @@
 
 Admin and MyLife are invite-only. Since migration `supabase/migrations/20261106000400_monitor_public_signup.sql`, the Supabase before-user-created hook (`public.hook_before_user_created`) **refuses every allowlisted email** on every path that runs it, so a stranger cannot sign up first with an admin or MyLife address (public Monitor signups get the `monitor_user` role instead). Invites therefore no longer create the account; the account is created first, without the hook.
 
-> **When this applies:** the steps below work once migration 0400 is applied to the project. Production gets it in slice C (together with switching public signup on). Until then production still runs the old hook (only allowlisted emails admitted), where the old "allowlist row, then invite" flow works; the steps below also work there.
+> **When this applies:** the steps below need migration 0400 on the project. Before production's public signup is switched on, `docs/runbooks/monitor-go-live.md` step 0b proves it is applied there (migration list, hook body, grants); the steps below also work on a project that still runs the old hook (only allowlisted emails admitted).
 
 GoTrue facts this relies on: the hook runs on `/signup`, `/invite` and `/admin/generate_link` when they create a **new** user; it does **not** run on `POST /auth/v1/admin/users` (`admin.createUser`), and `generate_link({ type: "invite" })` for an **existing** unconfirmed user creates nobody, so the hook does not run either. The Supabase dashboard's "Invite user" button calls `/invite` for a new user and is therefore refused for an allowlisted address.
 
@@ -32,7 +32,7 @@ All calls use the project's secret key (`SUPABASE_SECRET_KEY`) from a trusted ma
 
    or `POST {SUPABASE_URL}/auth/v1/admin/users` with body `{ "email": "person@example.dk" }`. Do not set a password or `email_confirm`: the invite link confirms the address and lets the person choose a password.
 
-4. **Send the invite** for the existing, unconfirmed account:
+4. **Send the invite right away** for the existing, unconfirmed account (see "The gap between steps 3 and 4" below):
 
    ```ts
    const { data, error } = await supabase.auth.admin.generateLink({ type: "invite", email: "person@example.dk" });
@@ -45,6 +45,24 @@ All calls use the project's secret key (`SUPABASE_SECRET_KEY`) from a trusted ma
    Send it to the person yourself. It works once and expires like the emailed invites. `/auth/confirm` lands the person on their area's set-password page by role.
 
 5. **Check** that `public.profiles` shows the expected role for the new `user_id`.
+
+## The gap between steps 3 and 4
+
+From `admin.createUser` until the person accepts the invite, the account exists but is unconfirmed. With public signup on, someone may sign up for Monitor with that address in this gap. GoTrue then takes its existing-unconfirmed-user path, which skips the hook, but the stranger gains nothing: GoTrue leaves the account's password unchanged (the account has none yet), the role stays the allowlist role, and the confirmation email goes to the real person.
+
+If the real person clicks that confirmation, the link is pinned to Monitor: it lands them on `/monitor/no-access` on the Monitor host, with their own session. Their address is now confirmed, so the pending invite link may then fail. In that case send a **recovery** link instead:
+
+```ts
+const { data, error } = await supabase.auth.admin.generateLink({ type: "recovery", email: "person@example.dk" });
+```
+
+and build it from `data.properties.hashed_token` as in step 4, with `type=recovery`:
+- admin: `https://alnyron.dk/auth/confirm?token_hash=<hashed_token>&type=recovery&next=/admin/set-password`
+- MyLife: `https://mylife.alnyron.dk/auth/confirm?token_hash=<hashed_token>&type=recovery&next=/mylife/set-password`
+
+Sending the invite (step 4) right after creating the account (step 3) keeps the gap short.
+
+> **GoTrue upgrade:** the onboarding gap described above is what this project's current GoTrue does (not verified by a test). The unreleased GoTrue 2.198 release candidates reportedly run the hook first and overwrite an unconfirmed account's password (not verified on hosted). When the project's GoTrue is upgraded, re-verify the facts in this section and SHIP-AC6g's expected `429` in `tests/e2e/monitor-ship-routing.spec.ts` (it may become the hook's `403`); see `docs/runbooks/monitor-go-live.md` step 7.
 
 ## Removing access
 

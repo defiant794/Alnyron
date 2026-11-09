@@ -3,15 +3,15 @@
  * Journey: monitor-chrome
  *
  * Covers:
- *   MCH-AC1 — landing header: ALNYRON lockup linked to /, no "Monitor" suffix,
- *             320px viewport fits without horizontal scroll
- *   MCH-AC2 — landing footer: SiteFooter (copyright, CVR if set, mailto, Privatliv → /privacy)
+ *   MCH-AC1 — landing header: ALNYRON lockup linked to the main site (absolute URL),
+ *             no "Monitor" suffix, 320px viewport fits without horizontal scroll
+ *   MCH-AC2 — landing footer: SiteFooter (copyright, CVR if set, mailto, Privatliv → absolute main-site URL)
  *   MCH-AC3 — signed-in dashboard: ALNYRON lockup → /monitor/dashboard, SiteFooter present
- *   MCH-AC4 — auth-card pages (login, signup): ALNYRON lockup → /, no footer
+ *   MCH-AC4 — auth-card pages (login, signup): ALNYRON lockup → main-site absolute URL, no footer
  *   MCH-AC5 — lead copy "2 sider", fresh signup default cap 2 (MCH-E10 skips
  *             on a target without migration 20261107000300)
  *
- * Requires dev server at PLAYWRIGHT_BASE_URL (http://localhost:3000).
+ * Requires dev server at http://monitor.localhost:3000 (the Monitor subdomain).
  * DB_AVAILABLE guards pg-dependent tests.
  */
 import { test, expect, type Page } from "@playwright/test";
@@ -28,9 +28,14 @@ import {
 import { endPool, getClient, type PoolClient } from "../integration/rls/helpers/db";
 import { FREE_LIMIT_SKIP_REASON, freeLimitApplied } from "../integration/rls/helpers/monitor-limit";
 import messages from "../../messages/da.json";
-import { MONITOR_SITE_HOME_HREF } from "../../src/config/monitor";
+
 
 const { Footer, Monitor, Nav } = messages;
+// Canonical Monitor host for this spec
+const MONITOR = "http://monitor.localhost:3000";
+// Main-site origin (used for lockup href assertions)
+const MAIN = "http://localhost:3000";
+
 
 test.afterAll(async () => {
   await endPool();
@@ -40,7 +45,7 @@ test.afterAll(async () => {
 
 /** Signs in on /monitor/login and waits until the page navigates away. */
 async function signIn(page: Page, email: string, password: string): Promise<void> {
-  await page.goto("/monitor/login");
+  await page.goto(`${MONITOR}/login`);
   await page.getByLabel(/e-mail/i).fill(email);
   await page.getByLabel(/adgangskode/i).fill(password);
   await page.getByRole("button", { name: messages.Auth.login.submit }).click();
@@ -68,31 +73,30 @@ async function readFooterSettings(): Promise<{ companyName: string; cvr: string 
 
 test.describe("MCH-AC1: /monitor landing header — pure ALNYRON lockup", () => {
   test("MCH-E1: header link accessible name is 'Alnyron' (no 'Monitor' suffix)", async ({ page }) => {
-    await page.goto("/monitor");
+    await page.goto(`${MONITOR}/`);
     const header = page.locator("header").first();
     const link = header.getByRole("link", { name: "Alnyron" });
     await expect(link).toBeVisible();
     await expect(link).not.toContainText("Monitor");
   });
 
-  test("MCH-E2: clicking the ALNYRON lockup navigates to /", async ({ page }) => {
-    await page.goto("/monitor");
+  test("MCH-E2: clicking the ALNYRON lockup navigates to the main site frontpage", async ({ page }) => {
+    await page.goto(`${MONITOR}/`);
     const header = page.locator("header").first();
     const link = header.getByRole("link", { name: "Alnyron" });
+    // The lockup now links to the absolute main-site URL, not '/'
+    await expect(link).toHaveAttribute("href", MAIN);
     await link.click();
-    await expect(page).toHaveURL((url) => url.pathname === MONITOR_SITE_HOME_HREF);
+    await expect(page).toHaveURL((url) => url.hostname === "localhost" && url.port === "3000");
   });
 
   test("MCH-E3: 320px viewport — page fits without horizontal scroll", async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 568 });
-    await page.goto("/monitor");
-    // Check the document root, not just the header element: a w-full flex-wrap
-    // header never overflows itself but the page may still have horizontal scroll.
+    await page.goto(`${MONITOR}/`);
     const overflowing = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth,
     );
     expect(overflowing).toBe(false);
-    // All three header elements (lockup, Log ind, Opret gratis) must be visible.
     const header = page.locator("header").first();
     await expect(header.getByRole("link", { name: "Alnyron" })).toBeVisible();
     await expect(header.getByRole("link", { name: Monitor.landing.ctaLogin })).toBeVisible();
@@ -100,13 +104,14 @@ test.describe("MCH-AC1: /monitor landing header — pure ALNYRON lockup", () => 
   });
 });
 
+
 // ── MCH-AC2: landing footer ───────────────────────────────────────────────────
 
 test.describe("MCH-AC2: /monitor landing footer — SiteFooter", () => {
   test("MCH-E4: footer is a contentinfo landmark with copyright year, company, CVR, mailto, and Privatliv link", async ({ page }) => {
     test.skip(!DB_AVAILABLE, "Requires DB credentials");
     const { companyName, cvr } = await readFooterSettings();
-    await page.goto("/monitor");
+    await page.goto(`${MONITOR}/`);
     const footer = page.getByRole("contentinfo");
     await expect(footer).toBeVisible();
     // `© {year} {company}`, the year in Copenhagen like SiteFooter.
@@ -120,31 +125,32 @@ test.describe("MCH-AC2: /monitor landing footer — SiteFooter", () => {
     // Contact mailto link present (AC2 requirement).
     const mailtoLink = footer.locator('a[href^="mailto:"]');
     await expect(mailtoLink).toBeVisible();
-    // Privacy link present, points to /privacy.
+    // Privacy link on Monitor subdomain points to main-site absolute URL
     const privacyLink = footer.getByRole("link", { name: Nav.privacy });
     await expect(privacyLink).toBeVisible();
-    await expect(privacyLink).toHaveAttribute("href", "/privacy");
+    await expect(privacyLink).toHaveAttribute("href", /^https?:\/\/localhost/);
   });
 
   test("MCH-E5: exactly one contentinfo landmark (the SiteFooter)", async ({ page }) => {
-    await page.goto("/monitor");
+    await page.goto(`${MONITOR}/`);
     await expect(page.getByRole("contentinfo")).toHaveCount(1);
   });
 });
 
 // ── MCH-AC4: auth-card pages ──────────────────────────────────────────────────
 
-test.describe("MCH-AC4: auth-card pages — ALNYRON lockup → /, no footer", () => {
-  for (const authPath of ["/monitor/login", "/monitor/signup"]) {
-    test(`MCH-E6/E7: ${authPath} card has 'Alnyron' link → /`, async ({ page }) => {
-      await page.goto(authPath);
+test.describe("MCH-AC4: auth-card pages — ALNYRON lockup → main-site URL, no footer", () => {
+  for (const authPath of ["/login", "/signup"]) {
+    test(`MCH-E6/E7: ${MONITOR}${authPath} card has 'Alnyron' link → main-site URL`, async ({ page }) => {
+      await page.goto(`${MONITOR}${authPath}`);
       const link = page.getByRole("link", { name: "Alnyron" });
       await expect(link).toBeVisible();
-      await expect(link).toHaveAttribute("href", MONITOR_SITE_HOME_HREF);
+      // Lockup links to the absolute main-site URL, not '/'
+      await expect(link).toHaveAttribute("href", MAIN);
     });
 
-    test(`MCH-E7: ${authPath} has no contentinfo landmark (no footer)`, async ({ page }) => {
-      await page.goto(authPath);
+    test(`MCH-E7: ${MONITOR}${authPath} has no contentinfo landmark (no footer)`, async ({ page }) => {
+      await page.goto(`${MONITOR}${authPath}`);
       await expect(page.getByRole("contentinfo")).toHaveCount(0);
     });
   }
@@ -205,7 +211,7 @@ test.describe("MCH-AC3: signed-in dashboard — lockup and footer", () => {
 
 test.describe("MCH-AC5: free tier — lead reads '2 sider'", () => {
   test("MCH-E9: landing lead contains 'Gratis for op til 2 sider.'", async ({ page }) => {
-    await page.goto("/monitor");
+    await page.goto(`${MONITOR}/`);
     // The hero lead inside <main>, with {limit} = 2.
     const lead = page.getByRole("main").getByText(Monitor.landing.lead.replace("{limit}", "2"), { exact: true });
     await expect(lead).toBeVisible();

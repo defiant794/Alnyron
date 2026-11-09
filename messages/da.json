@@ -105,7 +105,7 @@
         "toggle": "Vis i menuen"
       },
       "area": {
-        "description": "Appområde på {path}, uden tekst at redigere"
+        "description": "Appområde på {host}, uden tekst at redigere"
       },
       "edit": "Rediger",
       "moveUp": "Flyt op",

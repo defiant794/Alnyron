@@ -4,7 +4,8 @@
  * system pages (monitor-nav, design review #2 and #5). The page is an async
  * server component: it is awaited and its element rendered with the real
  * Danish messages, so the copy under test is the shipped copy:
- *   - an app area (Monitor) shows a description under its name, where a content
+ *   - an app area (Monitor) shows a description under its name (with the host
+ *     it is served on, derived from NEXT_PUBLIC_SITE_URL), where a content
  *     page shows its Danish title; the area's own (blank) title is never used
  *   - the area's nav switch shows the compact "Vis i menuen" and is named
  *     "Vis i menuen: Monitor", like the row's "Flyt op: Monitor"
@@ -27,6 +28,10 @@ vi.mock("@/services/auth/require-admin", () => ({
 }));
 vi.mock("@/services/admin/pages", () => ({ listSystemPages: mockListSystemPages }));
 vi.mock("@/app/admin/(panel)/pages/actions", () => ({ reorderNav: vi.fn(), setPageNav: vi.fn() }));
+vi.mock("@/config/env", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/config/env")>()),
+  parseSiteEnv: () => ({ NEXT_PUBLIC_SITE_URL: "https://alnyron.dk" }),
+}));
 
 import AdminPagesPage from "@/app/admin/(panel)/pages/page";
 
@@ -50,11 +55,12 @@ function rowOf(name: string): HTMLElement {
 afterEach(cleanup);
 
 describe("AC-MONNAV-1o: /admin/pages labels the Monitor row", () => {
-  it("AC-MONNAV-1o: the Monitor row shows the area description from Admin.pages.area (its path filled in), a content row its title", async () => {
+  it("AC-MONNAV-1o: the Monitor row shows the area description (the Monitor host filled in), a content row its title", async () => {
     mockListSystemPages.mockResolvedValue(PAGES);
     render(await AdminPagesPage());
 
-    const description = da.Admin.pages.area.description.replace("{path}", "/monitor");
+    // The shipped copy, pinned literally (the host derived from NEXT_PUBLIC_SITE_URL=https://alnyron.dk).
+    const description = "Appområde på monitor.alnyron.dk, uden tekst at redigere";
     const monitorHeader = within(rowOf(da.Nav.monitor)).getByRole("rowheader");
     expect(within(monitorHeader).getByText(description)).toBeInTheDocument();
 

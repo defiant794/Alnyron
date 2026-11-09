@@ -3,6 +3,8 @@
 <p>
   {{ if or (eq .RedirectTo "https://mylife.alnyron.dk") (eq .RedirectTo "http://mylife.localhost:3000") }}
   <a href="{{ .RedirectTo }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery&amp;next=/mylife/set-password">Vælg en ny adgangskode</a>
+  {{ else if or (eq .RedirectTo "https://monitor.alnyron.dk") (eq .RedirectTo "http://monitor.localhost:3000") }}
+  <a href="{{ .RedirectTo }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery&amp;next=/monitor/reset">Vælg en ny adgangskode</a>
   {{ else }}
   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery&amp;next=/admin/set-password">Vælg en ny adgangskode</a>
   {{ end }}

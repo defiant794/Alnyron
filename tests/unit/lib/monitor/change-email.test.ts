@@ -190,6 +190,23 @@ describe("buildChangeEmail — ENG-AC1: only href is siteUrl/monitor/monitors/<i
     expect(hrefsOf(html)).toEqual([`${siteUrl}/monitor/monitors/${monitorId}`]);
   });
 
+  it("SHIP-AC11a-1: href uses monitor.alnyron.dk siteUrl as base", () => {
+    const monitorId = "00000000-0000-0000-0000-000000000011";
+    const siteUrl = "https://monitor.alnyron.dk";
+    const { html } = buildChangeEmail({
+      eventId: "evt-8",
+      monitorId,
+      url: "https://example.com/watched",
+      label: "Watched",
+      detectedAt: "2026-11-08T10:00:00Z",
+      summary: null,
+      siteUrl,
+    });
+    expect(hrefsOf(html)).toEqual([
+      "https://monitor.alnyron.dk/monitor/monitors/00000000-0000-0000-0000-000000000011",
+    ]);
+  });
+
   it("ENG-AC1ce9: page URL appears as defanged text in the intro, never as href", () => {
     const { html } = buildChangeEmail({
       eventId: "evt-9",

@@ -111,3 +111,24 @@ describe("AC-HOME-09: SiteFooter keeps the email and privacy links", () => {
     expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/en/privacy");
   });
 });
+// ── SHIP-AC8c: SiteFooter siteOrigin prop makes privacy link absolute ────────
+
+describe("SHIP-AC8c: SiteFooter with siteOrigin prop — absolute privacy link", () => {
+  it("SHIP-AC8c-1: siteOrigin='https://alnyron.dk' → privacy link href='https://alnyron.dk/privacy'", async () => {
+    render(await SiteFooter({ locale: "da", siteOrigin: "https://alnyron.dk" }));
+    const link = screen.getByRole("link", { name: /privatliv/i });
+    expect(link).toHaveAttribute("href", "https://alnyron.dk/privacy");
+  });
+
+  it("SHIP-AC8c-2: siteOrigin='http://localhost:3000' → privacy link href='http://localhost:3000/privacy'", async () => {
+    render(await SiteFooter({ locale: "da", siteOrigin: "http://localhost:3000" }));
+    const link = screen.getByRole("link", { name: /privatliv/i });
+    expect(link).toHaveAttribute("href", "http://localhost:3000/privacy");
+  });
+
+  it("SHIP-AC8c-3: without siteOrigin, privacy link stays relative '/privacy' (default behavior unchanged)", async () => {
+    render(await SiteFooter({ locale: "da" }));
+    const link = screen.getByRole("link", { name: /privatliv/i });
+    expect(link).toHaveAttribute("href", "/privacy");
+  });
+});

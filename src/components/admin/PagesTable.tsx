@@ -30,7 +30,7 @@ export type PagesTableRow = {
   | {
       /** An app area (Monitor): no editor, its nav switch sits in the row instead. */
       kind: "area";
-      /** What the area is (it has no title), shown under the name ("Appområde på /monitor, …"). */
+      /** What the area is (it has no title), shown under the name ("Appområde på monitor.alnyron.dk, …"). */
       description: string;
     }
 );

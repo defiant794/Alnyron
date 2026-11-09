@@ -8,7 +8,7 @@
  * ALNYRON lockup linked to /, SiteFooter as the page footer,
  * lang=da enforced by layout.
  */
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
@@ -26,6 +26,10 @@ vi.mock("next-intl/server", async () => {
   const { nextIntlServerMock } = await import("../../../helpers/next-intl-server");
   return nextIntlServerMock();
 });
+vi.mock("@/config/env", () => ({
+  parseSiteEnv: vi.fn(() => ({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" })),
+}));
+
 vi.mock("next/image", () => ({
   default: ({ alt, className }: { alt: string; className?: string }) => (
     // eslint-disable-next-line @next/next/no-img-element
@@ -50,11 +54,16 @@ vi.mock("next/link", () => ({
 
 import MonitorLandingPage, { generateMetadata } from "@/app/monitor/page";
 import { loadMessages } from "@/i18n/messages";
-import { MONITOR_SIGNUP_PATH, MONITOR_LOGIN_PATH, MONITOR_SITE_HOME_HREF } from "@/config/monitor";
+import { MONITOR_SIGNUP_PATH, MONITOR_LOGIN_PATH } from "@/config/monitor";
+import { parseSiteEnv } from "@/config/env";
 
 const { Monitor } = loadMessages("da");
 
 afterEach(cleanup);
+beforeEach(() => {
+  vi.mocked(parseSiteEnv).mockReturnValue({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" });
+});
+
 
 describe("MON-AC1: /monitor landing page renders per design", () => {
   it("MON-AC1a: renders without throwing", async () => {
@@ -97,10 +106,10 @@ describe("MCH-AC1: landing header contains ALNYRON lockup linked to /", () => {
     expect(link).toBeInTheDocument();
   });
 
-  it("MCH-AC1b: brand link href is MONITOR_SITE_HOME_HREF ('/')", async () => {
+  it("MCH-AC1b: brand link href is the absolute main-site URL (http://localhost:3000)", async () => {
     render(await MonitorLandingPage());
     const link = screen.getByRole("link", { name: "Alnyron" });
-    expect(link).toHaveAttribute("href", MONITOR_SITE_HOME_HREF);
+    expect(link).toHaveAttribute("href", "http://localhost:3000");
   });
 
   it("MCH-AC1c: no 'Monitor' text rendered as a brand suffix in the header brand", async () => {

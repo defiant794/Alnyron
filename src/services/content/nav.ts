@@ -2,7 +2,8 @@ import type { Locale } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { AUTH_LOCALE } from "@/config/auth-areas";
 import { URL_SLUG_LOCALE } from "@/config/catalog";
-import { SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
+import { parseSiteEnv } from "@/config/env";
+import { SYSTEM_PAGE_AREA_ORIGIN, SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
 import { getPathname } from "@/i18n/navigation";
 import { resolveContent } from "@/lib/i18n/resolve-content";
 import { getPublicClient } from "@/lib/supabase/public";
@@ -16,7 +17,8 @@ export interface NavItem {
   label: string;
   /**
    * Locale-aware path (`/`, `/en`, `/contact`, `/en/apps`); also the
-   * active-state key. An app area's raw path (`/monitor`) on every locale.
+   * active-state key. An app area's absolute URL on its own host
+   * (`https://monitor.alnyron.dk/`) on every locale.
    */
   href: string;
   navOrder: number;
@@ -45,9 +47,11 @@ export function buildNavItems(items: readonly NavItem[]): NavItem[] {
  * fixed UI labels ("Forside", "Kontakt", "Monitor"); custom pages and
  * categories use their DB title with Danish fallback. Every link uses the
  * English URL slug (`URL_SLUG_LOCALE` route) on every locale; a custom page
- * without one is left out. An app area (Monitor) lies outside the `[locale]`
- * routing, so it links its raw path (`/monitor`) on every locale; it is
- * Danish only (`AUTH_LOCALE`), which an English page's link says (`hrefLang`).
+ * without one is left out. An app area (Monitor) is served on its own host,
+ * so it links that host's root (`SYSTEM_PAGE_AREA_ORIGIN`, from the site URL
+ * read at call time: no redirect hop through the main host) on every locale;
+ * it is Danish only (`AUTH_LOCALE`), which an English page's link says
+ * (`hrefLang`).
  *
  * @throws when a query fails, so a broken read never caches an empty nav.
  */
@@ -73,7 +77,7 @@ export async function getNavItems(locale: Locale): Promise<NavItem[]> {
           ? { ...item, href: getPathname({ href: SYSTEM_PAGE_PATHNAMES[key], locale }) }
           : {
               ...item,
-              href: SYSTEM_PAGE_PATHNAMES[key],
+              href: `${SYSTEM_PAGE_AREA_ORIGIN[key](parseSiteEnv().NEXT_PUBLIC_SITE_URL)}/`,
               hrefLang: locale === AUTH_LOCALE ? undefined : AUTH_LOCALE,
             },
       );

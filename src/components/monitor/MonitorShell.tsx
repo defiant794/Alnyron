@@ -7,6 +7,7 @@ import SiteFooter from "@/components/site/SiteFooter";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { AUTH_LOCALE } from "@/config/auth-areas";
 import { MONITOR_DASHBOARD_PATH, MONITOR_SETTINGS_PATH } from "@/config/monitor";
+import { siteOrigin } from "@/config/site-origin";
 import { loadMessages } from "@/i18n/messages";
 import { cx } from "@/lib/cx";
 
@@ -31,7 +32,8 @@ const CURRENT =
  * Monitor panel frame (approved dashboard mock): a top bar with the site's
  * ALNYRON lockup (linked back to the dashboard, the panel's home), the two
  * destinations (no sidebar, per the brief), the account and "Log ud"; the
- * page in a centered column up to 1120px; the site footer (Danish) below.
+ * page in a centered column up to 1120px; the site footer (Danish) below,
+ * whose privacy link is the main site's absolute URL (`NEXT_PUBLIC_SITE_URL`).
  * The bar wraps on small screens in reading order (brand, then navigation
  * and account), so nothing comes between the navigation and the page. Each
  * panel page renders it with its own `requireMonitor()` user (a synchronous
@@ -88,7 +90,7 @@ export default function MonitorShell({ email, section, sectionPage = true, child
       >
         {children}
       </main>
-      <SiteFooter locale={AUTH_LOCALE} />
+      <SiteFooter locale={AUTH_LOCALE} siteOrigin={siteOrigin()} />
     </div>
   );
 }

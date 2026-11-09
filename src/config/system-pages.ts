@@ -1,3 +1,4 @@
+import { monitorSiteOrigin } from "@/config/monitor";
 import type { Database } from "@/types/database";
 
 /** The fixed pages every site has (`pages.system_key`): always published, fixed routes, not deletable. */
@@ -21,10 +22,14 @@ export type ContentPageKey = {
   [Key in SystemPageKey]: (typeof SYSTEM_PAGE_IS_AREA)[Key] extends true ? never : Key;
 }[SystemPageKey];
 
+/** An app area among the system pages: every key {@link SYSTEM_PAGE_IS_AREA} marks. */
+export type AreaPageKey = Exclude<SystemPageKey, ContentPageKey>;
+
 /**
  * Path of each system page: the internal next-intl pathname (`routing.pathnames`)
- * of a content page, the raw same-site path of an app area (the same on every
- * locale, never passed to `getPathname`).
+ * of a content page, the raw path of an app area on the main host (the same on
+ * every locale, never passed to `getPathname`), which redirects to the area's
+ * own host ({@link SYSTEM_PAGE_AREA_ORIGIN}).
  */
 export const SYSTEM_PAGE_PATHNAMES = {
   home: "/",
@@ -32,6 +37,15 @@ export const SYSTEM_PAGE_PATHNAMES = {
   privacy: "/privacy",
   monitor: "/monitor",
 } as const satisfies Record<SystemPageKey, string>;
+
+/**
+ * Origin of the host each app area is served on, derived from the main site's
+ * URL (`NEXT_PUBLIC_SITE_URL`, read by the caller at call time): the site nav
+ * links its root, the Sider list names its host.
+ */
+export const SYSTEM_PAGE_AREA_ORIGIN = {
+  monitor: monitorSiteOrigin,
+} as const satisfies Record<AreaPageKey, (siteUrl: string) => string>;
 
 /** Whether the page's markdown body (`body_md`) is shown on the site, so the editor offers it. */
 export const SYSTEM_PAGE_HAS_BODY: Record<SystemPageKey, boolean> = {

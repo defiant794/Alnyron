@@ -1,7 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { MONITOR_DASHBOARD_PATH, MONITOR_LOGIN_PATH } from "@/config/monitor";
+import { MONITOR_DASHBOARD_PATH, MONITOR_LOGIN_PATH, monitorOrigin } from "@/config/monitor";
 import { safeNext } from "@/lib/safe-next";
 import { requireMonitor } from "@/services/auth/require-role";
 import {
@@ -33,22 +34,34 @@ export async function signIn(
 
 /**
  * Public Monitor signup (see `signUpWithPassword`): no session and no
- * redirect; the user confirms the address through the emailed link.
+ * redirect; the user confirms the address through the emailed link (a Site
+ * URL link, which `/auth/confirm` forwards to the Monitor host).
  */
 export async function signUp(_previous: SignUpResult | null, formData: FormData): Promise<SignUpResult> {
   return signUpWithPassword(formData);
 }
 
 /**
- * Monitor password reset (see `sendPasswordResetLink`). No `redirectTo`: the
- * Site URL link of the DA template applies, and `/auth/confirm` lands a
- * `monitor_user` on `/monitor/reset` by role.
+ * Monitor password reset (see `sendPasswordResetLink`). Asked on the Monitor
+ * host, the link must lead back there (the session cookies are per host), so
+ * `redirectTo` is that host's origin, taken from the Monitor host allowlist
+ * (`monitorOrigin`), never from user input; the DA recovery template accepts
+ * only the two exact Monitor origins (`https://monitor.alnyron.dk`,
+ * `http://monitor.localhost:3000`) and then links `/monitor/reset` there.
+ * Any other origin (a Monitor host on another port; the main host redirects
+ * `/monitor/*` to the Monitor host, so the form is not asked there) or a
+ * `redirectTo` GoTrue drops (its origin missing from the redirect allow-list)
+ * gets the template's Site URL link (`next=/admin/set-password`):
+ * `/auth/confirm` verifies it on the main host and sends a `monitor_user` to
+ * `/monitor/reset`, which redirects to the Monitor host, where that session
+ * does not exist, so the reset does not complete there
+ * (`docs/runbooks/monitor-go-live.md`, known limitations).
  */
 export async function requestPasswordReset(
   _previous: ResetPasswordState | null,
   formData: FormData,
 ): Promise<ResetPasswordState> {
-  return sendPasswordResetLink(formData);
+  return sendPasswordResetLink(formData, monitorOrigin((await headers()).get("host")));
 }
 
 /**

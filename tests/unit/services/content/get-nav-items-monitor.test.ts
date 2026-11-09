@@ -13,7 +13,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── vi.hoisted ─────────────────────────────────────────────────────────────────
-const { mockPagesQuery } = vi.hoisted(() => ({ mockPagesQuery: vi.fn() }));
+const { mockPagesQuery, mockParseSiteEnv } = vi.hoisted(() => ({
+  mockPagesQuery: vi.fn(),
+  mockParseSiteEnv: vi.fn(() => ({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" })),
+}));
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 vi.mock("next-intl/server", async () =>
@@ -26,6 +29,10 @@ vi.mock("@/lib/supabase/public", () => ({
   }),
 }));
 vi.mock("@/services/content/categories", () => ({ getPublicCategories: vi.fn() }));
+vi.mock("@/config/env", () => ({
+  parseSiteEnv: mockParseSiteEnv,
+}));
+
 
 import { getPublicCategories, type PublicCategory } from "@/services/content/categories";
 import { getNavItems } from "@/services/content/nav";
@@ -79,6 +86,7 @@ const appsCategory: PublicCategory = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getPublicCategories).mockResolvedValue([servicesCategory, appsCategory]);
+  mockParseSiteEnv.mockReturnValue({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" });
 });
 
 // ── AC-MONNAV-2: monitor item included when show_in_nav=true ──────────────────
@@ -100,24 +108,21 @@ describe("AC-MONNAV-2: getNavItems — monitor page row produces a NavItem", () 
 
 // ── AC-MONNAV-6: href is raw "/monitor" on DA and EN (locale-agnostic) ─────────
 
-describe("AC-MONNAV-6: getNavItems — monitor href is locale-agnostic '/monitor'", () => {
-  it("AC-MONNAV-6c: DA locale — monitor item href is exactly '/monitor', not getPathname result", async () => {
-    // getPathname for a locale-agnostic area path must NOT be called; the raw
-    // "/monitor" must be returned as-is so there is no locale prefix on DA.
+describe("AC-MONNAV-6: getNavItems — monitor href is absolute Monitor subdomain URL (locale-agnostic)", () => {
+  it("AC-MONNAV-6c: DA locale — monitor item href is 'http://monitor.localhost:3000/'", async () => {
     mockPagesQuery.mockResolvedValue({ data: [homeRow, monitorRow], error: null });
     const items = await getNavItems("da");
     const monitor = items.find((item) => item.key === "system-monitor");
-    expect(monitor?.href).toBe("/monitor");
+    expect(monitor?.href).toBe("http://monitor.localhost:3000/");
   });
 
-  it("AC-MONNAV-6d: EN locale — monitor item href is exactly '/monitor', NOT '/en/monitor'", async () => {
-    // Key AC6 test: the href must be the same on /en as on /. If the nav builder
-    // incorrectly calls getPathname({href: '/monitor', locale: 'en'}), it would
-    // produce '/en/monitor' (or similar) — this test catches that regression.
+  it("AC-MONNAV-6d: EN locale — monitor item href is 'http://monitor.localhost:3000/' (same on every locale)", async () => {
+    // Key AC6 test: the href must be the same on /en as on /. The absolute subdomain URL
+    // is locale-independent and must never carry a locale prefix like '/en/monitor'.
     mockPagesQuery.mockResolvedValue({ data: [homeRow, monitorRow], error: null });
     const items = await getNavItems("en");
     const monitor = items.find((item) => item.key === "system-monitor");
-    expect(monitor?.href).toBe("/monitor");
+    expect(monitor?.href).toBe("http://monitor.localhost:3000/");
   });
 });
 

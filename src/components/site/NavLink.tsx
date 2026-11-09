@@ -15,7 +15,11 @@ const CURRENT =
 const HOME_PATHS = new Set<string>(routing.locales.map((locale) => getPathname({ href: "/", locale })));
 
 export type NavLinkProps = Omit<ComponentPropsWithRef<typeof NextLink>, "href"> & {
-  /** Locale-aware path (`/contact`, `/en/apps`), as built on the server. */
+  /**
+   * Locale-aware path (`/contact`, `/en/apps`), as built on the server, or an
+   * absolute URL to another host (the Monitor item, the privacy link on the
+   * Monitor host), which never matches the current path and is never marked.
+   */
   href: string;
 };
 

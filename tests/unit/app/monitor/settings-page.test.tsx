@@ -28,6 +28,11 @@ vi.mock("@/services/auth/require-role", () => ({ requireMonitor: mockRequireMoni
 // The change-password form posts to the area's updatePassword action (the
 // SetPasswordForm pattern of /monitor/reset); "Log ud" posts to signOut.
 vi.mock("@/app/monitor/(auth)/actions", () => ({ signOut: vi.fn(), updatePassword: vi.fn() }));
+// MonitorShell links the footer's privacy page on the main site (NEXT_PUBLIC_SITE_URL).
+vi.mock("@/config/env", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/config/env")>()),
+  parseSiteEnv: () => ({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" }),
+}));
 vi.mock("@/components/site/SiteFooter", () => ({
   default: ({ locale }: { locale: string }) => (
     <footer data-testid="site-footer" data-locale={locale} />

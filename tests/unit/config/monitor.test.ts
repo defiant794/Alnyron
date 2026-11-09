@@ -15,7 +15,6 @@ import {
   MONITOR_DASHBOARD_PATH,
   MONITOR_NEW_PATH,
   MONITOR_SETTINGS_PATH,
-  MONITOR_SITE_HOME_HREF,
   MONITOR_FREE_LIMIT,
   MONITOR_PUBLIC_PATHS,
   monitorDetailPath,
@@ -61,10 +60,6 @@ describe("MONITOR_* path constants — MON-AC58/MON-AC67", () => {
     expect(MONITOR_SETTINGS_PATH).toBe("/monitor/settings");
   });
 
-  it("MCH-AC1b / MCH-AC4b: MONITOR_SITE_HOME_HREF is /", () => {
-    expect(MONITOR_SITE_HOME_HREF).toBe("/");
-  });
-
   it("MCH-AC5a / MON-AC67: MONITOR_FREE_LIMIT is 2", () => {
     expect(MONITOR_FREE_LIMIT).toBe(2);
   });
@@ -106,9 +101,10 @@ describe("MONITOR_PUBLIC_PATHS — MON-AC44", () => {
   });
 });
 
-// ── supabase/config.toml — confirmation template + enable_signup: MON-AC65 ───
+// ── supabase/config.toml — confirmation template: MON-AC65 ───────────────────
+// (local enable_signup is pinned true by SHIP-AC6a in monitor-ship-static.test.ts)
 
-describe("supabase/config.toml: MON-AC65 confirmation template + enable_signup=false", () => {
+describe("supabase/config.toml: MON-AC65 confirmation template", () => {
   it("MON-AC65a: has [auth.email.template.confirmation] section", () => {
     const toml = readFileSync(resolve("supabase/config.toml"), "utf-8");
     expect(toml).toContain("[auth.email.template.confirmation]");
@@ -124,11 +120,6 @@ describe("supabase/config.toml: MON-AC65 confirmation template + enable_signup=f
     const toml = readFileSync(resolve("supabase/config.toml"), "utf-8");
     const sectionIndex = toml.indexOf("[auth.email.template.confirmation]");
     expect(toml.slice(sectionIndex)).toMatch(/content_path\s*=/);
-  });
-
-  it("MON-AC65d: enable_signup is false (prod flip is slice C)", () => {
-    const toml = readFileSync(resolve("supabase/config.toml"), "utf-8");
-    expect(toml).toMatch(/enable_signup\s*=\s*false/);
   });
 });
 
@@ -214,8 +205,8 @@ describe("Engine config constants — ENG-AC7: literals pinned", () => {
     expect(MONITOR_SUMMARY_MAX_CHARS).toBe(1_000);
   });
 
-  it("ENG-AC7cfg10: MONITOR_FETCH_USER_AGENT is 'AlnyronMonitor/1.0 (+https://alnyron.dk/monitor)'", () => {
-    expect(MONITOR_FETCH_USER_AGENT).toBe("AlnyronMonitor/1.0 (+https://alnyron.dk/monitor)");
+  it("ENG-AC7cfg10: MONITOR_FETCH_USER_AGENT is 'AlnyronMonitor/1.0 (+https://monitor.alnyron.dk)'", () => {
+    expect(MONITOR_FETCH_USER_AGENT).toBe("AlnyronMonitor/1.0 (+https://monitor.alnyron.dk)");
   });
 
   it("ENG-AC7cfg11: MONITOR_CHECK_SUBREQUESTS is 15 (4 page requests × (2 DNS + 1 fetch) + snapshot, record, email)", () => {

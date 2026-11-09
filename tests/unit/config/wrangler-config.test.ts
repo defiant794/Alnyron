@@ -274,8 +274,8 @@ describe('workers/monitor-cron/wrangler.jsonc — ENG-AC7: Free-plan config', ()
     expect(cronConfig.vars?.['MONITOR_SUBREQUEST_LIMIT']).toBe('50');
   });
 
-  it('ENG-AC7wc14: vars.MONITOR_SITE_URL is "https://alnyron.dk"', () => {
-    expect(cronConfig.vars?.['MONITOR_SITE_URL']).toBe('https://alnyron.dk');
+  it('ENG-AC7wc14: vars.MONITOR_SITE_URL is "https://monitor.alnyron.dk"', () => {
+    expect(cronConfig.vars?.['MONITOR_SITE_URL']).toBe('https://monitor.alnyron.dk');
   });
 
   it('ENG-AC7wc15: vars.SUPABASE_URL is "https://xmgpixhxecamtryohgmk.supabase.co"', () => {

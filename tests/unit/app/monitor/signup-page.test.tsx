@@ -11,7 +11,10 @@ import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 
-const { mockSignUp } = vi.hoisted(() => ({ mockSignUp: vi.fn() }));
+const { mockSignUp, mockParseSiteEnv } = vi.hoisted(() => ({
+  mockSignUp: vi.fn(),
+  mockParseSiteEnv: vi.fn(() => ({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" })),
+}));
 
 vi.mock("next-intl/server", async () => {
   const { nextIntlServerMock } = await import("../../../helpers/next-intl-server");
@@ -24,6 +27,10 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/monitor/signup",
 }));
 vi.mock("@/app/monitor/(auth)/actions", () => ({ signUp: mockSignUp }));
+vi.mock("@/config/env", () => ({
+  parseSiteEnv: mockParseSiteEnv,
+}));
+
 
 import MonitorSignupPage, { generateMetadata } from "@/app/monitor/(auth)/signup/page";
 import { loadMessages } from "@/i18n/messages";
@@ -34,6 +41,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockParseSiteEnv.mockReturnValue({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" });
 });
 
 describe("MON-AC4/MON-AC9: /monitor/signup renders per design", () => {
@@ -59,11 +67,13 @@ describe("MON-AC4/MON-AC9: /monitor/signup renders per design", () => {
     expect(screen.getByRole("button", { name: Monitor.signup.submit })).toBeInTheDocument();
   });
 
-  it("MON-AC9a: privacy note is present with a link to the privacy page", async () => {
+  it("MON-AC9a: privacy note link is absolute main-site URL (not relative, not /monitor/)", async () => {
     render(await MonitorSignupPage({ searchParams: Promise.resolve({}) }));
     const privacyLink = screen.getByRole("link", { name: Monitor.signup.privacyLinkText });
     expect(privacyLink).toBeInTheDocument();
-    // The link must not point to the monitor area itself
+    // After subdomain routing, the privacy link must be an absolute main-site URL
+    expect(privacyLink).toHaveAttribute("href", "http://localhost:3000/privacy");
+    // Must not point into the monitor area
     expect(privacyLink).not.toHaveAttribute("href", expect.stringContaining("/monitor/"));
   });
 

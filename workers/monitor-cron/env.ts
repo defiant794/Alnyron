@@ -26,7 +26,7 @@ export const monitorCronEnvSchema = z.object({
   RESEND_API_KEY: nonEmpty,
   /** From address of every email (`Name <address>`), same as the web app's MAIL_FROM. */
   MAIL_FROM: nonEmpty,
-  /** The public site the emails link to (the monitor's detail page). */
+  /** The Monitor host the emails link to (the monitor's detail page), `https://monitor.alnyron.dk`. */
   MONITOR_SITE_URL: httpsUrl,
   /** Monitors checked (and change emails sent per sweep) per run. */
   MONITOR_BATCH_SIZE: z.coerce.number().check(z.refine(Number.isInteger), z.gte(1), z.lte(500)),

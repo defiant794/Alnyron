@@ -36,10 +36,14 @@
   // use; react-shim.ts stands in so no React code ships in this Worker.
   "alias": { "react": "./react-shim.ts" },
   "triggers": { "crons": ["* * * * *"] },
+  // MONITOR_SITE_URL: the Monitor host, where the emails' detail-page link
+  // (/monitor/monitors/<id>) is served as it is. No "routes"/"route" key here or in the web
+  // Worker's config: the custom domains are attached in the dashboard, and a routes key would make
+  // wrangler manage (and drop) them (docs/runbooks/monitor-go-live.md step 4).
   "vars": {
     "SUPABASE_URL": "https://xmgpixhxecamtryohgmk.supabase.co",
     "MAIL_FROM": "Alnyron <noreply@send.alnyron.dk>",
-    "MONITOR_SITE_URL": "https://alnyron.dk",
+    "MONITOR_SITE_URL": "https://monitor.alnyron.dk",
     "MONITOR_BATCH_SIZE": "2",
     "MONITOR_SUBREQUEST_LIMIT": "50"
   }

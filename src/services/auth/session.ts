@@ -91,8 +91,9 @@ export async function signInWithPassword(formData: FormData): Promise<SignInStat
  * redirect URL, so nothing the form sends can influence the account's role
  * (the database assigns `monitor_user`, or refuses an allowlisted address in
  * the before-user-created hook). With email confirmation on, Supabase
- * returns no session; the confirmation link (`/auth/confirm?type=signup`)
- * signs the user in.
+ * returns no session; the confirmation link (the Site URL's
+ * `/auth/confirm?type=signup`, forwarded to the Monitor host) signs the user
+ * in there.
  *
  * Success, an address that already has an account and a refused address all
  * get the same "check your email" answer (no account enumeration). Only
@@ -142,13 +143,13 @@ export async function signUpWithPassword(formData: FormData): Promise<SignUpResu
  *
  * Without `redirectTo` the DA templates build the link from the project's
  * Site URL, `{{ .SiteURL }}/auth/confirm?token_hash=...&next=/admin/set-password`,
- * which also serves invites sent from the dashboard (they carry none) and
- * Monitor resets (`/auth/confirm` lands a `monitor_user` on `/monitor/reset`
- * by role). With
- * it (the MyLife host's own origin, never user input) they link
- * `{{ .RedirectTo }}/auth/confirm?...&next=/mylife/set-password`, but only
- * when it is exactly `https://mylife.alnyron.dk` or
- * `http://mylife.localhost:3000`; any other value gets the Site URL link.
+ * which also serves invites sent from the dashboard (they carry none). With
+ * it (the MyLife or Monitor host's own origin, never user input) they link
+ * `{{ .RedirectTo }}/auth/confirm?...&next=/mylife/set-password` or
+ * `...&next=/monitor/reset`, but only when it is exactly
+ * `https://mylife.alnyron.dk` / `http://mylife.localhost:3000` or
+ * `https://monitor.alnyron.dk` / `http://monitor.localhost:3000`; any other
+ * value gets the Site URL link.
  */
 export async function sendPasswordResetLink(
   formData: FormData,

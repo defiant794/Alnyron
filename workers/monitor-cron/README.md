@@ -53,9 +53,9 @@ covers the same path against the e2e project with a capturing mailer:
 ## Go-live (production)
 
 In this order. `npm run deploy` deploys this Worker too (`deploy:monitor-cron` is chained at its
-end), so steps 1–3 must be done **before the next `npm run deploy`**, even a routine web-only
+end), so steps 1–4 must be done **before the next `npm run deploy`**, even a routine web-only
 one: from then on the cron runs every minute against production, and without the migration and
-both secrets every run fails.
+both secrets every run fails, and without the Monitor domain every email link is dead.
 
 1. Apply the migration to production: `npm run db:push`, then regenerate types with
    `npm run db:types`.
@@ -63,7 +63,12 @@ both secrets every run fails.
    `npx wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc`
 3. Create a Resend sending key restricted to `send.alnyron.dk` (already verified) and store it:
    `npx wrangler secret put RESEND_API_KEY --config workers/monitor-cron/wrangler.jsonc`
-4. Deploy: `npm run deploy:monitor-cron`, or `npm run deploy` (web Worker, then this one).
+4. `MONITOR_SITE_URL` is `https://monitor.alnyron.dk` (`wrangler.jsonc`): every change email
+   links `https://monitor.alnyron.dk/monitor/monitors/<id>`. Attach that custom domain to the web
+   Worker first (`docs/runbooks/monitor-go-live.md` step 4), or the links lead to a dead host.
+   Never add a `routes` key to either `wrangler.jsonc`: wrangler would then manage the zone's
+   routes and drop the domains attached in the dashboard.
+5. Deploy: `npm run deploy:monitor-cron`, or `npm run deploy` (web Worker, then this one).
 
 ## Plan profiles
 
@@ -211,7 +216,7 @@ unless older monitors of owners with strikes are waiting (see "Accepted residual
   and a failed send is not retried. At the cap it is not claimed (`error_notified_at` stays
   empty), so a later failure of the same streak notifies once the window frees.
 - Page text and URLs in emails are defanged (`hxxps://`, `example[.]com`, `user[at]host`), so no
-  mail client turns them into links; the only link is the monitor's page on alnyron.dk. A dot
+  mail client turns them into links; the only link is the monitor's page on monitor.alnyron.dk. A dot
   between two digits (`1.299 kr.`, `08.11.2026`, `10.30`) stays, as no top-level domain is
   numeric. The defang runs in linear time, also on a 2048-character URL.
 - DNS is checked right before each request, but the answer can change between the check and
