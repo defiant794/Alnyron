@@ -1,7 +1,9 @@
 {
-  // Cloudflare Worker "alnyron-monitor-cron": the Monitor engine (P4 slice B). A cron trigger
-  // runs index.ts's scheduled() handler, which checks due monitors through the service-role-only
-  // monitor_engine_* functions (migration 20261108000100) and emails changes through Resend.
+  // Cloudflare Worker "alnyron-monitor-cron": the Monitor engine (P4 slices B and C). A cron
+  // trigger runs index.ts's scheduled() handler, which checks due monitors and emails changes
+  // through Resend, then deletes stale unconfirmed Monitor accounts and emails the site owner
+  // about new confirmed signups, all through the service-role-only monitor_engine_* functions
+  // (migrations 20261108000100 and 20261110000100).
   // Separate from the OpenNext web Worker (root wrangler.jsonc) so the Supabase secret key never
   // sits in the public app's bundle. No HTTP ingress: no routes, no workers.dev, no previews.
   //

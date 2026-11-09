@@ -103,7 +103,8 @@ describe("AC-I18N-09: da.json contains no em-dash character (U+2014)", () => {
 });
 
 // ── MonitorEmail keys — ENG-AC1 / ENG-AC3 ────────────────────────────────────
-// Keys pinned from the contract JSON (§3 change-email.ts).
+// Keys pinned from the contract JSON (§3 change-email.ts), plus the owner's signup notice
+// (monitor-signup-notice SNE-AC1i, signup-notice-email.ts).
 
 const MONITOR_EMAIL_REQUIRED_KEYS = [
   "changeSubject",
@@ -118,6 +119,11 @@ const MONITOR_EMAIL_REQUIRED_KEYS = [
   "errorHeading",
   "errorBody",
   "errorFooter",
+  "signupNoticeSubject",
+  "signupNoticeHeading",
+  "signupNoticeBody",
+  "signupNoticeWaiting",
+  "signupNoticeFooter",
 ] as const;
 
 describe("ENG-AC1/ENG-AC3: MonitorEmail namespace in da.json", () => {

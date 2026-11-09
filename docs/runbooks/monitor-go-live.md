@@ -20,7 +20,19 @@ Puts Monitor on its own host, `monitor.alnyron.dk`, and switches public signup o
 - The cron Worker's `MONITOR_SITE_URL` is `https://monitor.alnyron.dk` (`workers/monitor-cron/wrangler.jsonc`): change emails link `https://monitor.alnyron.dk/monitor/monitors/<id>`.
 - `site_url` stays `https://alnyron.dk`: admin invites and resets, and every template's fallback branch, depend on it.
 
-Run B (a later commit) adds the owner's "new signup" email (`profiles.signup_notified_at`, two service-role RPCs, a cron sweep) and the purge of unconfirmed `monitor_user` accounts older than 24 hours. Rows marked **[Run B]** depend on it.
+## What Run B adds
+
+Run B (a later commit) adds migration `20261110000100_monitor_signup_notice.sql` and two last steps to every cron run (`workers/monitor-cron/README.md`, "New signups and unconfirmed accounts"): the owner's "new signup" email and the purge of unconfirmed `monitor_user` accounts older than 24 hours. The same migration adds a trigger on `auth.users` that empties a pre-registered password. Rows marked **[Run B]** depend on it.
+
+- `public.profiles.signup_notified_at`: when the owner was told about a new confirmed `monitor_user` account. Adding the column stamps every existing `monitor_user` row with its own `created_at`, so no account that exists before step 2 is notified.
+- Three functions, callable only with the cron's service-role key (EXECUTE revoked from `public`, `anon` and `authenticated`, granted to `service_role`; empty `search_path`):
+  - `monitor_engine_pending_signups(integer, integer)`: the next confirmed `monitor_user` accounts to notify, with the owner's address. **SECURITY DEFINER**, owned by `postgres`: it reads `auth.users.email_confirmed_at`, and `service_role` has no privilege at all on `auth.users` (checked on the e2e project; the table belongs to `supabase_auth_admin` and has RLS on). A grant on that table would open all of it to every holder of the secret key; the function returns only the pending notices.
+  - `monitor_engine_mark_signup_notified(uuid)`: stamps `signup_notified_at` once the notice was sent (or rejected for good). SECURITY INVOKER: it writes only `public.profiles`, which `service_role` may update.
+  - `monitor_engine_purge_unconfirmed(integer)`: deletes `monitor_user` accounts still unconfirmed 24 hours after signup (profile, monitors and the other account rows go by cascade). **SECURITY DEFINER**, owned by `postgres`, for the same reason: it deletes from `auth.users`, but only the rows its own condition selects. Other roles (owner, admin, MyLife accounts waiting for their invite) are never deleted.
+- `private.monitor_wipe_password_on_resignup()` and its trigger `monitor_wipe_password_on_resignup` (`BEFORE UPDATE OF confirmation_sent_at, recovery_sent_at ON auth.users`): empties `encrypted_password` of an unconfirmed `monitor_user` account whenever `confirmation_sent_at` changes from a non-NULL value or `recovery_sent_at` changes to a new non-NULL value. Per the supabase/auth source (v2.197.0 and master, see the next point; production's version is not verified), GoTrue does that notably in these cases (the list is not exhaustive): it records a confirmation again (a re-signup that keeps the first password and a resend, both emailing it; an admin `generate_link` of type `signup` for the existing account, which ignores the submitted password and emails nothing); its `UpdatePassword` writes a new password together with `confirmation_sent_at = NULL` in one UPDATE (a re-signup that overwrites the password, whose confirmation then goes from NULL to now, wipes nothing and leaves the password empty; also an admin password change); its `ClearAllPendingTokens` sets `confirmation_sent_at = NULL` with the other pending tokens (an admin email or phone change without `email_confirm`, and `UpdateUserEmailFromIdentities`); and it records a password reset (a reset asked with the address, which emails the link; an admin `generate_link` of type `recovery` or `magiclink` for the existing account, which emails nothing), so the password is emptied before the reset link can confirm the account. `UpdatePassword` and `ClearAllPendingTokens` also set `recovery_sent_at = NULL`, which wipes nothing; their `confirmation_sent_at` change decides. **SECURITY DEFINER**, owned by `postgres` (GoTrue updates `auth.users` as `supabase_auth_admin`, and the function reads `public.profiles`); EXECUTE revoked from `public`, `anon` and `authenticated` and granted to no role; `service_role` holds none either (checked on the e2e project; step 2 checks it again). The first confirmation, the confirmation itself, confirmed accounts and other roles are untouched.
+- Pre-registration, and why the trigger: a stranger may sign up with someone else's address and a password of their own, hoping the owner of the address confirms that account. What GoTrue does when an unconfirmed address signs up again depends on its version (read in the supabase/auth source at v2.197.0, the version the e2e project reports, and on master; production's version is not verified): v2.197.0 keeps the first signup's password and only sends the confirmation again; supabase/auth master (#2868 of 2026-11-03, reverted by #2912, re-landed by #2918 on 2026-11-09) runs the before-user-created hook, then overwrites the password with the latest signup's and sends the confirmation again. A password reset depends on the version too: at v2.197.0 the reset link confirms an unconfirmed account and keeps its password, so the person's own "Glemt adgangskode?" would confirm the account with the stranger's password still on it; master clears an unconfirmed account's password before confirming it. The purge alone closes neither signup case. Under the first behaviour a stranger can register again right after each purge (one call a day per address), so a stranger's password sits on the account almost all the time; under the second the stranger signs up again between the person's own signup and confirmation. The trigger handles all of these: under the first behaviour the person's own signup sends the confirmation again; under the second the stranger's signup overwrites the password through `UpdatePassword`, which clears the earlier `confirmation_sent_at` in the same UPDATE; and the person's reset records a new `recovery_sent_at` before its link can confirm the account. Each of these UPDATEs empties the password (the one exception, master only, is an account never sent a confirmation: see the next point), and only the mailbox owner can then set one, through "Glemt adgangskode?" (GoTrue refuses a password sign-in against an empty hash: `400 invalid_credentials`, seen on the e2e project). The purge additionally frees addresses stuck on an unconfirmed account and bounds a stale pre-registration to 24 hours plus the wait for a run with room: at most 5 accounts per run (`MONITOR_UNCONFIRMED_PURGE_BATCH`), oldest first.
+- Accepted costs and residuals of the trigger (`workers/monitor-cron/README.md`, "Accepted residuals"): a real person who signs up twice, or asks for the confirmation again, before confirming loses the password they chose. The confirmation link still signs them in on the Monitor host, but for later sign-ins they must set a password with "Glemt adgangskode?". A stranger can do the same to a pending account by signing up, asking for the confirmation, or asking for a password reset with its address. Recovery is unchanged (the newest link signs in, then "Glemt adgangskode?"); those sends count against the project's email rate limit. An admin password, email or phone change on an unconfirmed `monitor_user` account that already had a confirmation sent empties the password in that UPDATE, a password it sets included: set a password once the address is confirmed (an update that also sets `email_confirm` confirms the address first). Someone who, without signing up, clicks an unsolicited confirmation email for a stranger's pre-registration confirms an account with the stranger's password: the stranger can sign in to it (empty at first) until the password is reset. Under master's behaviour only, an unconfirmed `monitor_user` account that never had a confirmation sent (`confirmation_sent_at` NULL, e.g. an `admin.createUser` without a send) keeps a stranger's signup password (the overwrite goes from NULL to NULL, the send from NULL to now), and the mailbox owner's click on that confirmation confirms it. A password reset sent for such an account while it is still unconfirmed empties that password too, and the purge limits both to links clicked before it deletes the unconfirmed account (24 hours plus the wait for a run); bounded and of low value.
+- Owner notice: at most 1 per run (`MONITOR_SIGNUP_NOTICE_PER_RUN`) and 10 per rolling 24 hours (`MONITOR_SIGNUP_NOTICE_DAILY_CAP`), oldest confirmation first, to the oldest `owner` profile's address, without any link (the new address is defanged in full). Only addresses confirmed under 23 hours ago qualify, so a retry with the same idempotency key stays inside Resend's documented 24-hour idempotency window (not verified by a test) and cannot send twice. Signups past the cap or the 23-hour window are **not emailed**: they stay visible in `public.profiles` with `signup_notified_at is null` (see "Signups without an owner notice").
 
 ## Before you start
 
@@ -40,16 +52,16 @@ Run the commands from the repo root (step 3 reads the templates from `supabase/t
 | # | Owner | Step | Gate |
 |---|---|---|---|
 | 0a | VERIFY (Supabase) | Read the production auth config (commands below) | `hook_before_user_created_enabled=true` with uri `pg-functions://postgres/public/hook_before_user_created`; `disable_signup=true`; `mailer_autoconfirm=false`; `external_anonymous_users_enabled=false`; `external_phone_enabled=false`; every OAuth `external_*_enabled=false`; `smtp_host=smtp.resend.com`; `site_url=https://alnyron.dk`. Note `rate_limit_email_sent` and `uri_allow_list` |
-| 0b | VERIFY (SQL) | Migrations 20261106000400, 20261107000300, 20261108000100 applied; the hook's body refuses allowlisted emails; grants | all true |
+| 0b | VERIFY (SQL) | Migrations 20261106000400, 20261107000300, 20261108000100 applied (**[Run B]** and 20261110000100 once Run B is deployed: step 2 applies it, with the wipe trigger on `auth.users`, enabled, on `confirmation_sent_at` and `recovery_sent_at`); the hook's body refuses allowlisted emails; grants | all true |
 | 0c | VERIFY (SQL) | Squattable set: allowlisted emails without an account | empty, or known and cleaned up |
 | 0d | VERIFY (Cloudflare) | `https://alnyron.dk/sitemap.xml` lists `https://alnyron.dk/...` URLs (proves the build's `NEXT_PUBLIC_SITE_URL`; were it `localhost`, the derived Monitor host would be `monitor.localhost`). No DNS record named `monitor` in the zone (a CNAME blocks Custom Domains). Resend domain `send.alnyron.dk` verified | ok |
-| 1 | CODE | Feature-orchestrator TDD loop. **Run A** (this change: host routing, 308, confirm forward, recovery branch, absolute links, cron var, this runbook) and **Run B** (signup notice, unconfirmed purge), each committed by the main session. **No push and no `npm run deploy` (not even a web-only one) from the first commit until steps 3 and 4 hold** | gates pass |
-| 2 | CODE -> DB **[Run B]** | `npm run db:push` (Run B's additive migration; inert until the cron calls it), then `npm run db:types`. Run A has no migration: with Run A alone this row is empty | RPCs exist, EXECUTE denied to API roles |
+| 1 | CODE | Feature-orchestrator TDD loop. **Run A** (this change: host routing, 308, confirm forward, recovery branch, absolute links, cron var, this runbook) and **Run B** (signup notice, unconfirmed purge, wipe trigger), each committed by the main session. **No push and no `npm run deploy` (not even a web-only one) from the first commit until steps 3 and 4 hold** | gates pass |
+| 2 | CODE -> DB **[Run B]** | `npm run db:push` (Run B's additive migration 20261110000100; inert until the cron calls it, apart from the wipe trigger), then `npm run db:types`. Run A has no migration: with Run A alone this row is empty | the three signup functions exist; EXECUTE denied to `anon` and `authenticated`, granted to `service_role`; the wipe trigger exists on `auth.users`, is enabled (`tgenabled = 'O'`) and fires on `confirmation_sent_at` and `recovery_sent_at`, its function executable by none of `anon`, `authenticated` and `service_role` |
 | 3 | SUPABASE (signup still OFF) | PATCH: `uri_allow_list` += exact `https://monitor.alnyron.dk` and exact `https://mylife.alnyron.dk`; `mailer_subjects_confirmation`; confirmation and recovery templates from the repo; `rate_limit_email_sent=10`. Must come **before** step 5, or Monitor resets lose their session on the main host | GET shows the values |
 | 4 | CLOUDFLARE | Attach the custom domain `monitor.alnyron.dk` to the Worker `alnyron-web`. No `routes` key in either `wrangler.jsonc`. For a few minutes the subdomain serves the main site (old build); harmless | `curl -I https://monitor.alnyron.dk` -> 200 from the Worker, valid certificate |
 | 5 | USER | Push. Workers Builds deploys the web Worker. Deploy the cron with `npm run deploy:monitor-cron` unless the build chains `npm run deploy` | new build live; the cron's `MONITOR_SITE_URL` shows the subdomain |
 | 6 | VERIFY | Subdomain routing, 308s, links, owner sign-in and reset on the subdomain, cron log (checklist below) | all pass |
-| 7 | VERIFY canary (signup OFF) | `generate_link` canaries: an allowlisted address is refused and creates no user; a non-allowlisted one becomes `monitor_user` and its main-host confirm link lands on the subdomain dashboard | all pass |
+| 7 | VERIFY canary (signup OFF) | `generate_link` canaries: an allowlisted address is refused and creates no user; a non-allowlisted one becomes `monitor_user` and its main-host confirm link lands on the subdomain dashboard (**[Run B]** then the owner notice, `signupNotices: 1` in the cron log) | all pass |
 | U1 | USER (before 8) | Cloudflare WAF rate-limit rule on `/signup` and `/monitor/signup`, after confirming the plan's one free rule slot is unused | rule active |
 | U2 | USER (before 8) | Update the privacy page (Admin > Sider > Privatliv) for public Monitor accounts and that the owner is notified of each signup | page published |
 | 8 | SUPABASE: **THE FLIP** | `PATCH {"disable_signup": false, "mailer_autoconfirm": false, "external_email_enabled": true, "external_anonymous_users_enabled": false, "external_phone_enabled": false}`, then GET | values confirmed |
@@ -99,9 +111,19 @@ The last command must print `{"external_email_enabled": true}` and nothing else.
 
 ```sql
 select version from supabase_migrations.schema_migrations
- where version in ('20261106000400', '20261107000300', '20261108000100')
+ where version in ('20261106000400', '20261107000300', '20261108000100', '20261110000100')
  order by version;
--- 3 rows
+-- 3 rows; 4 rows (20261110000100 too) once Run B's migration is applied (step 2) [Run B]
+
+select t.tgenabled,
+       array(select a.attname::text
+               from unnest(t.tgattr) as k(attnum)
+               join pg_attribute a on a.attrelid = t.tgrelid and a.attnum = k.attnum
+              order by a.attname) as columns
+  from pg_trigger t
+ where t.tgrelid = 'auth.users'::regclass and t.tgname = 'monitor_wipe_password_on_resignup';
+-- [Run B] 1 row: O (enabled), {confirmation_sent_at,recovery_sent_at}, once 20261110000100 is
+--   applied; 0 rows before step 2
 
 select pg_get_functiondef('public.hook_before_user_created(jsonb)'::regprocedure);
 -- returns {"error": {"http_code": 403, ...}} when the email is in public.user_allowlist
@@ -116,6 +138,8 @@ select has_function_privilege('supabase_auth_admin', 'public.hook_before_user_cr
 This also settles the onboarding runbook's prerequisite (`docs/runbooks/area-user-onboarding.md`): its steps need migration 0400 on the project.
 
 If 20261107000300 (free cap 2) or 20261108000100 (the engine) is missing, Slice B's go-live is not done yet: finish it first (`workers/monitor-cron/README.md`, "Go-live"), then repeat this step.
+
+**[Run B]** 20261110000100 (signup notice, purge and the wipe trigger) is needed only once Run B is deployed: before step 2 the queries return 3 rows and no trigger row, which is expected. Step 2 applies it, and it must be there before step 5 deploys a build with Run B: from then on every cron run calls its functions, and without them each run logs `rpcErrors`. From step 2 on, the trigger row must show `O` and both columns: no row, `D` (disabled), or a missing column leaves a pre-registered password in place (see "What Run B adds"), so stop and re-apply the migration before step 8.
 
 ### 0c. Squattable set (VERIFY, SQL editor)
 
@@ -151,7 +175,44 @@ npm run db:types
 
 `db push` needs the current database password (refresh it from the dashboard first). Without it, apply the migration file's SQL through the Management API (`POST https://api.supabase.com/v1/projects/$PROD_REF/database/query` with `Authorization: Bearer $SUPABASE_ACCESS_TOKEN`) and record it with `insert into supabase_migrations.schema_migrations (version, name) values ('<version>', '<name>')`, so the next `db push` sees no drift.
 
-Check in the SQL editor that the new `monitor_engine_*` signup functions exist and that `has_function_privilege('anon', ..., 'execute')` and `('authenticated', ...)` are false.
+Then, in the SQL editor, check that the three functions exist and only `service_role` may execute them:
+
+```sql
+select p.oid::regprocedure as function,
+       p.prosecdef as security_definer,
+       pg_get_userbyid(p.proowner) as owner,
+       has_function_privilege('anon', p.oid, 'execute') as anon,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role
+  from pg_proc p
+ where p.pronamespace = 'public'::regnamespace
+   and p.proname in ('monitor_engine_pending_signups', 'monitor_engine_mark_signup_notified',
+                     'monitor_engine_purge_unconfirmed')
+ order by p.proname;
+-- 3 rows; anon false, authenticated false, service_role true on each;
+-- security_definer true with owner postgres for pending_signups and purge_unconfirmed, false for mark_signup_notified
+```
+
+Then check that the wipe trigger is on `auth.users`, enabled, fires on `confirmation_sent_at` and `recovery_sent_at`, and that its function is a definer that neither `anon`, `authenticated` nor `service_role` may execute (EXECUTE is granted to no role):
+
+```sql
+select t.tgenabled,
+       pg_get_triggerdef(t.oid) as definition,
+       p.prosecdef as security_definer,
+       pg_get_userbyid(p.proowner) as owner,
+       has_function_privilege('anon', p.oid, 'execute') as anon,
+       has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+       has_function_privilege('service_role', p.oid, 'execute') as service_role
+  from pg_trigger t
+  join pg_proc p on p.oid = t.tgfoid
+ where t.tgrelid = 'auth.users'::regclass
+   and t.tgname = 'monitor_wipe_password_on_resignup';
+-- 1 row: O; CREATE TRIGGER monitor_wipe_password_on_resignup BEFORE UPDATE OF confirmation_sent_at, recovery_sent_at
+--   ON auth.users FOR EACH ROW EXECUTE FUNCTION private.monitor_wipe_password_on_resignup(); true; postgres; false; false;
+--   false
+```
+
+Fewer than 3 function rows, `anon` or `authenticated` true on any function, `service_role` false on any of the three functions or true on the trigger's function, or the trigger missing, not `O`, or not on both `confirmation_sent_at` and `recovery_sent_at`: stop, and do not deploy Run B (step 5) until it is fixed.
 
 ### 3. Allow-list, templates, email rate limit (SUPABASE, signup still off)
 
@@ -226,7 +287,7 @@ Push to the deploy branch: Workers Builds deploys `alnyron-web`. Deploy the cron
 - `curl -sSI https://alnyron.dk/monitor` -> `308`, `location: https://monitor.alnyron.dk/`, `cache-control: public, max-age=86400`; `https://alnyron.dk/monitor/login?next=/monitor/dashboard` -> 308 with the query kept.
 - The ALNYRON lockup and the footer's "Privatliv" on the subdomain lead to `https://alnyron.dk` and `https://alnyron.dk/privacy`.
 - The owner signs in on the subdomain. Owner reset from `https://monitor.alnyron.dk/forgot-password`: the real email's link points at `https://monitor.alnyron.dk/auth/confirm?...&next=/monitor/reset` and lands on `/monitor/reset` signed in.
-- Cron log (Workers > `alnyron-monitor-cron` > Logs): no `rpcErrors`; the signup counters at 0 **[Run B]**.
+- Cron log (Workers > `alnyron-monitor-cron` > Logs): no `rpcErrors`. **[Run B]** Each line also has the counters `purged`, `signupNotices` and `signupNoticesDeferred`. `signupNotices` and `signupNoticesDeferred` are 0 (signup is still off, and step 2 stamped every existing `monitor_user`). `purged` is 0, or above 0 (at most 5 per run) for the few runs that delete `monitor_user` accounts left unconfirmed for over 24 hours, if there are any. A line without these counters comes from a cron build without Run B.
 
 ### 7. Pre-flip canary with `generate_link` (VERIFY, signup still off)
 
@@ -258,11 +319,12 @@ delete from public.user_allowlist where email = '<canary>';
 **Non-allowlisted case.** Same call with `monitor-canary-<rand>@alnyron-test.local` (no allowlist row) and keep the response:
 
 - The user exists, unconfirmed; `public.profiles` shows `role = 'monitor_user'` and `monitor_limit = 2`.
+- Optional **[Run B]**, before opening the link: repeat the same call once more for the same address (per the supabase/auth source, GoTrue ignores the body's password for the existing account, records a new confirmation and sets `confirmation_sent_at` again; no email is sent), then in the SQL editor `select encrypted_password = '' as wiped from auth.users where lower(email) = lower('<canary>');` -> `true` (the wipe trigger emptied the password; after the first call alone it is `false`). Use the **second** response's `properties.hashed_token` in the next step: the second call replaced the first token.
 - Open `https://alnyron.dk/auth/confirm?token_hash=<properties.hashed_token>&type=signup&next=/monitor/dashboard` (the link the confirmation template sends; use `hashed_token`, not `action_link`). It is forwarded to `https://monitor.alnyron.dk/auth/confirm?...` and lands on `/monitor/dashboard` signed in; the session cookie exists only on `monitor.alnyron.dk`.
-- **[Run B]** The owner's signup notice arrives within about two cron runs.
+- **[Run B]** The owner's signup notice arrives within about two cron runs; the run that sends it logs `signupNotices: 1`.
 - Delete the canary: Authentication > Users, or `DELETE $SUPABASE_URL/auth/v1/admin/users/<id>` with the same two headers.
 
-**GoTrue version.** The onboarding gap in `docs/runbooks/area-user-onboarding.md` ("The gap between steps 3 and 4"), where a signup on an existing unconfirmed address skips the hook and leaves the account unchanged, is what this project's current GoTrue does (not verified by a test). The unreleased GoTrue 2.198 release candidates reportedly run the hook first and overwrite an unconfirmed account's password (not verified on hosted). When the project's GoTrue is upgraded (`GET $SUPABASE_URL/auth/v1/health` with the publishable key shows `version`), re-verify those onboarding-gap facts and SHIP-AC6g's expected `429` in `tests/e2e/monitor-ship-routing.spec.ts` (it may become the hook's `403`).
+**GoTrue version.** The onboarding gap in `docs/runbooks/area-user-onboarding.md` ("The gap between steps 3 and 4"), where a signup on an existing unconfirmed address skips the hook and leaves the account unchanged, is what the supabase/auth source does at v2.197.0, the version the e2e project reports (read in the source, not verified by a test; production's version is not verified). supabase/auth master (#2868 of 2026-11-03, reverted by #2912, re-landed by #2918 on 2026-11-09; read in the source, not verified on hosted) runs the hook first on such a signup, so an allowlisted address is refused, and overwrites an admitted account's password with the latest signup's through `UpdatePassword`, which sets `confirmation_sent_at` to NULL in the same UPDATE; **[Run B]** on a `monitor_user` account that already had a confirmation sent, the wipe trigger empties that password in that UPDATE, while one never sent a confirmation keeps it until a password reset is sent for it (see "What Run B adds"). When the project's GoTrue is upgraded (`GET $SUPABASE_URL/auth/v1/health` with the publishable key shows `version`), re-verify those onboarding-gap facts and SHIP-AC6g's expected `429` in `tests/e2e/monitor-ship-routing.spec.ts` (it may become the hook's `403`).
 
 ### U1. WAF rate-limit rule (USER, before step 8)
 
@@ -337,6 +399,24 @@ New signups stop at once; existing accounts keep working. The web rollback is re
 - **Signal:** the project's Auth logs show `over_email_send_rate_limit`, and real signups or resets get no email.
 - **Response:** `PATCH {"disable_signup": true}` (the command under Rollback); existing accounts keep working. Meanwhile give owner and admin access with `POST $SUPABASE_URL/auth/v1/admin/generate_link` (secret key, `type: "recovery"`), which returns the link instead of sending an email; build it from `properties.hashed_token` as in `docs/runbooks/area-user-onboarding.md` step 4. When the logs show the burst has subsided, switch signup back on with step 8's PATCH and GET.
 - If `over_email_send_rate_limit` keeps appearing with signup off, the emails come from another public auth endpoint, which `disable_signup` does not stop.
+
+## Signups without an owner notice [Run B]
+
+The owner notice is a courtesy, not a log. A confirmed `monitor_user` account the cron did not notify within 23 hours of its confirmation (held back by the cap of 10 per 24 hours, by a send that stopped, by a missing `owner` profile, or by a cron that did not run) is never emailed later, but keeps `signup_notified_at` null. List them in the SQL editor:
+
+```sql
+select p.email, u.email_confirmed_at, p.created_at,
+       u.email_confirmed_at <= now() - interval '23 hours' as never_notified
+  from public.profiles p
+  join auth.users u on u.id = p.user_id
+ where p.role = 'monitor_user'
+   and p.signup_notified_at is null
+   and u.email_confirmed_at is not null
+ order by u.email_confirmed_at;
+-- never_notified false: still pending, a later run may notify it; true: no notice will come
+```
+
+Unconfirmed accounts are left out: they get no notice, and the purge deletes them 24 hours after signup (5 per run).
 
 ## Email quota (Resend Free)
 

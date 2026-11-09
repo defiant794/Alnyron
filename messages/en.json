@@ -61,5 +61,12 @@
       "text": "Write to us, and we will get back to you with a no-obligation quote.",
       "button": "Contact us"
     }
+  },
+  "MonitorEmail": {
+    "signupNoticeSubject": "New account on Alnyron Monitor",
+    "signupNoticeHeading": "New account on Alnyron Monitor",
+    "signupNoticeBody": "{email} created an account on Alnyron Monitor and confirmed their email {when}.",
+    "signupNoticeWaiting": "{waiting, plural, one {# other is also waiting for a notice.} other {# others are also waiting for a notice.}}",
+    "signupNoticeFooter": "You get this email because you own Alnyron. We only write about new accounts that have confirmed their email, and at most once per account."
   }
 }

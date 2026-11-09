@@ -633,6 +633,11 @@
     "errorSubject": "Vi kan ikke hente {name}",
     "errorHeading": "Vi kan ikke hente {name}",
     "errorBody": "Vi har forsøgt at hente {url} {failures} gange i træk uden held. Vi prøver igen, men sjældnere. Tjek, at adressen stadig virker.",
-    "errorFooter": "Du får kun denne mail én gang, indtil siden kan hentes igen."
+    "errorFooter": "Du får kun denne mail én gang, indtil siden kan hentes igen.",
+    "signupNoticeSubject": "Ny konto på Alnyron Monitor",
+    "signupNoticeHeading": "Ny konto på Alnyron Monitor",
+    "signupNoticeBody": "{email} har oprettet en konto på Alnyron Monitor og bekræftet sin e-mail {when}.",
+    "signupNoticeWaiting": "{waiting, plural, one {# anden venter også på en besked.} other {# andre venter også på en besked.}}",
+    "signupNoticeFooter": "Du får denne mail, fordi du er ejer af Alnyron. Vi skriver kun om nye konti, der har bekræftet deres e-mail, og højst én gang pr. konto."
   }
 }

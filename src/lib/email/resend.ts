@@ -12,9 +12,11 @@ export type EmailMessage = { from: string; to: string; subject: string; html: st
 /**
  * Why a send failed: `rate_limited` (429, try again later), `quota` (429 for the
  * daily or monthly sending quota), `config` (401/403: bad key or unverified
- * domain), `transient` (409 idempotency conflict, 5xx, network or timeout: the
- * same message with the same idempotency key may be retried) and `rejected`
- * (any other 4xx: retrying the same message cannot help).
+ * domain), `transient` (5xx, network, timeout, or a 409 other than a payload
+ * conflict, e.g. `concurrent_idempotent_requests`: the same message with the same
+ * idempotency key may be retried) and `rejected` (any other 4xx, including the 409
+ * `invalid_idempotent_request` of a key already used with a different payload:
+ * retrying the same request cannot help).
  */
 export type SendFailure = "rate_limited" | "quota" | "config" | "transient" | "rejected";
 
@@ -24,6 +26,15 @@ const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 
 /** Resend error names (`name` in a 429 body) that mean the sending quota is used up. */
 const QUOTA_ERRORS = new Set(["daily_quota_exceeded", "monthly_quota_exceeded"]);
+
+/**
+ * Resend's error name (`name` in a 409 body) for an idempotency key already used, within its
+ * 24 hours, on a request with a different payload: per Resend's docs as of 2026-11, retrying
+ * it is useless without changing the key or the payload. Its other 409,
+ * `concurrent_idempotent_requests` (the key's first request is still in progress), is safe to
+ * retry later.
+ */
+const IDEMPOTENT_PAYLOAD_CONFLICT = "invalid_idempotent_request";
 
 /** A JSON body's string field, or null when the body is no JSON object or lacks it. */
 async function bodyField(response: Response, field: string): Promise<string | null> {
@@ -39,8 +50,10 @@ async function bodyField(response: Response, field: string): Promise<string | nu
 
 /**
  * Sends one email through Resend. `idempotencyKey` (at most 256 characters)
- * makes a retry within 24 hours return the first send's result instead of
- * sending again, so a caller may retry a `transient` failure with the same key.
+ * makes a retry within 24 hours with the same payload return the first send's
+ * result instead of sending again, so a caller may retry a `transient` failure
+ * with the same key. A retry under that key whose payload changed is answered
+ * with a 409 payload conflict, a `rejected` failure: nothing is sent again.
  */
 export async function sendEmail(
   apiKey: string,
@@ -77,8 +90,12 @@ export async function sendEmail(
     const name = await bodyField(response, "name");
     return { ok: false, kind: name !== null && QUOTA_ERRORS.has(name) ? "quota" : "rate_limited", status };
   }
+  if (status === 409) {
+    const name = await bodyField(response, "name");
+    return { ok: false, kind: name === IDEMPOTENT_PAYLOAD_CONFLICT ? "rejected" : "transient", status };
+  }
   await response.body?.cancel().catch(() => {});
   if (status === 401 || status === 403) return { ok: false, kind: "config", status };
-  if (status >= 400 && status < 500 && status !== 409) return { ok: false, kind: "rejected", status };
+  if (status >= 400 && status < 500) return { ok: false, kind: "rejected", status };
   return { ok: false, kind: "transient", status };
 }

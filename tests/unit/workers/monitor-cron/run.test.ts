@@ -6,6 +6,9 @@
  * Covers: baseline (no email), unchanged (no email), change → one email with
  *   key "monitor-event/<event_id>", transient failure → same key on retry,
  *   quota stop → mailStop:'quota' + deferred, rejected → markEmailed + no retry,
+ *   a change email sent but not marked, retried next run after the monitor was renamed:
+ *   the real sendEmail maps Resend's 409 invalid_idempotent_request to a rejection →
+ *   marked, emailsRejected, no mail stop, the next pending event still sent,
  *   stale applied:false → staleSkips, legacy hash → baseline,
  *   error with notify_error → error email key, the claim cut to the monitors
  *   the subrequest budget can check (budgetStop), batchFull, exactly one log
@@ -28,7 +31,7 @@ import {
   type RunConfig,
   type RunSummary,
 } from "../../../../workers/monitor-cron/run";
-import type { SendResult } from "@/lib/email/resend";
+import { sendEmail, type EmailMessage, type SendResult } from "@/lib/email/resend";
 import { buildChangeEmail } from "@/lib/monitor/change-email";
 
 // ── Fake-RPC types (mirror contract §4 EngineRpc return shapes) ──────────────
@@ -104,6 +107,15 @@ function makeFakeRpc(opts: FakeRpcOptions = {}): EngineRpc {
     },
     async markEmailed() {
       return opts.markEmailedResult ?? true;
+    },
+    async pendingSignups() {
+      return [];
+    },
+    async purgeUnconfirmed() {
+      return 0;
+    },
+    async markSignupNotified() {
+      return true;
     },
   };
 }
@@ -374,6 +386,99 @@ describe("runMonitorChecks — ENG-AC1: rejected → markEmailed called, no retr
   });
 });
 
+// ── A retry whose payload changed → Resend's 409 → rejected, sending goes on ──
+
+describe("runMonitorChecks — ENG-AC1: a retry whose payload changed gets Resend's 409 → marked, sending goes on", () => {
+  const RETRIED: PendingRow = {
+    event_id: "evt-retried", monitor_id: MONITOR_ID, user_id: USER_ID, email: "u@example.com",
+    url: MONITOR_URL, label: "Priser", detected_at: new Date().toISOString(), summary: null,
+  };
+  const NEXT: PendingRow = { ...RETRIED, event_id: "evt-next" };
+
+  /**
+   * Run 1: Resend accepts the change email for RETRIED, its markEmailed throws. Run 2: RETRIED is
+   * still pending, its monitor renamed meanwhile ("Priser" → "Tilbud"), followed by `behind`; the
+   * mailer is the real sendEmail on a fetch that answers RETRIED's key with Resend's 409
+   * `invalid_idempotent_request` body and any other key with a 200.
+   */
+  async function retryAfterRename(behind: readonly PendingRow[]) {
+    const marked: string[] = [];
+    let markThrows = true;
+    const rpcWith = (rows: readonly PendingRow[]): EngineRpc => {
+      let sweeps = 0;
+      return {
+        ...makeFakeRpc({ claimRows: [] }),
+        async pendingEmails() { return sweeps++ === 0 ? [...rows] : []; },
+        async markEmailed(id) {
+          marked.push(id);
+          if (markThrows) throw new Error("db down");
+          return true;
+        },
+      };
+    };
+
+    const first: { key: string; message: EmailMessage }[] = [];
+    const okMailer: Mailer = async (message, idempotencyKey) => {
+      first.push({ key: idempotencyKey, message });
+      return { ok: true, id: "mail-1" };
+    };
+    const run1 = await runMonitorChecks({ rpc: rpcWith([RETRIED]), mailer: okMailer, fetchPage: makeFakeFetchPage(), config: BASE_CONFIG, log: () => {} });
+
+    markThrows = false;
+    const retries: { key: string; message: EmailMessage }[] = [];
+    const mailer: Mailer = (message, idempotencyKey) => {
+      retries.push({ key: idempotencyKey, message });
+      return sendEmail("re_unit_test_key", message, idempotencyKey, async () =>
+        idempotencyKey === `monitor-event/${RETRIED.event_id}`
+          ? new Response(JSON.stringify({ name: "invalid_idempotent_request" }), { status: 409 })
+          : new Response(JSON.stringify({ id: "mail-2" }), { status: 200 }),
+      );
+    };
+    const run2 = await runMonitorChecks({
+      rpc: rpcWith([{ ...RETRIED, label: "Tilbud" }, ...behind]),
+      mailer,
+      fetchPage: makeFakeFetchPage(),
+      config: BASE_CONFIG,
+      log: () => {},
+    });
+    return { run1, run2, first, retries, marked };
+  }
+
+  it("ENG-AC1run5: send ok + markEmailed throws; next run's retry (label renamed) gets 409 invalid_idempotent_request → the event is marked, emailsRejected:1, emailsSent:0, mailStop stays null", async () => {
+    const { run1, run2, first, retries, marked } = await retryAfterRename([]);
+    expect(run1.emailsSent).toBe(1);
+    expect(run1.rpcErrors).toBe(1);
+
+    expect(retries.map((retry) => retry.key)).toEqual([`monitor-event/${RETRIED.event_id}`]);
+    expect(retries[0]!.key).toBe(first[0]!.key);
+    expect(retries[0]!.message.to).toBe(first[0]!.message.to);
+    expect(retries[0]!.message.subject).not.toBe(first[0]!.message.subject);
+    expect(retries[0]!.message.html).not.toBe(first[0]!.message.html);
+    expect(retries[0]!.message.text).not.toBe(first[0]!.message.text);
+    expect(marked).toEqual([RETRIED.event_id, RETRIED.event_id]);
+    expect(run2.emailsSent).toBe(0);
+    expect(run2.emailsRejected).toBe(1);
+    expect(run2.emailsDeferred).toBe(0);
+    expect(run2.mailStop).toBeNull();
+    expect(run2.rpcErrors).toBe(0);
+  });
+
+  it("ENG-AC1run6: after that 409 the next pending event of the same run is still sent and marked", async () => {
+    const { run2, retries, marked } = await retryAfterRename([NEXT]);
+    expect(retries.map((retry) => retry.key)).toEqual([
+      `monitor-event/${RETRIED.event_id}`,
+      `monitor-event/${NEXT.event_id}`,
+    ]);
+    expect(marked).toEqual([RETRIED.event_id, RETRIED.event_id, NEXT.event_id]);
+    // Only NEXT counts as sent: the retried event counts as rejected.
+    expect(run2.emailsSent).toBe(1);
+    expect(run2.emailsRejected).toBe(1);
+    expect(run2.emailsDeferred).toBe(0);
+    expect(run2.mailStop).toBeNull();
+    expect(run2.rpcErrors).toBe(0);
+  });
+});
+
 // ── Stale (applied:false) → staleSkips++ ─────────────────────────────────────
 
 describe("runMonitorChecks — ENG-AC1: stale record (applied:false) → staleSkips++, no email", () => {
@@ -503,8 +608,10 @@ describe("runMonitorChecks — ENG-AC7: the claim asks only for what the budget 
       claimed: 1, strikerClaimed: 0, checked: 1, unchanged: 0, baselines: 1, changed: 0, errors: 0, staleSkips: 0,
       emailsSent: 0, emailsDeferred: 0, emailsRejected: 0, errorEmails: 0,
       mailStop: null, budgetStop: true, batchFull: false,
-      subrequests: 4, // pendingEmails + claim + page 1 + record
+      // pendingEmails + claim + page 1 + record + purge + pendingSignups
+      subrequests: 6,
       rpcErrors: 0, durationMs: 0,
+      purged: 0, signupNotices: 0, signupNoticesDeferred: 0,
     });
   });
 });
@@ -581,8 +688,10 @@ describe("runMonitorChecks — ENG-AC6: exactly one log line per run, no sensiti
       claimed: 0, strikerClaimed: 0, checked: 0, unchanged: 0, baselines: 0, changed: 0, errors: 0, staleSkips: 0,
       emailsSent: 0, emailsDeferred: 0, emailsRejected: 0, errorEmails: 0,
       mailStop: null, budgetStop: false, batchFull: false,
-      subrequests: 2, // pendingEmails + claim
+      // pendingEmails + claim + purge + pendingSignups (empty run, all budget available)
+      subrequests: 4,
       rpcErrors: 0, durationMs: 0,
+      purged: 0, signupNotices: 0, signupNoticesDeferred: 0,
     });
   });
 

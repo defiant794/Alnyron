@@ -1,6 +1,7 @@
 /**
  * Live engine integration test: workers/monitor-cron/run.ts
  * Journey: monitor-engine  ENG-E1–ENG-E7; security round 1 live checks under ENG-AC1–ENG-AC4
+ *          monitor-signup-notice  SNE-AC2i (precondition guard for pending signups + purgeable accounts)
  *
  * e2e target only (requires SUPABASE_E2E_REF): off that target the whole suite is reported as
  * skipped (describe.skipIf), never as passed.
@@ -37,10 +38,13 @@
  *
  * Precondition (fails fast with a clear message): no foreign monitor that a run of this file
  *   could claim (the real claim, in a rolled-back transaction, with the grace widened by the
- *   file's run time) and no foreign event it could email (the real pending-emails query, by the
- *   database clock, with the daily cap lifted). Each run claims and stamps whatever is due and
- *   emails whatever is pending, so foreign rows would be checked or emailed by the test.
- *
+ *   file's run time), no foreign event it could email (the real pending-emails query, by the
+ *   database clock, with the daily cap lifted), no foreign confirmed monitor_user signup
+ *   pending notification (SNE-AC2i), and no foreign purgeable unconfirmed monitor_user
+ *   account (SNE-AC2i). It sends no signup notice, so it needs no daily-cap headroom (its
+ *   fixtures are stamped 25 h back, outside the cap window). Each run
+ *   claims/stamps/emails/notices/purges whatever is due, so foreign rows would be touched by
+ *   the test.
  * Run: npm run test:integration:e2e-project -- tests/integration/monitor-engine/engine-live.test.ts
  */
 
@@ -62,6 +66,8 @@ import {
 } from "../../../workers/monitor-cron/run";
 import type { EmailMessage, SendResult } from "@/lib/email/resend";
 import { endPool, getClient } from "../rls/helpers/db.js";
+import { assertNoForeignSignupWork } from "./helpers/signup-preconditions.js";
+import { assertE2eTarget } from "../../helpers/assert-e2e-target.js";
 
 // ── Skip when not on the e2e project ─────────────────────────────────────────
 
@@ -314,7 +320,24 @@ async function createOwner(tag: string): Promise<string> {
     user_metadata: {},
   });
   if (error) throw new Error(`Failed to create the ${tag} user: ${error.message}`);
-  return data.user.id;
+  const userId = data.user.id;
+  // Pre-stamp signup_notified_at so the signupSweep does not notice this test fixture; 25 h back,
+  // outside the 24 h window, so the stamp holds no daily-cap slot (even if the run aborts).
+  // On failure: delete the already-created user to prevent it leaking as a foreign pending signup.
+  const c = await getClient();
+  try {
+    const { rowCount } = await c.query<never>(
+      "UPDATE public.profiles SET signup_notified_at = now() - interval '25 hours' WHERE user_id = $1",
+      [userId],
+    );
+    if (rowCount !== 1) throw new Error(`Expected 1 profile row to stamp for ${tag}, got ${rowCount ?? 0}`);
+  } catch (stampErr) {
+    await makeAdminClient().auth.admin.deleteUser(userId).catch(() => {});
+    throw stampErr;
+  } finally {
+    c.release();
+  }
+  return userId;
 }
 
 /** Inserts a further active 60-minute monitor of the seeded user; the test deletes it in `finally`. */
@@ -391,6 +414,10 @@ describe.skipIf(!ON_E2E)("monitor engine live run (e2e project only)", () => {
   // ── Setup / teardown ────────────────────────────────────────────────────────
 
   beforeAll(async () => {
+    // Guard: verify the env targets the e2e project, not prod,
+    // before the first supabase-js client is built later in this beforeAll.
+    assertE2eTarget();
+
     // Start local HTTP server
     server = createServer((_req, res) => {
       const spec = currentPage;
@@ -428,6 +455,10 @@ describe.skipIf(!ON_E2E)("monitor engine live run (e2e project only)", () => {
           "They would be emailed during the test run.",
       );
     }
+    // Precondition (SNE-AC2i): no foreign confirmed signup or purgeable unconfirmed account the
+    // signup sweep / purge could notice or delete (stamps signup_notified_at irreversibly). This
+    // file sends no signup notice (its fixtures are pre-stamped), so it needs no cap headroom.
+    await assertNoForeignSignupWork(0);
 
     const admin = makeAdminClient();
 
@@ -463,6 +494,23 @@ describe.skipIf(!ON_E2E)("monitor engine live run (e2e project only)", () => {
       .single();
     if (monErr || !monitor) throw new Error(`Failed to seed monitor: ${monErr?.message}`);
     seededMonitorId = monitor.id;
+
+    // Pre-stamp signup_notified_at so the signupSweep does not notice this confirmed monitor_user
+    // seed in every subsequent run (it would email the owner and skew exact email counts); 25 h
+    // back, outside the 24 h window, so the stamp holds no daily-cap slot.
+    const stampClient = await getClient();
+    try {
+      const { rowCount } = await stampClient.query<never>(
+        "UPDATE public.profiles SET signup_notified_at = now() - interval '25 hours' WHERE user_id = $1",
+        [userId],
+      );
+      if (rowCount !== 1) throw new Error(`Expected 1 profile row to stamp for seed user, got ${rowCount ?? 0}`);
+    } catch (stampErr) {
+      await admin.auth.admin.deleteUser(userId).catch(() => {});
+      throw stampErr;
+    } finally {
+      stampClient.release();
+    }
   });
 
   afterAll(async () => {

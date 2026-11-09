@@ -48,7 +48,7 @@ All calls use the project's secret key (`SUPABASE_SECRET_KEY`) from a trusted ma
 
 ## The gap between steps 3 and 4
 
-From `admin.createUser` until the person accepts the invite, the account exists but is unconfirmed. With public signup on, someone may sign up for Monitor with that address in this gap. GoTrue then takes its existing-unconfirmed-user path, which skips the hook, but the stranger gains nothing: GoTrue leaves the account's password unchanged (the account has none yet), the role stays the allowlist role, and the confirmation email goes to the real person.
+From `admin.createUser` until the person accepts the invite, the account exists but is unconfirmed. With public signup on, someone may sign up for Monitor with that address in this gap. In the supabase/auth source at v2.197.0, the version the e2e project reports (not verified by a test; production's version is not verified), GoTrue then takes its existing-unconfirmed-user path, which skips the hook, but the stranger gains nothing: GoTrue leaves the account's password unchanged (an unknown random password: `admin.createUser` without a password stores a random hash, seen on the e2e project), the role stays the allowlist role, and the confirmation email goes to the real person. supabase/auth master (#2868 of 2026-11-03, reverted by #2912, re-landed by #2918 on 2026-11-09; read in the source, which version the hosted project runs is not verified) runs the before-user-created hook on such a signup too, so the hook refuses the allowlisted address (`403`) and the account stays unchanged.
 
 If the real person clicks that confirmation, the link is pinned to Monitor: it lands them on `/monitor/no-access` on the Monitor host, with their own session. Their address is now confirmed, so the pending invite link may then fail. In that case send a **recovery** link instead:
 
@@ -62,7 +62,7 @@ and build it from `data.properties.hashed_token` as in step 4, with `type=recove
 
 Sending the invite (step 4) right after creating the account (step 3) keeps the gap short.
 
-> **GoTrue upgrade:** the onboarding gap described above is what this project's current GoTrue does (not verified by a test). The unreleased GoTrue 2.198 release candidates reportedly run the hook first and overwrite an unconfirmed account's password (not verified on hosted). When the project's GoTrue is upgraded, re-verify the facts in this section and SHIP-AC6g's expected `429` in `tests/e2e/monitor-ship-routing.spec.ts` (it may become the hook's `403`); see `docs/runbooks/monitor-go-live.md` step 7.
+> **GoTrue upgrade:** the path that skips the hook, described above, is what the supabase/auth source does at v2.197.0, the version the e2e project reports (not verified by a test). supabase/auth master (#2868 of 2026-11-03, reverted by #2912, re-landed by #2918 on 2026-11-09; read in the source, which version the hosted project runs is not verified) runs the hook first on such a signup instead, so the allowlisted address is refused (`403`) and the account stays unchanged. When the project's GoTrue is upgraded, re-verify the facts in this section and SHIP-AC6g's expected `429` in `tests/e2e/monitor-ship-routing.spec.ts` (it may become the hook's `403`); see `docs/runbooks/monitor-go-live.md` step 7.
 
 ## Removing access
 

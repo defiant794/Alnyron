@@ -3,10 +3,11 @@ import { MONITOR_RPC_TIMEOUT_MS } from "@/config/monitor";
 import type { Database } from "@/types/database";
 
 /**
- * The cron's only door to the database: typed wrappers around the five
- * `monitor_engine_*` functions (migration 20261108000100, EXECUTE for
- * service_role only). Row shapes are written out here because the generated
- * types cannot express which returned columns may be NULL.
+ * The cron's only door to the database: typed wrappers around the eight
+ * `monitor_engine_*` functions (migrations 20261108000100 and
+ * 20261110000100, EXECUTE for service_role only). Row shapes are written out
+ * here because the generated types cannot express which returned columns may
+ * be NULL.
  */
 
 /**
@@ -77,6 +78,23 @@ export type PendingEmail = {
   summary: string | null;
 };
 
+/**
+ * A new confirmed public account waiting for the owner's notice
+ * (`monitor_engine_pending_signups`): a `monitor_user` whose address was
+ * confirmed under 23 hours ago and who was not notified yet.
+ */
+export type PendingSignup = {
+  user_id: string;
+  /** The account's address (its profile email). */
+  email: string;
+  /** When the address was confirmed (ISO timestamp). */
+  confirmed_at: string;
+  /** Pending accounts the call did not return (beyond its limit or the daily notice cap). */
+  waiting: number;
+  /** The email of every `owner` profile, oldest profile first; empty when there is none. */
+  owner_emails: string[];
+};
+
 export type EngineRpc = {
   /**
    * Leased monitors in check order: owners without strikes first, then oldest
@@ -88,6 +106,15 @@ export type EngineRpc = {
   record(input: RecordInput): Promise<RecordResult>;
   pendingEmails(limit: number, dailyCap: number): Promise<PendingEmail[]>;
   markEmailed(eventId: string): Promise<boolean>;
+  /**
+   * Up to `limit` new confirmed accounts not yet notified, oldest confirmation first, no more
+   * than `dailyCap` minus the notices of the last 24 hours.
+   */
+  pendingSignups(limit: number, dailyCap: number): Promise<PendingSignup[]>;
+  /** Stamps the account notified; true when it stamped, false when it already was (or is no `monitor_user`). */
+  markSignupNotified(userId: string): Promise<boolean>;
+  /** Deletes up to `limit` `monitor_user` accounts still unconfirmed 24 hours after signup; returns how many. */
+  purgeUnconfirmed(limit: number): Promise<number>;
 };
 
 /**
@@ -179,6 +206,21 @@ export function createSupabaseEngineRpc(url: string, secretKey: string): EngineR
 
     async markEmailed(eventId) {
       return unwrap(await client.rpc("monitor_engine_mark_emailed", { p_event_id: eventId })) === true;
+    },
+
+    async pendingSignups(limit, dailyCap) {
+      const rows = unwrap(
+        await client.rpc("monitor_engine_pending_signups", { p_limit: limit, p_daily_cap: dailyCap }),
+      );
+      return rows ?? [];
+    },
+
+    async markSignupNotified(userId) {
+      return unwrap(await client.rpc("monitor_engine_mark_signup_notified", { p_user_id: userId })) === true;
+    },
+
+    async purgeUnconfirmed(limit) {
+      return unwrap(await client.rpc("monitor_engine_purge_unconfirmed", { p_limit: limit })) ?? 0;
     },
   };
 }

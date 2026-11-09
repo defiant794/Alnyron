@@ -5,8 +5,10 @@ import { monitorDetailPath } from "@/config/monitor";
 import { displayUrl, formatDateTime } from "@/lib/monitor/format";
 
 /**
- * The two emails the monitor engine sends: "a page changed" and "we cannot
- * fetch a page". Pure (no env, no I/O), so the cron Worker and tests share it.
+ * The two emails the monitor engine sends about monitored pages ("a page
+ * changed" and "we cannot fetch a page"), and the layout and helpers every
+ * engine email shares (the owner's signup notice, `signup-notice-email.ts`,
+ * too). Pure (no env, no I/O), so the cron Worker and tests share it.
  * Page and user data (label, URL, summary lines) is third-party text: it is
  * defanged ({@link defangLinks}, so mail clients cannot auto-link it) and
  * HTML-escaped everywhere, and the only link is the monitor's detail page on
@@ -19,7 +21,8 @@ const t = createTranslator({ locale: AUTH_LOCALE, messages: { MonitorEmail }, na
 
 const HTML_ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
-function escapeHtml(text: string): string {
+/** Escapes `&`, `<`, `>`, `"` and `'` for HTML text and attribute values. */
+export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char);
 }
 
@@ -78,6 +81,10 @@ function summaryLines(summary: string | null): { added: string[]; removed: strin
   };
 }
 
+/** The one button of an email: its label and the absolute URL (on our own site) it opens. */
+type EmailAction = { label: string; url: string };
+
+/** The content of an engine email, to be wrapped in the shared layout ({@link renderEmail}). */
 type EmailParts = {
   subject: string;
   heading: string;
@@ -85,15 +92,19 @@ type EmailParts = {
   bodyHtml: string;
   /** The same content as plain text. */
   bodyText: string;
-  monitorId: string;
-  siteUrl: string;
+  /** The button; without one the email holds no link at all. */
+  action?: EmailAction;
   footer: string;
 };
 
 /** Wraps an email's content in the shared layout (HTML with inline styles, plus a text part). */
-function renderEmail(parts: EmailParts): EmailContent {
-  const detailUrl = new URL(monitorDetailPath(parts.monitorId), parts.siteUrl).href;
-  const cta = t("cta");
+export function renderEmail(parts: EmailParts): EmailContent {
+  const { action } = parts;
+  const actionHtml = action
+    ? `<p style="margin:28px 0;"><a href="${escapeHtml(action.url)}" style="display:inline-block;padding:12px 20px;background:#3346e8;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;">${escapeHtml(action.label)}</a></p>\n`
+    : "";
+  // The button's paragraph spaces the footer from the body; without it the footer does.
+  const footerMargin = action ? "0" : "28px 0 0";
   const html = `<!doctype html>
 <html lang="da">
 <head>
@@ -108,8 +119,7 @@ function renderEmail(parts: EmailParts): EmailContent {
 <tr><td style="padding:32px 28px;font-size:16px;line-height:1.5;">
 <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:#0b1d33;">${escapeHtml(parts.heading)}</h1>
 ${parts.bodyHtml}
-<p style="margin:28px 0;"><a href="${escapeHtml(detailUrl)}" style="display:inline-block;padding:12px 20px;background:#3346e8;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;">${escapeHtml(cta)}</a></p>
-<p style="margin:0;font-size:13px;line-height:1.5;color:#5a6778;">${escapeHtml(parts.footer)}</p>
+${actionHtml}<p style="margin:${footerMargin};font-size:13px;line-height:1.5;color:#5a6778;">${escapeHtml(parts.footer)}</p>
 </td></tr>
 </table>
 </td></tr>
@@ -117,8 +127,14 @@ ${parts.bodyHtml}
 </body>
 </html>
 `;
-  const text = `${parts.heading}\n\n${parts.bodyText}\n\n${cta}: ${detailUrl}\n\n${parts.footer}\n`;
+  const actionText = action ? `${action.label}: ${action.url}\n\n` : "";
+  const text = `${parts.heading}\n\n${parts.bodyText}\n\n${actionText}${parts.footer}\n`;
   return { subject: parts.subject, html, text };
+}
+
+/** The button of a monitor email: the monitor's detail page on the site at `siteUrl`. */
+function monitorAction(monitorId: string, siteUrl: string): EmailAction {
+  return { label: t("cta"), url: new URL(monitorDetailPath(monitorId), siteUrl).href };
 }
 
 /** One "Tilføjet"/"Fjernet" list, in HTML and text, or nothing for no lines. */
@@ -132,9 +148,16 @@ function lineList(heading: string, lines: readonly string[]): { html: string; te
 }
 
 /**
- * The email for one detected change, built only from the stored event (so a
- * retry with the same idempotency key sends the same message). `summary` is
- * the event's summary; without lines the email says the content changed.
+ * The email for one detected change. The engine builds it from the stored event
+ * plus the monitor's current URL and label, and sends it to the owner's current
+ * address under the key `monitor-event/<event id>`. A retry whose payload
+ * changed (the monitor renamed or its URL edited, or the owner's address
+ * changed, since the first send) gets Resend's 409 `invalid_idempotent_request`
+ * (per Resend's docs as of 2026-11): the event is marked and counted in
+ * `emailsRejected`, with no second email, and sending goes on. The first send
+ * under that key was most likely delivered (inferred; Resend's docs don't say
+ * so). `summary` is the event's summary; without lines the email says the
+ * content changed.
  */
 export function buildChangeEmail(input: {
   eventId: string;
@@ -160,8 +183,7 @@ export function buildChangeEmail(input: {
       ? `${paragraph}${addedList.html}${removedList.html}`
       : `${paragraph}<p style="margin:16px 0 0;">${escapeHtml(t("noLines"))}</p>\n`,
     bodyText: hasLines ? `${intro}${addedList.text}${removedList.text}` : `${intro}\n\n${t("noLines")}`,
-    monitorId: input.monitorId,
-    siteUrl: input.siteUrl,
+    action: monitorAction(input.monitorId, input.siteUrl),
     footer: t("footer"),
   });
 }
@@ -181,8 +203,7 @@ export function buildErrorEmail(input: {
     heading: t("errorHeading", { name }),
     bodyHtml: `<p style="margin:0;">${escapeHtml(body)}</p>\n`,
     bodyText: body,
-    monitorId: input.monitorId,
-    siteUrl: input.siteUrl,
+    action: monitorAction(input.monitorId, input.siteUrl),
     footer: t("errorFooter"),
   });
 }

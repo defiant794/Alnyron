@@ -1,8 +1,11 @@
 /**
- * Unit tests: src/lib/monitor/change-email.ts — buildChangeEmail, buildErrorEmail, defangLinks
- * Journey: monitor-engine  ENG-AC1, ENG-AC3
+ * Unit tests: src/lib/monitor/change-email.ts — buildChangeEmail, buildErrorEmail, renderEmail,
+ * defangLinks
+ * Journey: monitor-engine  ENG-AC1, ENG-AC3; monitor-signup-notice  SNE-AC1i
  *
- * Keys pinned from messages/da.json at runtime (not re-typed literals).
+ * Keys pinned from messages/da.json at runtime (not re-typed literals), except the exact
+ * whole-email pins at the end, which type out the copy (and use the typed-out layout in
+ * ./email-layout.ts).
  * Covers: subject/heading from MonitorEmail, HTML-escaping of <script>/"/url/label,
  *   ONLY href = siteUrl/monitor/monitors/<id>, page URL never an href,
  *   added/removed sections, noLines fallback, text part, error email shape,
@@ -10,7 +13,10 @@
  *   ones; a dot between two digits kept, a dot with a letter on either side
  *   defanged; text without them unchanged; a 2046-character URL exactly and
  *   100 000-character inputs in linear time) and its use on every
- *   page/user-derived value in both parts of both emails, before HTML escaping.
+ *   page/user-derived value in both parts of both emails, before HTML escaping;
+ *   the whole html and text of a change email (with and without summary lines) and an
+ *   error email, pinned exactly (the layout with its button), and renderEmail's layout
+ *   without a button (footer spaced by its own margin, no link).
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -19,9 +25,11 @@ import {
   buildChangeEmail,
   buildErrorEmail,
   defangLinks,
+  renderEmail,
   type EmailContent,
 } from "@/lib/monitor/change-email";
 import { formatDateTime } from "@/lib/monitor/format";
+import { emailDocument } from "./email-layout";
 
 // ── Load MonitorEmail keys from da.json (pins the exact JSON, not re-typed) ──
 
@@ -594,5 +602,135 @@ describe("buildChangeEmail / buildErrorEmail — ENG-AC1, ENG-AC3: page and user
     expect(email.html).toContain(`<p style="margin:0;">${body}</p>`);
     expect(email.html).not.toMatch(/evil\.example/);
     expect(hrefsOf(email.html)).toEqual(["https://alnyron.dk/monitor/monitors/mon-df6"]);
+  });
+});
+
+// ── The whole email, pinned exactly ──────────────────────────────────────────
+
+describe("buildChangeEmail / buildErrorEmail / renderEmail — ENG-AC1, ENG-AC3, SNE-AC1i: the whole email, exactly", () => {
+  // Only the date comes from formatDateTime: its exact form depends on the runtime's ICU data.
+  const WHEN = formatDateTime("2026-11-08T10:00:00Z");
+  const H1 = '<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:#0b1d33;">';
+  const BUTTON = (url: string) =>
+    `<p style="margin:28px 0;"><a href="${url}" style="display:inline-block;padding:12px 20px;background:#3346e8;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;">Se overvågningen</a></p>\n`;
+  const FOOTER_AFTER_BUTTON = '<p style="margin:0;font-size:13px;line-height:1.5;color:#5a6778;">';
+  const CHANGE_FOOTER =
+    "Du får denne mail, fordi du overvåger siden med Alnyron Monitor. Du kan sætte overvågningen på pause eller slette den under Monitor. Vi tjekker kun sidens tekst.";
+  const ERROR_FOOTER = "Du får kun denne mail én gang, indtil siden kan hentes igen.";
+
+  it("ENG-AC1ce15: change email with added and removed lines → exact subject, html and text", () => {
+    const detailUrl = "https://monitor.alnyron.dk/monitor/monitors/00000000-0000-0000-0000-0000000000c1";
+    const email = buildChangeEmail({
+      eventId: "evt-pin1",
+      monitorId: "00000000-0000-0000-0000-0000000000c1",
+      url: "https://example.com/priser",
+      label: "Priser & tilbud",
+      detectedAt: "2026-11-08T10:00:00Z",
+      summary: "+ Ny pris: 1.299 kr.\n\u2212 Gammel pris: 1.499 kr. på shop.example",
+      siteUrl: "https://monitor.alnyron.dk",
+    });
+    expect(email.subject).toBe("Ændring på Priser & tilbud");
+    expect(email.html).toBe(
+      emailDocument(
+        "Ændring på Priser &amp; tilbud",
+        `${H1}Priser &amp; tilbud har ændret sig</h1>\n` +
+          `<p style="margin:0;">Vi tjekkede hxxps://example[.]com/priser ${WHEN} og fandt ændringer siden sidste tjek.</p>\n` +
+          '<h2 style="margin:20px 0 8px;font-size:16px;color:#0b1d33;">Tilføjet</h2>\n' +
+          '<ul style="margin:0;padding-left:20px;"><li style="margin:0 0 4px;">Ny pris: 1.299 kr.</li></ul>\n' +
+          '<h2 style="margin:20px 0 8px;font-size:16px;color:#0b1d33;">Fjernet</h2>\n' +
+          '<ul style="margin:0;padding-left:20px;"><li style="margin:0 0 4px;">Gammel pris: 1.499 kr. på shop[.]example</li></ul>\n' +
+          "\n" +
+          BUTTON(detailUrl) +
+          `${FOOTER_AFTER_BUTTON}${CHANGE_FOOTER}</p>\n`,
+      ),
+    );
+    expect(email.text).toBe(
+      "Priser & tilbud har ændret sig\n\n" +
+        `Vi tjekkede hxxps://example[.]com/priser ${WHEN} og fandt ændringer siden sidste tjek.\n\n` +
+        "Tilføjet:\n- Ny pris: 1.299 kr.\n\n" +
+        "Fjernet:\n- Gammel pris: 1.499 kr. på shop[.]example\n\n" +
+        `Se overvågningen: ${detailUrl}\n\n` +
+        `${CHANGE_FOOTER}\n`,
+    );
+  });
+
+  it("ENG-AC1ce16: change email without summary lines → exact subject, html and text", () => {
+    const detailUrl = "https://alnyron.dk/monitor/monitors/00000000-0000-0000-0000-0000000000c2";
+    const email = buildChangeEmail({
+      eventId: "evt-pin2",
+      monitorId: "00000000-0000-0000-0000-0000000000c2",
+      url: "https://www.example.com/",
+      label: null,
+      detectedAt: "2026-11-08T10:00:00Z",
+      summary: null,
+      siteUrl: "https://alnyron.dk",
+    });
+    expect(email.subject).toBe("Ændring på www[.]example[.]com");
+    expect(email.html).toBe(
+      emailDocument(
+        "Ændring på www[.]example[.]com",
+        `${H1}www[.]example[.]com har ændret sig</h1>\n` +
+          `<p style="margin:0;">Vi tjekkede hxxps://www[.]example[.]com/ ${WHEN} og fandt ændringer siden sidste tjek.</p>\n` +
+          '<p style="margin:16px 0 0;">Indholdet på siden er ændret.</p>\n' +
+          "\n" +
+          BUTTON(detailUrl) +
+          `${FOOTER_AFTER_BUTTON}${CHANGE_FOOTER}</p>\n`,
+      ),
+    );
+    expect(email.text).toBe(
+      "www[.]example[.]com har ændret sig\n\n" +
+        `Vi tjekkede hxxps://www[.]example[.]com/ ${WHEN} og fandt ændringer siden sidste tjek.\n\n` +
+        "Indholdet på siden er ændret.\n\n" +
+        `Se overvågningen: ${detailUrl}\n\n` +
+        `${CHANGE_FOOTER}\n`,
+    );
+  });
+
+  it("ENG-AC3ce6: error email → exact subject, html and text", () => {
+    const detailUrl = "https://monitor.alnyron.dk/monitor/monitors/00000000-0000-0000-0000-0000000000c3";
+    const email = buildErrorEmail({
+      monitorId: "00000000-0000-0000-0000-0000000000c3",
+      url: "https://example.com/down",
+      label: "<Min side>",
+      failures: 3,
+      siteUrl: "https://monitor.alnyron.dk",
+    });
+    const body =
+      "Vi har forsøgt at hente hxxps://example[.]com/down 3 gange i træk uden held. Vi prøver igen, men sjældnere. Tjek, at adressen stadig virker.";
+    expect(email.subject).toBe("Vi kan ikke hente <Min side>");
+    expect(email.html).toBe(
+      emailDocument(
+        "Vi kan ikke hente &lt;Min side&gt;",
+        `${H1}Vi kan ikke hente &lt;Min side&gt;</h1>\n` +
+          `<p style="margin:0;">${body}</p>\n` +
+          "\n" +
+          BUTTON(detailUrl) +
+          `${FOOTER_AFTER_BUTTON}${ERROR_FOOTER}</p>\n`,
+      ),
+    );
+    expect(email.text).toBe(
+      `Vi kan ikke hente <Min side>\n\n${body}\n\nSe overvågningen: ${detailUrl}\n\n${ERROR_FOOTER}\n`,
+    );
+  });
+
+  it("SNE-AC1i-ce1: renderEmail without an action → exact html (no button, footer margin 28px 0 0, no link) and text (no CTA line)", () => {
+    const email = renderEmail({
+      subject: "Emne",
+      heading: "Overskrift & <mere>",
+      bodyHtml: '<p style="margin:0;">Brødtekst</p>\n',
+      bodyText: "Brødtekst",
+      footer: "Fod & <note>",
+    });
+    expect(email.subject).toBe("Emne");
+    expect(email.html).toBe(
+      emailDocument(
+        "Emne",
+        `${H1}Overskrift &amp; &lt;mere&gt;</h1>\n` +
+          '<p style="margin:0;">Brødtekst</p>\n' +
+          "\n" +
+          '<p style="margin:28px 0 0;font-size:13px;line-height:1.5;color:#5a6778;">Fod &amp; &lt;note&gt;</p>\n',
+      ),
+    );
+    expect(email.text).toBe("Overskrift & <mere>\n\nBrødtekst\n\nFod & <note>\n");
   });
 });

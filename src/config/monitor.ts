@@ -216,6 +216,31 @@ export const MONITOR_DUE_GRACE_MINUTES = 5;
  */
 export const MONITOR_DAILY_EMAIL_CAP = 10;
 
+/**
+ * Owner notices of new confirmed public Monitor signups per rolling 24 hours
+ * (`monitor_engine_pending_signups` counts the `monitor_user` accounts whose
+ * `profiles.signup_notified_at` falls in that window). Signups beyond it stay
+ * un-notified (visible in the database); each notice that is sent says how
+ * many others are waiting.
+ */
+export const MONITOR_SIGNUP_NOTICE_DAILY_CAP = 10;
+
+/** Owner notices of new signups one cron run sends at most (the run's last step, after every check). */
+export const MONITOR_SIGNUP_NOTICE_PER_RUN = 1;
+
+/**
+ * Stale unconfirmed `monitor_user` accounts (unconfirmed 24 hours after
+ * signup) one cron run deletes at most (`monitor_engine_purge_unconfirmed`).
+ * The purge frees addresses stuck on an unconfirmed account and bounds how
+ * long a stale pre-registration lasts; a pre-registered password itself is
+ * emptied by the `monitor_wipe_password_on_resignup` trigger when
+ * `confirmation_sent_at` changes from a non-NULL value or `recovery_sent_at`
+ * to a new non-NULL value, e.g. once the address signs up again, a
+ * confirmation is resent or a password reset is sent
+ * (`workers/monitor-cron/README.md`).
+ */
+export const MONITOR_UNCONFIRMED_PURGE_BATCH = 5;
+
 /** Lines in a change summary (`monitor_events.summary`, the email's added/removed lists). */
 export const MONITOR_SUMMARY_MAX_LINES = 5;
 

@@ -14,7 +14,7 @@ import type { RunSummary } from "../../../../workers/monitor-cron/run";
 const RUN_SUMMARY: RunSummary = {
   claimed: 0, strikerClaimed: 0, checked: 0, unchanged: 0, baselines: 0, changed: 0,
   errors: 0, staleSkips: 0, emailsSent: 0, emailsDeferred: 0,
-  emailsRejected: 0, errorEmails: 0, mailStop: null,
+  emailsRejected: 0, errorEmails: 0, signupNotices: 0, signupNoticesDeferred: 0, purged: 0, mailStop: null,
   budgetStop: false, batchFull: false, subrequests: 0,
   rpcErrors: 0, durationMs: 1,
 };

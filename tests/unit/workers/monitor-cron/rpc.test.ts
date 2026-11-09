@@ -1,14 +1,17 @@
 /**
  * Unit tests: workers/monitor-cron/rpc.ts — every database call is aborted after 5 s
- * Journey: monitor-engine  ENG-AC7
+ * Journey: monitor-engine  ENG-AC7; monitor-signup-notice  SNE-AC4f
  *
  * `rpcFetch` (the engine client's supabase-js `global.fetch`) gives each request
  * the signal AbortSignal.timeout(MONITOR_RPC_TIMEOUT_MS = 5 000 ms), combined
  * with a signal the caller passed (either one aborts the request), and passes
  * the rest of the request on unchanged. Through createSupabaseEngineRpc, each
- * of the five engine calls whose request is never answered until that timeout
- * aborts it rejects with EngineRpcError("unknown"), naming neither the URL, the
- * key nor the abort reason; an answer in time comes back as usual.
+ * of the eight engine calls (claim, snapshot, record, pendingEmails, markEmailed,
+ * pendingSignups, markSignupNotified, purgeUnconfirmed) whose request is never
+ * answered until that timeout aborts it rejects with EngineRpcError("unknown"),
+ * naming neither the URL, the key nor the abort reason; an answer in time comes
+ * back as usual. The three signup-notice calls send their SQL argument names and
+ * pass the RPC result through unchanged.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MONITOR_RPC_TIMEOUT_MS } from "@/config/monitor";
@@ -108,6 +111,9 @@ describe("createSupabaseEngineRpc — ENG-AC7: an aborted call is an EngineRpcEr
     },
     { name: "pendingEmails", fn: "monitor_engine_pending_emails", call: (rpc) => rpc.pendingEmails(2, 10) },
     { name: "markEmailed", fn: "monitor_engine_mark_emailed", call: (rpc) => rpc.markEmailed("00000000-0000-0000-0000-0000000000e1") },
+    { name: "pendingSignups", fn: "monitor_engine_pending_signups", call: (rpc) => rpc.pendingSignups(1, 10) },
+    { name: "markSignupNotified", fn: "monitor_engine_mark_signup_notified", call: (rpc) => rpc.markSignupNotified("00000000-0000-0000-0000-000000005e01") },
+    { name: "purgeUnconfirmed", fn: "monitor_engine_purge_unconfirmed", call: (rpc) => rpc.purgeUnconfirmed(5) },
   ];
 
   it.for(CALLS)(
@@ -173,5 +179,60 @@ describe("createSupabaseEngineRpc — ENG-AC7: an aborted call is an EngineRpcEr
     expect(signals).toHaveLength(1);
     expect(signals[0]).toBe(timer.signal);
     expect(timeout.mock.calls).toEqual([[5_000]]);
+  });
+});
+
+describe("createSupabaseEngineRpc — signup-notice RPCs use the correct SQL arg names and pass the RPC result through unchanged", () => {
+  it("SNE-AC4f-rpc1: pendingSignups(1, 10) sends exactly { p_limit: 1, p_daily_cap: 10 } and returns the rows unchanged", async () => {
+    const mockRows = [
+      { user_id: "00000000-0000-0000-0000-000000005e01", email: "test@test.local", confirmed_at: "2026-11-08T10:00:00.000Z", waiting: 0, owner_emails: ["owner@test.local"] },
+    ];
+    const bodies: unknown[] = [];
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(init?.body as string));
+      return new Response(JSON.stringify(mockRows), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const rpc = createSupabaseEngineRpc(SUPABASE_URL, SECRET_KEY);
+    const result = await rpc.pendingSignups(1, 10);
+    expect(bodies[0]).toEqual({ p_limit: 1, p_daily_cap: 10 });
+    expect(result).toEqual(mockRows);
+  });
+
+  it("SNE-AC4f-rpc2: purgeUnconfirmed(5) sends exactly { p_limit: 5 } and returns the count", async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(init?.body as string));
+      return new Response(JSON.stringify(5), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const rpc = createSupabaseEngineRpc(SUPABASE_URL, SECRET_KEY);
+    const result = await rpc.purgeUnconfirmed(5);
+    expect(bodies[0]).toEqual({ p_limit: 5 });
+    expect(result).toBe(5);
+  });
+
+  it("SNE-AC4f-rpc3: markSignupNotified sends exactly { p_user_id } on each call", async () => {
+    const userId = "00000000-0000-0000-0000-000000005e01";
+    const bodies: unknown[] = [];
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(init?.body as string));
+      return new Response(JSON.stringify(true), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const rpc = createSupabaseEngineRpc(SUPABASE_URL, SECRET_KEY);
+    await rpc.markSignupNotified(userId);
+    await rpc.markSignupNotified(userId);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toEqual({ p_user_id: userId });
+    expect(bodies[1]).toEqual({ p_user_id: userId });
+  });
+
+  it("SNE-AC4f-rpc4: markSignupNotified passes the boolean RPC result through unchanged (true first call, false second call from stub)", async () => {
+    const userId = "00000000-0000-0000-0000-000000005e01";
+    let call = 0;
+    vi.stubGlobal("fetch", async () => {
+      return new Response(JSON.stringify(call++ === 0 ? true : false), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const rpc = createSupabaseEngineRpc(SUPABASE_URL, SECRET_KEY);
+    expect(await rpc.markSignupNotified(userId)).toBe(true);
+    expect(await rpc.markSignupNotified(userId)).toBe(false);
   });
 });

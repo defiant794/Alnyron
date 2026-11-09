@@ -1,12 +1,13 @@
 /**
  * Unit tests: src/lib/email/resend.ts — sendEmail
- * Journey: monitor-engine  ENG-AC1
+ * Journey: monitor-engine  ENG-AC1; monitor-signup-notice  SNE-AC1e, SNE-AC1f
  *
  * Covers: POST URL/headers/body shape, any 2xx → ok (id or ""), 429+quota_name → quota,
- *   429 other → rate_limited, 401/403 → config, 409 → transient, 5xx → transient,
- *   thrown → transient(status:null), 422 → rejected, the status-range edges
- *   (299/300, 399/400, 499/500, 599), idempotency-key header, the request's
- *   abort signal = AbortSignal.timeout(MONITOR_EMAIL_SEND_TIMEOUT_MS = 10 000 ms),
+ *   429 other → rate_limited, 401/403 → config, 409 invalid_idempotent_request (key reused
+ *   with a different payload) → rejected, 409 concurrent_idempotent_requests or without a
+ *   known name → transient, 5xx → transient, thrown → transient(status:null), 422 → rejected,
+ *   the status-range edges (299/300, 399/400, 499/500, 599), idempotency-key header, the
+ *   request's abort signal = AbortSignal.timeout(MONITOR_EMAIL_SEND_TIMEOUT_MS = 10 000 ms),
  *   API key and recipient never in return value or errors.
  */
 import { describe, expect, it, vi } from "vitest";
@@ -223,10 +224,28 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     expect(result).toEqual({ ok: false, kind: "config", status: 403 });
   });
 
-  it("ENG-AC1rs14: 409 → {ok:false, kind:'transient', status:409}", async () => {
+  it("ENG-AC1rs14: 409 without a recognised error name → {ok:false, kind:'transient', status:409}", async () => {
     const captured: { req?: FakeRequest } = {};
     const fetchImpl = makeFetch(captured, () =>
       new Response("{}", { status: 409 }),
+    );
+    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    expect(result).toEqual({ ok: false, kind: "transient", status: 409 });
+  });
+
+  it("SNE-AC1f-rs1: 409 invalid_idempotent_request (key already used with a different payload) → {ok:false, kind:'rejected', status:409}", async () => {
+    const captured: { req?: FakeRequest } = {};
+    const fetchImpl = makeFetch(captured, () =>
+      new Response(JSON.stringify({ name: "invalid_idempotent_request" }), { status: 409 }),
+    );
+    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    expect(result).toEqual({ ok: false, kind: "rejected", status: 409 });
+  });
+
+  it("SNE-AC1e-rs2: 409 concurrent_idempotent_requests (the key's first request still in progress) → {ok:false, kind:'transient', status:409}", async () => {
+    const captured: { req?: FakeRequest } = {};
+    const fetchImpl = makeFetch(captured, () =>
+      new Response(JSON.stringify({ name: "concurrent_idempotent_requests" }), { status: 409 }),
     );
     const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "transient", status: 409 });

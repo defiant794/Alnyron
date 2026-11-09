@@ -3,10 +3,13 @@
 The Monitor engine: a Cloudflare Worker with only a `scheduled()` handler. Each cron run
 (`run.ts`) emails pending change events, leases a batch of due monitors, fetches each page
 (SSRF-checked on every hop, DNS answers included), records unchanged / baseline / changed /
-error through the service-role-only `monitor_engine_*` functions (migration
-`supabase/migrations/20261108000100_monitor_engine.sql`), and emails new changes and the first
-"Vi kan ikke hente" of an error streak through Resend. It logs one JSON line per run
-(`msg: "monitor-cron run"` plus counters; never a URL, address, page text or key).
+error through the service-role-only `monitor_engine_*` functions (migrations
+`supabase/migrations/20261108000100_monitor_engine.sql` and
+`supabase/migrations/20261110000100_monitor_signup_notice.sql`), and emails new changes and the
+first "Vi kan ikke hente" of an error streak through Resend. Last, it deletes stale unconfirmed
+public accounts and tells the site owner about new confirmed ones (see "New signups and
+unconfirmed accounts"). It logs one JSON line per run (`msg: "monitor-cron run"` plus counters;
+never a URL, address, user id, page text or key).
 
 Separate from the OpenNext web Worker so the Supabase secret key never ships in the public app.
 Always pass `--config workers/monitor-cron/wrangler.jsonc`: without it, `wrangler deploy` hands
@@ -17,11 +20,12 @@ the root project to OpenNext.
 | `wrangler.jsonc` | Worker config: cron trigger, vars, `alias` of `react` to `react-shim.ts` |
 | `index.ts` | `scheduled()` entry: validates env, runs once |
 | `env.ts` | zod schema of the Worker env (names failing keys, never values) |
-| `rpc.ts` | typed wrappers of the five `monitor_engine_*` functions |
-| `run.ts` | one engine run (email sweep, claim, checks, second sweep; subrequest budget) |
+| `rpc.ts` | typed wrappers of the eight `monitor_engine_*` functions |
+| `run.ts` | one engine run (email sweep, claim, checks, second sweep, purge, signup notice; budgets) |
 
 The pure parts live in `src/lib/monitor/` (`page-fetch`, `page-text`, `change-summary`,
-`change-email`, `url-guard`) and `src/lib/email/resend.ts`; constants in `src/config/monitor.ts`.
+`change-email`, `signup-notice-email`, `url-guard`) and `src/lib/email/resend.ts`; constants in
+`src/config/monitor.ts`.
 
 ## Build
 
@@ -57,8 +61,8 @@ end), so steps 1–4 must be done **before the next `npm run deploy`**, even a r
 one: from then on the cron runs every minute against production, and without the migration and
 both secrets every run fails, and without the Monitor domain every email link is dead.
 
-1. Apply the migration to production: `npm run db:push`, then regenerate types with
-   `npm run db:types`.
+1. Apply the migrations to production (20261108000100 and 20261110000100): `npm run db:push`,
+   then regenerate types with `npm run db:types`.
 2. Create a dedicated, revocable Supabase secret key named `monitor-cron` and store it:
    `npx wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc`
 3. Create a Resend sending key restricted to `send.alnyron.dk` (already verified) and store it:
@@ -131,6 +135,130 @@ A Paid batch, too, takes at most one monitor of all owners with strikes: the slo
 run (at most 288 a day) when the owners without strikes leave room, so the monitors one kill
 leaves unchecked (at most the batch's 24) all get it within 24 runs, 2 hours, once due again,
 unless older monitors of owners with strikes are waiting (see "Accepted residuals").
+
+## New signups and unconfirmed accounts
+
+After every check and the second email sweep, a run does two more things, in this order. Both
+only use what the checks left: neither changes the claim's size or sets `budgetStop`, and a run
+that has no room for them simply leaves them to a later one.
+
+1. **Purge** (`monitor_engine_purge_unconfirmed`, `MONITOR_UNCONFIRMED_PURGE_BATCH` = 5): when a
+   subrequest and 5 seconds are left, deletes up to 5 `monitor_user` accounts whose address is
+   still unconfirmed 24 hours after signup, oldest first (profile, monitors and the other account
+   rows go by cascade), also when sending has stopped. Why: it frees addresses stuck on an
+   unconfirmed account and bounds how long a stale pre-registration lasts (see "Pre-registered
+   passwords" below) to 24 hours plus the time until a run has room (5 accounts per run: at most
+   7200 a day on Free, 1440 on Paid). Rows another transaction holds are skipped, and the delete
+   re-checks the whole condition, so an account confirmed meanwhile is kept. Other roles (owner,
+   admin, MyLife accounts waiting for their invite) are never deleted.
+2. **Owner notice** (`monitor_engine_pending_signups` + `monitor_engine_mark_signup_notified`):
+   unless sending stopped this run, and while the lookup, one send and one mark call fit (3
+   subrequests, 20 seconds), emails the site owner about one new confirmed `monitor_user`
+   account (`MONITOR_SIGNUP_NOTICE_PER_RUN`), at most 10 per rolling 24 hours
+   (`MONITOR_SIGNUP_NOTICE_DAILY_CAP`, counted on `profiles.signup_notified_at`), oldest
+   confirmation first, only for addresses confirmed under 23 hours ago (inside Resend's 24-hour
+   idempotency window). The notice goes to the address of the oldest `owner` profile with the key
+   `monitor-signup/<user id>`; then the account is stamped (`signup_notified_at`). A rejected
+   notice is stamped too (no retry); a rate-limit, quota, config or transient failure stops
+   sending for the rest of the run and leaves the account for a later run. A notice sent but not
+   stamped (the mark call failed) is sent again next run under the same key: for the same payload
+   Resend returns the first send's result instead of a second email, but the notice's `waiting`
+   count may have changed since, and a key reused with a different payload gets a 409
+   `invalid_idempotent_request` (per Resend's docs as of 2026-11). `sendEmail` reports that 409
+   as a rejection, so the account is stamped, sending goes on, and the owner keeps only the first
+   notice (a 409 `concurrent_idempotent_requests` stays a transient failure). Without an owner
+   profile nothing is sent or stamped. The notice states the new address (defanged in full and
+   escaped, e.g. `ny[.]bruger[at]eksempel[.]dk`), when it was confirmed and, when others wait, how
+   many ("2 andre venter også på en besked."); it holds no link.
+
+Counters in the log line: `purged` (accounts deleted), `signupNotices` (notices handed to
+Resend; a rejected one is not counted) and `signupNoticesDeferred` (the pending accounts the
+lookup did not return, plus a notice not sent for want of an owner or because sending stopped).
+The line holds no address, user id or idempotency key.
+
+On Free the whole run stays within its 50 subrequests: at worst 41 before these steps (first
+sweep 5, claim, 2 checks × 15, second sweep 5), then 1 for the purge and 3 for the notice. On
+Paid a run whose checks take their whole worst-case time may leave no time for them; a later run
+does them.
+
+Pre-registered passwords (a database trigger, migration `20261110000100`, not a cron step): a
+stranger may sign up with someone else's address and a password of their own, hoping the owner of
+the address confirms that account. What GoTrue does when an unconfirmed address signs up again
+depends on its version (read in the supabase/auth source at v2.197.0, the version the e2e project
+reports, and on master; production's version is not verified): v2.197.0 keeps the first signup's
+password and only sends the confirmation again; supabase/auth master (#2868 of 2026-11-03,
+reverted by #2912, re-landed by #2918 on 2026-11-09) runs the before-user-created hook, then
+overwrites the password with the latest signup's and sends the confirmation again. A password
+reset depends on the version too: at v2.197.0 the reset link confirms an unconfirmed account and
+keeps its password, so the person's own "Glemt adgangskode?" would confirm the account with the
+stranger's password still on it; master clears an unconfirmed account's password before
+confirming it. The purge alone closes neither signup case: under the first behaviour a stranger
+can register again right after each purge (one call a day per address); under the second the
+stranger signs up again between the person's own signup and confirmation. The trigger
+`monitor_wipe_password_on_resignup` on `auth.users` handles all of these: it empties
+`encrypted_password` of an unconfirmed `monitor_user` account whenever `confirmation_sent_at`
+changes from a non-NULL value or `recovery_sent_at` changes to a new non-NULL value. In the same
+source reading GoTrue does that notably in these cases (the list is not exhaustive):
+
+- It records a confirmation again: the re-signup under the first behaviour and a resend (both
+  email it), and an admin `generate_link` of type `signup` for the existing account (it ignores
+  the submitted password, returns the link and emails nothing).
+- Its `UpdatePassword` writes the new password together with `confirmation_sent_at = NULL`, in one
+  UPDATE: the re-signup under the second behaviour (its confirmation then goes from NULL to now,
+  wipes nothing, and the password stays empty) and an admin password change.
+- Its `ClearAllPendingTokens` sets `confirmation_sent_at = NULL` with the other pending tokens: an
+  admin email or phone change without `email_confirm`, and `UpdateUserEmailFromIdentities` (an
+  identity link or unlink that replaces the account's address).
+- It records a password reset (`recovery_sent_at`): a reset asked with the address (it emails the
+  link) and an admin `generate_link` of type `recovery` or `magiclink` for the existing account
+  (it returns the link and emails nothing). The password is emptied when the reset is sent,
+  before its link can confirm the account. `UpdatePassword` and `ClearAllPendingTokens` also set
+  `recovery_sent_at = NULL`, which wipes nothing; their `confirmation_sent_at` change decides.
+
+So no re-signup's password survives, except on an account never sent a confirmation (under
+master's behaviour only, e.g. one created with `admin.createUser` without a send: the last of the
+"Accepted residuals" below, bounded by a password reset sent for the account and by the 24-hour
+purge). GoTrue refuses a password sign-in against an empty hash (`400 invalid_credentials`, seen
+on the e2e project); once a password is emptied, only the mailbox owner can set one, through
+"Glemt adgangskode?". The first confirmation, the confirmation itself, confirmed accounts and
+other roles are untouched.
+
+Accepted residuals:
+
+- Signups beyond the daily cap, or confirmed more than 23 hours before a run could notify them,
+  are never emailed: their `signup_notified_at` stays NULL, so they remain visible in the
+  database (`profiles` with role `monitor_user` and no stamp). The cap counts the notices
+  actually sent (or rejected), and the backfilled stamps below until they are 24 hours old.
+- `waiting` (and so `signupNoticesDeferred`) is reported only when the lookup returns an account:
+  at the cap the lookup returns none, and the log shows 0 deferred.
+- `monitor_user` accounts that existed when `signup_notified_at` was added were stamped with
+  their own `created_at`: they get no notice. Those created less than 24 hours before the column
+  was added count against the cap until their stamp ages out of the 24 hours.
+- A real person who signs up twice, or asks for the confirmation again, before confirming loses
+  the password they chose: the confirmation link still signs them in, but for later sign-ins they
+  must set a password with "Glemt adgangskode?". A stranger can do the same to a pending account
+  by signing up, asking for the confirmation, or asking for a password reset with its address.
+  Recovery is unchanged (the newest link signs in, then "Glemt adgangskode?"); those sends count
+  against the project's email rate limit.
+- An admin password, email or phone change on an unconfirmed `monitor_user` account that already
+  had a confirmation sent empties the password in that UPDATE, a password it sets included (in the
+  source reading above: `UpdatePassword` or `ClearAllPendingTokens`, e.g. `admin.updateUserById`
+  with a password, or with an email or phone and no `email_confirm`). Set a password once the
+  address is confirmed (a confirmed account is never wiped; an update that also sets
+  `email_confirm` confirms the address first), or let the person use "Glemt adgangskode?".
+- Someone who, without signing up, clicks an unsolicited confirmation email for a stranger's
+  pre-registration confirms an account with the stranger's password: the stranger can sign in to
+  it (empty at first) until the password is reset. The purge limits that to links clicked before
+  it deletes the unconfirmed account (24 hours plus the wait for a run); bounded and of low value.
+- Under supabase/auth master's behaviour only: an unconfirmed `monitor_user` account that never
+  had a confirmation sent (`confirmation_sent_at` NULL, e.g. one created with `admin.createUser`
+  without a send) keeps a stranger's password when the stranger signs up on it: the overwrite
+  takes `confirmation_sent_at` from NULL to NULL and the send from NULL to now, so the trigger
+  fires both times with an old value of NULL and wipes nothing. If the mailbox owner clicks that
+  confirmation, the account is confirmed with the stranger's password until it is reset. A
+  password reset sent for the account while it is still unconfirmed empties that password (its
+  `recovery_sent_at` change), and the purge limits the rest to links clicked before it deletes the
+  unconfirmed account (24 hours plus the wait for a run).
 
 ## Behaviour worth knowing
 
@@ -211,14 +339,24 @@ unless older monitors of owners with strikes are waiting (see "Accepted residual
   Rows older than 48 hours are pruned by the engine.
 - Change emails use the idempotency key `monitor-event/<event id>` and are only retried within
   23 hours of detection (inside Resend's 24-hour window); those over the cap show in the panel
-  only.
+  only. A change email is built from the event plus the monitor's current URL and label and the
+  owner's current address. One sent but not marked emailed (the mark call failed) is sent again
+  next run under the same key: for the same payload Resend returns the first send's result
+  instead of a second email, and a retry whose payload changed (the monitor renamed or its URL
+  edited, or the owner's address changed, meanwhile) gets Resend's 409
+  `invalid_idempotent_request` (per Resend's docs as of 2026-11). `sendEmail` reports that 409 as
+  a rejection, so the event is marked and counted in `emailsRejected`, with no second email, and
+  sending goes on. The first send under that key was most likely delivered (inferred; Resend's
+  docs don't say so).
 - The error email is claimed in the database before it is sent: at most one per error streak,
   and a failed send is not retried. At the cap it is not claimed (`error_notified_at` stays
   empty), so a later failure of the same streak notifies once the window frees.
 - Page text and URLs in emails are defanged (`hxxps://`, `example[.]com`, `user[at]host`), so no
   mail client turns them into links; the only link is the monitor's page on monitor.alnyron.dk. A dot
   between two digits (`1.299 kr.`, `08.11.2026`, `10.30`) stays, as no top-level domain is
-  numeric. The defang runs in linear time, also on a 2048-character URL.
+  numeric. The defang runs in linear time, also on a 2048-character URL. In the owner's signup
+  notice (no link at all) the new account's address is defanged in full, its local part included
+  (`evil.com@x.dk` -> `evil[.]com[at]x[.]dk`), and every `@` becomes `[at]`.
 - DNS is checked right before each request, but the answer can change between the check and
   the fetch (DNS rebinding window): an accepted risk. IPv6 answers must be global unicast
   (`2000::/3`) outside its special-purpose blocks; IPv4-mapped, IPv4-translated and NAT64

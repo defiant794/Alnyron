@@ -428,6 +428,7 @@ export type Database = {
           email: string
           monitor_limit: number | null
           role: Database["public"]["Enums"]["app_role"] | null
+          signup_notified_at: string | null
           updated_at: string
           user_id: string
         }
@@ -436,6 +437,7 @@ export type Database = {
           email: string
           monitor_limit?: number | null
           role?: Database["public"]["Enums"]["app_role"] | null
+          signup_notified_at?: string | null
           updated_at?: string
           user_id: string
         }
@@ -444,6 +446,7 @@ export type Database = {
           email?: string
           monitor_limit?: number | null
           role?: Database["public"]["Enums"]["app_role"] | null
+          signup_notified_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -618,6 +621,10 @@ export type Database = {
         Args: { p_event_id: string }
         Returns: boolean
       }
+      monitor_engine_mark_signup_notified: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
       monitor_engine_pending_emails: {
         Args: { p_daily_cap: number; p_limit: number }
         Returns: {
@@ -630,6 +637,20 @@ export type Database = {
           url: string
           user_id: string
         }[]
+      }
+      monitor_engine_pending_signups: {
+        Args: { p_daily_cap: number; p_limit: number }
+        Returns: {
+          confirmed_at: string
+          email: string
+          owner_emails: string[]
+          user_id: string
+          waiting: number
+        }[]
+      }
+      monitor_engine_purge_unconfirmed: {
+        Args: { p_limit: number }
+        Returns: number
       }
       monitor_engine_record: {
         Args: {

@@ -106,6 +106,9 @@ const IDLE_SUMMARY: RunSummary = {
   subrequests: 0,
   rpcErrors: 0,
   durationMs: 0,
+  purged: 0,
+  signupNotices: 0,
+  signupNoticesDeferred: 0,
 };
 
 /** An EngineRpc whose calls resolve to the given values (a claim returns at most its limit); overrides replace single methods. */
@@ -122,6 +125,9 @@ function fakeRpc(options: {
     record: options.record ?? (async () => APPLIED),
     pendingEmails: async () => options.pendingSweeps?.[sweep++] ?? [],
     markEmailed: async () => true,
+    pendingSignups: async () => [],
+    purgeUnconfirmed: async () => 0,
+    markSignupNotified: async () => true,
   };
 }
 
@@ -155,6 +161,9 @@ const QUICK_IO: IoCosts = {
   markEmailed: 100,
   send: 300,
   fetch: 1_000,
+  pendingSignups: 100,
+  purgeUnconfirmed: 100,
+  markSignupNotified: 100,
 };
 
 /** Every call takes its whole timeout: database 5 000 ms, email send 10 000 ms, page check 15 000 ms. */
@@ -166,6 +175,9 @@ const TIMEOUT_IO: IoCosts = {
   markEmailed: MONITOR_RPC_TIMEOUT_MS,
   send: MONITOR_EMAIL_SEND_TIMEOUT_MS,
   fetch: MONITOR_FETCH_TIMEOUT_MS,
+  pendingSignups: MONITOR_RPC_TIMEOUT_MS,
+  purgeUnconfirmed: MONITOR_RPC_TIMEOUT_MS,
+  markSignupNotified: MONITOR_RPC_TIMEOUT_MS,
 };
 
 /**
@@ -205,6 +217,18 @@ function ioClock(costs: IoCosts) {
       markEmailed: async (eventId) => {
         advance("markEmailed");
         return inner.markEmailed(eventId);
+      },
+      pendingSignups: async (limit, dailyCap) => {
+        advance("pendingSignups");
+        return inner.pendingSignups(limit, dailyCap);
+      },
+      purgeUnconfirmed: async (limit) => {
+        advance("purgeUnconfirmed");
+        return inner.purgeUnconfirmed(limit);
+      },
+      markSignupNotified: async (userId) => {
+        advance("markSignupNotified");
+        return inner.markSignupNotified(userId);
       },
     }),
     mailer: (inner: Mailer): Mailer => async (message, key) => {
@@ -268,7 +292,7 @@ describe("runMonitorChecks — ENG-AC7: the email budget", () => {
     expect(summary.emailsDeferred).toBe(1);
     expect(summary.budgetStop).toBe(true);
     expect(summary.mailStop).toBeNull();
-    expect(summary.subrequests).toBe(9);
+    expect(summary.subrequests).toBe(10);
   });
 
   it("ENG-AC7runx5: with exactly 2 subrequests left the email is still sent (send + markEmailed)", async () => {
@@ -328,73 +352,73 @@ describe("runMonitorChecks — ENG-AC7: the claim asks only for the monitors the
       id: "ENG-AC7runx2",
       label: "17, nothing pending: 16 left affords exactly one check → limit 1, a cut claim that came back full",
       subrequestLimit: 17, batchSize: 5, pendingCount: 0,
-      claims: [1], claimed: 1, budgetStop: true, batchFull: false, subrequests: 6, durationMs: 1_300,
+      claims: [1], claimed: 1, budgetStop: true, batchFull: false, subrequests: 8, durationMs: 1_500,
     },
     {
       id: "ENG-AC7runx8",
       label: "16, nothing pending: 15 left, one short of claim + check → no claim, budget stop",
       subrequestLimit: 16, batchSize: 5, pendingCount: 0,
-      claims: [], claimed: 0, budgetStop: true, batchFull: false, subrequests: 1, durationMs: 100,
+      claims: [], claimed: 0, budgetStop: true, batchFull: false, subrequests: 3, durationMs: 300,
     },
     {
       id: "ENG-AC7runx9",
       label: "32: 31 left = 1 + 2 × 15 → limit 2",
       subrequestLimit: 32, batchSize: 5, pendingCount: 0,
-      claims: [2], claimed: 2, budgetStop: true, batchFull: false, subrequests: 10, durationMs: 2_400,
+      claims: [2], claimed: 2, budgetStop: true, batchFull: false, subrequests: 12, durationMs: 2_600,
     },
     {
       id: "ENG-AC7runx10",
       label: "31: 30 left, one short of 1 + 2 × 15 → limit 1",
       subrequestLimit: 31, batchSize: 5, pendingCount: 0,
-      claims: [1], claimed: 1, budgetStop: true, batchFull: false, subrequests: 6, durationMs: 1_300,
+      claims: [1], claimed: 1, budgetStop: true, batchFull: false, subrequests: 8, durationMs: 1_500,
     },
     {
       id: "ENG-AC7runx11",
       label: "50 after 2 emails: 45 left affords 2 checks (3 need 46) → limit 2 of a batch of 5",
       subrequestLimit: 50, batchSize: 5, pendingCount: 2,
-      claims: [2], claimed: 2, budgetStop: true, batchFull: false, subrequests: 14, durationMs: 3_200,
+      claims: [2], claimed: 2, budgetStop: true, batchFull: false, subrequests: 16, durationMs: 3_400,
     },
     {
       id: "ENG-AC7runx12",
       label: "Free profile, 50 with batch 2 after a full first sweep (2 emails): 45 left → the whole batch",
       subrequestLimit: 50, batchSize: 2, pendingCount: 2,
-      claims: [2], claimed: 2, budgetStop: false, batchFull: true, subrequests: 14, durationMs: 3_200,
+      claims: [2], claimed: 2, budgetStop: false, batchFull: true, subrequests: 16, durationMs: 3_400,
     },
     {
       id: "ENG-AC7runx13",
       label: "77: 76 left = 1 + 5 × 15 → the batch size 5",
       subrequestLimit: 77, batchSize: 5, pendingCount: 0,
-      claims: [5], claimed: 5, budgetStop: false, batchFull: true, subrequests: 22, durationMs: 5_700,
+      claims: [5], claimed: 5, budgetStop: false, batchFull: true, subrequests: 24, durationMs: 5_900,
     },
     {
       id: "ENG-AC7runx14",
       label: "76: 75 left, one short of 1 + 5 × 15 → limit 4",
       subrequestLimit: 76, batchSize: 5, pendingCount: 0,
-      claims: [4], claimed: 4, budgetStop: true, batchFull: false, subrequests: 18, durationMs: 4_600,
+      claims: [4], claimed: 4, budgetStop: true, batchFull: false, subrequests: 20, durationMs: 4_800,
     },
     {
       id: "ENG-AC7runx15",
       label: "Paid profile (batch 24, 10000) after a full first sweep (24 emails): claimed 9 700 ms in with 9951 left → the whole batch of 24, no budget stop",
       subrequestLimit: 10_000, batchSize: 24, pendingCount: 24,
-      claims: [24], claimed: 24, budgetStop: false, batchFull: true, subrequests: 146, durationMs: 36_200,
+      claims: [24], claimed: 24, budgetStop: false, batchFull: true, subrequests: 148, durationMs: 36_400,
     },
     {
       id: "ENG-AC7runx16",
       label: "410 with batch 24 after a full first sweep: 361 left = 1 + 24 × 15 → the batch size 24",
       subrequestLimit: 410, batchSize: 24, pendingCount: 24,
-      claims: [24], claimed: 24, budgetStop: false, batchFull: true, subrequests: 146, durationMs: 36_200,
+      claims: [24], claimed: 24, budgetStop: false, batchFull: true, subrequests: 148, durationMs: 36_400,
     },
     {
       id: "ENG-AC7runx17",
       label: "409 with batch 24 after a full first sweep: 360 left → limit 23",
       subrequestLimit: 409, batchSize: 24, pendingCount: 24,
-      claims: [23], claimed: 23, budgetStop: true, batchFull: false, subrequests: 142, durationMs: 35_100,
+      claims: [23], claimed: 23, budgetStop: true, batchFull: false, subrequests: 144, durationMs: 35_300,
     },
     {
       id: "ENG-AC7runx21",
       label: "10000 with batch 150, claimed 100 ms in: the wall-time limit ((870 000 − 100 − 5 000) / 35 000) cuts it to 24, a cut claim that came back full",
       subrequestLimit: 10_000, batchSize: 150, pendingCount: 0,
-      claims: [24], claimed: 24, budgetStop: true, batchFull: false, subrequests: 98, durationMs: 26_600,
+      claims: [24], claimed: 24, budgetStop: true, batchFull: false, subrequests: 100, durationMs: 26_800,
     },
   ])("$id: $label", async (row) => {
     const { claims, sent, summary } = await sizedRun(row);
@@ -425,10 +449,10 @@ describe("runMonitorChecks — ENG-AC7: the claim asks only for the monitors the
       checked: 1,
       baselines: 1,
       emailsSent: 2,
-      // pendingEmails 1 + 2 emails × 2 + claim 1 + page 3 + record 1.
-      subrequests: 10,
-      // lookup 100 + 2 × 400 + claim 100 + page 1 000 + record 100.
-      durationMs: 2_100,
+      // pendingEmails 1 + 2 emails × 2 + claim 1 + page 3 + record 1 + purge 1 + pendingSignups 1.
+      subrequests: 12,
+      // lookup 100 + 2 × 400 + claim 100 + page 1 000 + record 100 + purge 100 + signup 100.
+      durationMs: 2_300,
     });
   });
 
@@ -437,7 +461,7 @@ describe("runMonitorChecks — ENG-AC7: the claim asks only for the monitors the
     const { claims, sent, summary } = await sizedRun({ subrequestLimit: 17, batchSize: 5, pendingCount: 1 });
     expect(sent.map((mail) => mail.key)).toEqual(["monitor-event/e1"]);
     expect(claims).toEqual([]);
-    expect(summary).toEqual({ ...IDLE_SUMMARY, emailsSent: 1, budgetStop: true, subrequests: 3, durationMs: 500 });
+    expect(summary).toEqual({ ...IDLE_SUMMARY, emailsSent: 1, budgetStop: true, subrequests: 5, durationMs: 700 });
   });
 
   it("ENG-AC7runx4: when the first sweep leaves exactly 15 (one short of claim + check), nothing is claimed", async () => {
@@ -445,7 +469,7 @@ describe("runMonitorChecks — ENG-AC7: the claim asks only for the monitors the
     const { claims, sent, summary } = await sizedRun({ subrequestLimit: 18, batchSize: 5, pendingCount: 1 });
     expect(sent.map((mail) => mail.key)).toEqual(["monitor-event/e1"]);
     expect(claims).toEqual([]);
-    expect(summary).toEqual({ ...IDLE_SUMMARY, emailsSent: 1, budgetStop: true, subrequests: 3, durationMs: 500 });
+    expect(summary).toEqual({ ...IDLE_SUMMARY, emailsSent: 1, budgetStop: true, subrequests: 5, durationMs: 700 });
   });
 });
 
@@ -516,10 +540,10 @@ describe("runMonitorChecks — ENG-AC7: every leased monitor is checked", () => 
       errorEmails: 1,
       budgetStop: true,
       batchFull: true,
-      // pendingEmails 1 + claim 1 + page 14 + record 1 + error email 1.
-      subrequests: 18,
-      // lookup 100 + claim 100 + page 1 000 + record 100 + error email 300.
-      durationMs: 1_600,
+      // pendingEmails 1 + claim 1 + page 14 + record 1 + error email 1 + purge 1 + pendingSignups 1.
+      subrequests: 20,
+      // lookup 100 + claim 100 + page 1 000 + record 100 + error email 300 + purge 100 + signup 100.
+      durationMs: 1_800,
     });
   });
 });
@@ -582,7 +606,7 @@ describe("runMonitorChecks — ENG-AC7: the second email sweep needs room for on
     expect(summary.emailsSent).toBe(0);
     expect(summary.emailsDeferred).toBe(0);
     expect(summary.budgetStop).toBe(true);
-    expect(summary.subrequests).toBe(15);
+    expect(summary.subrequests).toBe(16);
   });
 });
 
@@ -650,32 +674,32 @@ describe("runMonitorChecks — ENG-AC7: the wall-time limit (870 000 ms, every c
     {
       id: "ENG-AC7runx22",
       label: "830 000 ms in: 40 000 left = the claim's 5 000 + exactly one check of 35 000 → limit 1 of a batch of 5, a cut claim that came back full",
-      at: 830_000, batchSize: 5, claims: [1], budgetStop: true, batchFull: false, durationMs: 831_200,
+      at: 830_000, batchSize: 5, claims: [1], budgetStop: true, batchFull: false, durationMs: 831_400,
     },
     {
       id: "ENG-AC7runx23",
       label: "830 001 ms in: 1 ms short of the claim + one check → no claim, budget stop",
-      at: 830_001, batchSize: 5, claims: [], budgetStop: true, batchFull: false, durationMs: 830_001,
+      at: 830_001, batchSize: 5, claims: [], budgetStop: true, batchFull: false, durationMs: 830_201,
     },
     {
       id: "ENG-AC7runx24",
       label: "795 000 ms in: 75 000 left fits the claim and exactly two checks → limit 2",
-      at: 795_000, batchSize: 5, claims: [2], budgetStop: true, batchFull: false, durationMs: 797_300,
+      at: 795_000, batchSize: 5, claims: [2], budgetStop: true, batchFull: false, durationMs: 797_500,
     },
     {
       id: "ENG-AC7runx25",
       label: "795 001 ms in: 1 ms short of two checks → limit 1",
-      at: 795_001, batchSize: 5, claims: [1], budgetStop: true, batchFull: false, durationMs: 796_201,
+      at: 795_001, batchSize: 5, claims: [1], budgetStop: true, batchFull: false, durationMs: 796_401,
     },
     {
       id: "ENG-AC7runx26",
       label: "Paid profile, batch 24, 25 000 ms in: 845 000 left fits the claim and exactly 24 checks → the whole batch, no budget stop",
-      at: 25_000, batchSize: 24, claims: [24], budgetStop: false, batchFull: true, durationMs: 51_500,
+      at: 25_000, batchSize: 24, claims: [24], budgetStop: false, batchFull: true, durationMs: 51_700,
     },
     {
       id: "ENG-AC7runx27",
       label: "batch 24, 25 001 ms in: 1 ms short of 24 checks → limit 23, a cut claim that came back full",
-      at: 25_001, batchSize: 24, claims: [23], budgetStop: true, batchFull: false, durationMs: 50_401,
+      at: 25_001, batchSize: 24, claims: [23], budgetStop: true, batchFull: false, durationMs: 50_601,
     },
   ])("$id: $label", async (row) => {
     const time = ioClock({ ...QUICK_IO, pendingEmails: row.at });
@@ -705,9 +729,9 @@ describe("runMonitorChecks — ENG-AC7: the wall-time limit (870 000 ms, every c
       baselines: claimed,
       budgetStop: row.budgetStop,
       batchFull: row.batchFull,
-      // pendingEmails 1; with a claim, also the claim 1 and page 3 + record 1 per monitor.
-      subrequests: claimed > 0 ? 2 + 4 * claimed : 1,
-      // `at`; with a claim, also the claim 100 and page 1 000 + record 100 per monitor.
+      // pendingEmails 1; with a claim, also the claim 1 and page 3 + record 1 per monitor; purge 1 and pendingSignups 1 at the end.
+      subrequests: claimed > 0 ? 4 + 4 * claimed : 3,
+      // `at`; with a claim, also the claim 100 and page 1 000 + record 100 per monitor; purge 100 and pendingSignups 100 at the end.
       durationMs: row.durationMs,
     });
   });
@@ -720,12 +744,12 @@ describe("runMonitorChecks — ENG-AC7: the wall-time limit (870 000 ms, every c
     {
       id: "ENG-AC7runx28",
       label: "the second email starts 855 000 ms in: send and markEmailed fit by 870 000, sent",
-      firstSendMs: 854_800, sent: ["e1", "e2"], emailsDeferred: 0, subrequests: 5, durationMs: 855_400,
+      firstSendMs: 854_800, sent: ["e1", "e2"], emailsDeferred: 0, subrequests: 6, durationMs: 855_500,
     },
     {
       id: "ENG-AC7runx29",
       label: "the second email would start 855 001 ms in: 1 ms late, deferred (still pending)",
-      firstSendMs: 854_801, sent: ["e1"], emailsDeferred: 1, subrequests: 3, durationMs: 855_001,
+      firstSendMs: 854_801, sent: ["e1"], emailsDeferred: 1, subrequests: 4, durationMs: 855_101,
     },
   ])("$id: first sweep — $label", async (row) => {
     const time = ioClock({ ...QUICK_IO, send: (call) => (call === 0 ? row.firstSendMs : 300) });
@@ -800,10 +824,10 @@ describe("runMonitorChecks — ENG-AC7: the wall-time limit (870 000 ms, every c
     expect(summary).toEqual({
       ...CHANGED_RUN,
       emailsSent: 2,
-      // pendingEmails 1 + claim 1 + page 3 + snapshot 1 + record 1 + pendingEmails 1 + 2 × 2.
-      subrequests: 12,
-      // 850 000 + lookup 100 + 2 × (send 300 + markEmailed 100).
-      durationMs: 850_900,
+      // pendingEmails 1 + claim 1 + page 3 + snapshot 1 + record 1 + pendingEmails 1 + 2 × 2 + purge 1 (signup wall too tight).
+      subrequests: 13,
+      // 850 000 + lookup 100 + 2 × (send 300 + markEmailed 100) + purge 100.
+      durationMs: 851_000,
     });
   });
 
@@ -811,7 +835,7 @@ describe("runMonitorChecks — ENG-AC7: the wall-time limit (870 000 ms, every c
     const { summary, sent, sweeps } = await secondSweepRun(849_601, 300);
     expect(sweeps).toBe(1);
     expect(sent).toEqual([]);
-    expect(summary).toEqual({ ...CHANGED_RUN, budgetStop: true, subrequests: 7, durationMs: 850_001 });
+    expect(summary).toEqual({ ...CHANGED_RUN, budgetStop: true, subrequests: 8, durationMs: 850_101 });
   });
 
   it("ENG-AC7runx35: second sweep 700 000 ms in, its first email ending 855 000 ms in: the second still starts in time, sent", async () => {
@@ -819,7 +843,7 @@ describe("runMonitorChecks — ENG-AC7: the wall-time limit (870 000 ms, every c
     const { summary, sent, sweeps } = await secondSweepRun(699_600, 154_800);
     expect(sweeps).toBe(2);
     expect(sent).toEqual(["monitor-event/evt-0", "monitor-event/evt-1"]);
-    expect(summary).toEqual({ ...CHANGED_RUN, emailsSent: 2, subrequests: 12, durationMs: 855_400 });
+    expect(summary).toEqual({ ...CHANGED_RUN, emailsSent: 2, subrequests: 13, durationMs: 855_500 });
   });
 
   it("ENG-AC7runx32: second sweep 700 000 ms in, its first email ending 855 001 ms in: the second email is deferred, budget stop", async () => {
@@ -831,9 +855,9 @@ describe("runMonitorChecks — ENG-AC7: the wall-time limit (870 000 ms, every c
       emailsSent: 1,
       emailsDeferred: 1,
       budgetStop: true,
-      // pendingEmails 1 + claim 1 + page 3 + snapshot 1 + record 1 + pendingEmails 1 + send 1 + mark 1.
-      subrequests: 10,
-      durationMs: 855_001,
+      // pendingEmails 1 + claim 1 + page 3 + snapshot 1 + record 1 + pendingEmails 1 + send 1 + mark 1 + purge 1.
+      subrequests: 11,
+      durationMs: 855_101,
     });
   });
 
@@ -875,13 +899,13 @@ describe("runMonitorChecks — ENG-AC7: the wall-time limit (870 000 ms, every c
     const { summary, sent } = await failedRunAt(854_700);
     expect(sent).toEqual(["monitor-error/00000000-0000-0000-0000-0000000000a1/2026-11-08T10:00:00.000+00:00"]);
     // pendingEmails 1 + claim 1 + page 3 + record 1 + error email 1; 855 000 + send 300.
-    expect(summary).toEqual({ ...FAILED_RUN, errorEmails: 1, subrequests: 7, durationMs: 855_300 });
+    expect(summary).toEqual({ ...FAILED_RUN, errorEmails: 1, subrequests: 8, durationMs: 855_400 });
   });
 
   it("ENG-AC7runx34: defensive check: the error email 855 001 ms in is 1 ms late: not sent (the claimed notification is lost), budget stop", async () => {
     const { summary, sent } = await failedRunAt(854_701);
     expect(sent).toEqual([]);
-    expect(summary).toEqual({ ...FAILED_RUN, budgetStop: true, subrequests: 6, durationMs: 855_001 });
+    expect(summary).toEqual({ ...FAILED_RUN, budgetStop: true, subrequests: 7, durationMs: 855_101 });
   });
 });
 
@@ -924,6 +948,9 @@ describe("runMonitorChecks — ENG-AC7: a run whose every call takes its whole t
       },
       pendingEmails: async () => (sweeps++ === 0 ? firstSweep : created.map(pending)),
       markEmailed: async () => true,
+      pendingSignups: async () => [],
+      purgeUnconfirmed: async () => 0,
+      markSignupNotified: async () => true,
     };
     const { mailer, sent } = capturingMailer([{ ok: true, id: "id" }]);
     const summary = await runMonitorChecks({
@@ -951,31 +978,31 @@ describe("runMonitorChecks — ENG-AC7: a run whose every call takes its whole t
       id: "ENG-AC7runx36",
       label: "Free profile (batch 2, 50), 2 pending: the sweep ends 35 000 ms in, both monitors claimed → 100 000 ms",
       subrequestLimit: 50, batchSize: 2, pendingCount: 2,
-      claimed: 2, emailsSent: 2, emailsDeferred: 0, budgetStop: false, batchFull: true, subrequests: 16, durationMs: 100_000,
+      claimed: 2, emailsSent: 2, emailsDeferred: 0, budgetStop: false, batchFull: true, subrequests: 18, durationMs: 110_000,
     },
     {
       id: "ENG-AC7runx37",
       label: "Paid profile (batch 24, 10000), nothing pending: 24 claimed 5 000 ms in → 730 000 ms",
       subrequestLimit: 10_000, batchSize: 24, pendingCount: 0,
-      claimed: 24, emailsSent: 0, emailsDeferred: 0, budgetStop: false, batchFull: true, subrequests: 122, durationMs: 730_000,
+      claimed: 24, emailsSent: 0, emailsDeferred: 0, budgetStop: false, batchFull: true, subrequests: 124, durationMs: 740_000,
     },
     {
       id: "ENG-AC7runx38",
       label: "Paid profile, 24 pending: the sweep ends 365 000 ms in, so the claim is cut to 14 → 790 000 ms",
       subrequestLimit: 10_000, batchSize: 24, pendingCount: 24,
-      claimed: 14, emailsSent: 24, emailsDeferred: 0, budgetStop: true, batchFull: false, subrequests: 120, durationMs: 790_000,
+      claimed: 14, emailsSent: 24, emailsDeferred: 0, budgetStop: true, batchFull: false, subrequests: 122, durationMs: 800_000,
     },
     {
       id: "ENG-AC7runx39",
-      label: "batch 150, 55 pending: the sweep ends 830 000 ms in, one monitor claimed, its error email starts exactly 855 000 ms in → 865 000 ms",
+      label: "batch 150, 55 pending: the sweep ends 830 000 ms in, one monitor claimed, its error email starts exactly 855 000 ms in → purge runs (at 870 000 ms), signup wall too tight",
       subrequestLimit: 10_000, batchSize: 150, pendingCount: 55,
-      claimed: 1, emailsSent: 55, emailsDeferred: 0, budgetStop: true, batchFull: false, subrequests: 117, durationMs: 865_000,
+      claimed: 1, emailsSent: 55, emailsDeferred: 0, budgetStop: true, batchFull: false, subrequests: 118, durationMs: 870_000,
     },
     {
       id: "ENG-AC7runx40",
-      label: "batch 150, 58 pending: 57 sent, the 58th would start 860 000 ms in (deferred), no claim → 860 000 ms",
+      label: "batch 150, 58 pending: 57 sent, the 58th would start 860 000 ms in (deferred), no claim → purge runs (at 865 000 ms), signup wall too tight",
       subrequestLimit: 10_000, batchSize: 150, pendingCount: 58,
-      claimed: 0, emailsSent: 57, emailsDeferred: 1, budgetStop: true, batchFull: false, subrequests: 115, durationMs: 860_000,
+      claimed: 0, emailsSent: 57, emailsDeferred: 1, budgetStop: true, batchFull: false, subrequests: 116, durationMs: 865_000,
     },
   ])("$id: every check fails and sends its error email — $label", async (row) => {
     const { summary, sent } = await worstCaseRun({ ...row, pages: "error" });
@@ -1194,8 +1221,8 @@ describe("runMonitorChecks — ENG-AC3: monitors are checked in the order the cl
       "fetch https://example.com/b",
       "record m2",
     ]);
-    // pendingEmails 1 + claim 1 + 3 × (page 3 + record 1) = 14; three never-checked pages are baselines.
-    expect(summary).toEqual({ ...IDLE_SUMMARY, claimed: 3, checked: 3, baselines: 3, subrequests: 14 });
+    // pendingEmails 1 + claim 1 + 3 × (page 3 + record 1) + purge 1 + pendingSignups 1 = 16; three never-checked pages are baselines.
+    expect(summary).toEqual({ ...IDLE_SUMMARY, claimed: 3, checked: 3, baselines: 3, subrequests: 16 });
   });
 });
 
@@ -1253,7 +1280,7 @@ describe("runMonitorChecks — ENG-AC3: a record repays only strikes from before
       ["m7", "error", true],
       ["m8", "error", false],
     ]);
-    // pendingEmails 1 + claim 1 + 8 × (page 3 + record 1) + 2 snapshots (the changed checks) = 36;
+    // pendingEmails 1 + claim 1 + 8 × (page 3 + record 1) + 2 snapshots + purge 1 + pendingSignups 1 = 38;
     // m2, m3, m5 and m7 were claimed with prior_strikes above 0.
     expect(summary).toEqual({
       ...IDLE_SUMMARY,
@@ -1265,7 +1292,7 @@ describe("runMonitorChecks — ENG-AC3: a record repays only strikes from before
       changed: 2,
       errors: 2,
       batchFull: true,
-      subrequests: 36,
+      subrequests: 38,
     });
   });
 
@@ -1288,8 +1315,8 @@ describe("runMonitorChecks — ENG-AC3: a record repays only strikes from before
       log: (line) => logLines.push(line),
       now: () => 0,
     });
-    // pendingEmails 1 + claim 1 + 4 × (page 3 + record 1) = 18; four never-checked pages are baselines.
-    const expected = { ...IDLE_SUMMARY, claimed: 4, strikerClaimed: 2, checked: 4, baselines: 4, subrequests: 18 };
+    // pendingEmails 1 + claim 1 + 4 × (page 3 + record 1) + purge 1 + pendingSignups 1 = 20; four never-checked pages are baselines.
+    const expected = { ...IDLE_SUMMARY, claimed: 4, strikerClaimed: 2, checked: 4, baselines: 4, subrequests: 20 };
     expect(summary).toEqual(expected);
     expect(logLines.map((line) => JSON.parse(line) as unknown)).toEqual([{ msg: "monitor-cron run", ...expected }]);
   });
