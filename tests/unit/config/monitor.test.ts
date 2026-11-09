@@ -1,7 +1,6 @@
 /**
- * Unit tests: src/config/monitor.ts — path constants, public paths, free limit,
- * interval config, confirmation template, config.toml.
- * Journey: monitor-web-area  MON-AC2, MON-AC58–MON-AC68
+ * Unit tests: src/config/monitor.ts — path constants, public paths, free limit, confirmation template, config.toml, engine constants.
+ * Journey: monitor-web-area  MON-AC44, MON-AC58, MON-AC64, MON-AC65, MON-AC67; monitor-chrome  MCH-AC1, MCH-AC4, MCH-AC5; monitor-engine  ENG-AC7
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
@@ -154,5 +153,92 @@ describe("supabase/templates/confirmation.html: MON-AC64 signup confirmation lin
   it("MON-AC64d: template link has next=/monitor/dashboard", () => {
     const html = readFileSync(resolve("supabase/templates/confirmation.html"), "utf-8");
     expect(html).toContain("next=/monitor/dashboard");
+  });
+});
+
+// ── Engine constants — ENG-AC7: pinned by literal ────────────────────────────
+
+import {
+  MONITOR_CHECK_SUBREQUESTS,
+  MONITOR_CHECK_WALL_MS,
+  MONITOR_DAILY_EMAIL_CAP,
+  MONITOR_DUE_GRACE_MINUTES,
+  MONITOR_EMAIL_SEND_TIMEOUT_MS,
+  MONITOR_FETCH_TIMEOUT_MS,
+  MONITOR_FETCH_USER_AGENT,
+  MONITOR_MAX_BODY_BYTES,
+  MONITOR_MAX_REDIRECTS,
+  MONITOR_MIN_RUN_SUBREQUESTS,
+  MONITOR_RPC_TIMEOUT_MS,
+  MONITOR_RUN_WALL_LIMIT_MS,
+  MONITOR_SNAPSHOT_MAX_CHARS,
+  MONITOR_SUMMARY_MAX_CHARS,
+  MONITOR_SUMMARY_MAX_LINE_CHARS,
+  MONITOR_SUMMARY_MAX_LINES,
+} from "@/config/monitor";
+
+describe("Engine config constants — ENG-AC7: literals pinned", () => {
+  it("ENG-AC7cfg1: MONITOR_FETCH_TIMEOUT_MS is 15_000", () => {
+    expect(MONITOR_FETCH_TIMEOUT_MS).toBe(15_000);
+  });
+
+  it("ENG-AC7cfg2: MONITOR_MAX_BODY_BYTES is 1_048_576", () => {
+    expect(MONITOR_MAX_BODY_BYTES).toBe(1_048_576);
+  });
+
+  it("ENG-AC7cfg3: MONITOR_MAX_REDIRECTS is 3", () => {
+    expect(MONITOR_MAX_REDIRECTS).toBe(3);
+  });
+
+  it("ENG-AC7cfg4: MONITOR_SNAPSHOT_MAX_CHARS is 50_000", () => {
+    expect(MONITOR_SNAPSHOT_MAX_CHARS).toBe(50_000);
+  });
+
+  it("ENG-AC7cfg5: MONITOR_DUE_GRACE_MINUTES is 5", () => {
+    expect(MONITOR_DUE_GRACE_MINUTES).toBe(5);
+  });
+
+  it("ENG-AC7cfg6: MONITOR_DAILY_EMAIL_CAP is 10", () => {
+    expect(MONITOR_DAILY_EMAIL_CAP).toBe(10);
+  });
+
+  it("ENG-AC7cfg7: MONITOR_SUMMARY_MAX_LINES is 5", () => {
+    expect(MONITOR_SUMMARY_MAX_LINES).toBe(5);
+  });
+
+  it("ENG-AC7cfg8: MONITOR_SUMMARY_MAX_LINE_CHARS is 160", () => {
+    expect(MONITOR_SUMMARY_MAX_LINE_CHARS).toBe(160);
+  });
+
+  it("ENG-AC7cfg9: MONITOR_SUMMARY_MAX_CHARS is 1_000", () => {
+    expect(MONITOR_SUMMARY_MAX_CHARS).toBe(1_000);
+  });
+
+  it("ENG-AC7cfg10: MONITOR_FETCH_USER_AGENT is 'AlnyronMonitor/1.0 (+https://alnyron.dk/monitor)'", () => {
+    expect(MONITOR_FETCH_USER_AGENT).toBe("AlnyronMonitor/1.0 (+https://alnyron.dk/monitor)");
+  });
+
+  it("ENG-AC7cfg11: MONITOR_CHECK_SUBREQUESTS is 15 (4 page requests × (2 DNS + 1 fetch) + snapshot, record, email)", () => {
+    expect(MONITOR_CHECK_SUBREQUESTS).toBe(15);
+  });
+
+  it("ENG-AC7cfg12: MONITOR_MIN_RUN_SUBREQUESTS is 17 (pending emails + claim + one worst-case check)", () => {
+    expect(MONITOR_MIN_RUN_SUBREQUESTS).toBe(17);
+  });
+
+  it("ENG-AC7cfg13: MONITOR_RUN_WALL_LIMIT_MS is 870_000 (Cloudflare's 900 s cron limit minus a 30 s margin)", () => {
+    expect(MONITOR_RUN_WALL_LIMIT_MS).toBe(870_000);
+  });
+
+  it("ENG-AC7cfg14: MONITOR_EMAIL_SEND_TIMEOUT_MS is 10_000 (one Resend send)", () => {
+    expect(MONITOR_EMAIL_SEND_TIMEOUT_MS).toBe(10_000);
+  });
+
+  it("ENG-AC7cfg15: MONITOR_RPC_TIMEOUT_MS is 5_000 (one Supabase call)", () => {
+    expect(MONITOR_RPC_TIMEOUT_MS).toBe(5_000);
+  });
+
+  it("ENG-AC7cfg16: MONITOR_CHECK_WALL_MS is 35_000 (fetch 15 000 + error email 10 000 + snapshot 5 000 + record 5 000)", () => {
+    expect(MONITOR_CHECK_WALL_MS).toBe(35_000);
   });
 });

@@ -177,3 +177,33 @@ describe("guard-no-bundled-secrets: no build output", () => {
     expect(run.output).toContain("guard-no-bundled-secrets: no missing output, nothing to check");
   });
 });
+
+describe("guard-no-bundled-secrets: ENG-AC6 SUPABASE_SECRET_KEY description updated for cron Worker", () => {
+  let run: GuardRun;
+
+  beforeAll(() => {
+    // A file that leaks SUPABASE_SECRET_KEY by value — the guard must report it
+    // and include the updated description mentioning the cron Worker.
+    const files: Record<string, string> = {
+      "cron/cloudflare/next-env.mjs":
+        `export const p = ${JSON.stringify({ SUPABASE_SECRET_KEY: FIXTURE_VALUE })};\n`,
+    };
+    run = runGuard(outputDir(files));
+  });
+
+  it("ENG-AC6guard1: the SUPABASE_SECRET_KEY line names the tests and the cron Worker as its only homes", () => {
+    // contract §5: description → "test tooling + cron Worker secret"
+    expect(run.output.split(/\r?\n/)).toContain(
+      "  SUPABASE_SECRET_KEY: test tooling + cron Worker secret: tests/.env.e2e or the shell environment for tests, " +
+        "`wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc` for the cron Worker, never the app",
+    );
+  });
+
+  it("ENG-AC6guard2: guard output still never prints the leaked value", () => {
+    expect(run.output).not.toContain(FIXTURE_VALUE);
+  });
+
+  it("ENG-AC6guard3: guard exits 1 when SUPABASE_SECRET_KEY value is present", () => {
+    expect(run.status).toBe(1);
+  });
+});

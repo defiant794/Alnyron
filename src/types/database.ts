@@ -232,6 +232,27 @@ export type Database = {
           },
         ]
       }
+      monitor_email_log: {
+        Row: {
+          id: number
+          kind: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: never
+          kind: string
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: never
+          kind?: string
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       monitor_events: {
         Row: {
           detected_at: string
@@ -277,6 +298,7 @@ export type Database = {
         Row: {
           consecutive_errors: number
           created_at: string
+          error_notified_at: string | null
           id: string
           interval_minutes: number
           label: string | null
@@ -291,6 +313,7 @@ export type Database = {
         Insert: {
           consecutive_errors?: number
           created_at?: string
+          error_notified_at?: string | null
           id?: string
           interval_minutes: number
           label?: string | null
@@ -305,6 +328,7 @@ export type Database = {
         Update: {
           consecutive_errors?: number
           created_at?: string
+          error_notified_at?: string | null
           id?: string
           interval_minutes?: number
           label?: string | null
@@ -575,6 +599,66 @@ export type Database = {
         Returns: undefined
       }
       hook_before_user_created: { Args: { event: Json }; Returns: Json }
+      monitor_engine_claim: {
+        Args: {
+          p_error_threshold: number
+          p_grace_minutes: number
+          p_limit: number
+        }
+        Returns: {
+          consecutive_errors: number
+          id: string
+          last_hash: string
+          prior_strikes: number
+          url: string
+          user_id: string
+        }[]
+      }
+      monitor_engine_mark_emailed: {
+        Args: { p_event_id: string }
+        Returns: boolean
+      }
+      monitor_engine_pending_emails: {
+        Args: { p_daily_cap: number; p_limit: number }
+        Returns: {
+          detected_at: string
+          email: string
+          event_id: string
+          label: string
+          monitor_id: string
+          summary: string
+          url: string
+          user_id: string
+        }[]
+      }
+      monitor_engine_record: {
+        Args: {
+          p_claimed_url: string
+          p_daily_cap?: number
+          p_error_threshold?: number
+          p_expected_hash?: string
+          p_monitor_id: string
+          p_new_hash?: string
+          p_outcome: string
+          p_repay?: boolean
+          p_snapshot?: string
+          p_summary?: string
+        }
+        Returns: {
+          applied: boolean
+          consecutive_errors: number
+          email: string
+          event_id: string
+          label: string
+          notified_at: string
+          notify_error: boolean
+          url: string
+        }[]
+      }
+      monitor_engine_snapshot: {
+        Args: { p_monitor_id: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "owner" | "admin" | "mylife_user" | "monitor_user"

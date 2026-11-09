@@ -23,8 +23,10 @@ export default defineConfig({
           // next-intl's ESM imports `next/navigation` without an extension,
           // which native Node cannot resolve (next has no exports map). Run it
           // through Vite instead; this also lets vi.mock("next/navigation")
-          // reach next-intl's own router hooks.
-          server: { deps: { inline: ["next-intl"] } },
+          // reach next-intl's own router hooks. use-intl likewise, so that
+          // vi.mock("react") reaches its `react` import (the cron Worker's
+          // react-shim test, tests/unit/workers/monitor-cron/react-shim.test.ts).
+          server: { deps: { inline: ["next-intl", "use-intl"] } },
         },
       },
       {

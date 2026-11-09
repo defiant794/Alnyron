@@ -5,8 +5,10 @@
  * F2.0 cache-infra:     AC-CACHE-13..AC-CACHE-18 (D1 tag cache, DO queue,
  *                       migrations, WORKER_SELF_REFERENCE, no env block,
  *                       preserved KV/flags/vars).
+ * monitor-engine:       ENG-AC7 (workers/monitor-cron/wrangler.jsonc: Free-plan
+ *                       cron config, no routes/limits, vars, MAIL_FROM parity).
  *
- * Package-script assertions (AC-CACHE-19) live in package-scripts.test.ts.
+ * Package-script assertions (AC-CACHE-19, ENG-AC7) live in package-scripts.test.ts.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { parse, type ParseError } from 'jsonc-parser';
@@ -188,5 +190,100 @@ describe('wrangler.jsonc F2.0: existing KV binding, compat flags, and vars prese
     expect(config.vars?.MAIL_FROM).toBeDefined();
     expect(typeof config.vars?.MAIL_FROM).toBe('string');
     expect((config.vars?.MAIL_FROM ?? '').length).toBeGreaterThan(0);
+  });
+});
+
+// ── monitor-cron wrangler config (ENG-AC7) ───────────────────────────────────
+
+type CronWranglerConfig = {
+  name?: string;
+  main?: string;
+  compatibility_date?: string;
+  compatibility_flags?: string[];
+  workers_dev?: boolean;
+  preview_urls?: boolean;
+  observability?: { enabled?: boolean };
+  triggers?: { crons?: string[] };
+  limits?: unknown;
+  routes?: unknown;
+  route?: unknown;
+  vars?: Record<string, string>;
+};
+
+describe('workers/monitor-cron/wrangler.jsonc — ENG-AC7: Free-plan config', () => {
+  let cronConfig!: CronWranglerConfig;
+  let cronParseErrors!: ParseError[];
+
+  beforeAll(() => {
+    const cronPath = path.resolve(process.cwd(), 'workers/monitor-cron/wrangler.jsonc');
+    const raw = fs.readFileSync(cronPath, 'utf-8');
+    cronParseErrors = [];
+    cronConfig = parse(raw, cronParseErrors, { allowTrailingComma: true }) as CronWranglerConfig;
+  });
+
+  it('ENG-AC7wc1: parses without JSONC syntax errors', () => {
+    expect(cronParseErrors).toEqual([]);
+  });
+
+  it('ENG-AC7wc2: name is "alnyron-monitor-cron"', () => {
+    expect(cronConfig.name).toBe('alnyron-monitor-cron');
+  });
+
+  it('ENG-AC7wc3: main is "./index.ts"', () => {
+    expect(cronConfig.main).toBe('./index.ts');
+  });
+
+  it('ENG-AC7wc4: compatibility_date is "2026-10-23"', () => {
+    expect(cronConfig.compatibility_date).toBe('2026-10-23');
+  });
+
+  it('ENG-AC7wc5: compatibility_flags is exactly ["nodejs_compat","global_fetch_strictly_public"]', () => {
+    expect(cronConfig.compatibility_flags).toEqual(['nodejs_compat', 'global_fetch_strictly_public']);
+  });
+
+  it('ENG-AC7wc6: workers_dev is false', () => {
+    expect(cronConfig.workers_dev).toBe(false);
+  });
+
+  it('ENG-AC7wc7: preview_urls is false', () => {
+    expect(cronConfig.preview_urls).toBe(false);
+  });
+
+  it('ENG-AC7wc8: observability.enabled is true', () => {
+    expect(cronConfig.observability?.enabled).toBe(true);
+  });
+
+  it('ENG-AC7wc9: triggers.crons is exactly ["* * * * *"] (every-minute Free-plan schedule)', () => {
+    expect(cronConfig.triggers?.crons).toEqual(['* * * * *']);
+  });
+
+  it('ENG-AC7wc10: no limits field (Free plan — cpu_ms lives under limits, not at top level)', () => {
+    expect(cronConfig.limits).toBeUndefined();
+  });
+
+  it('ENG-AC7wc11: no routes or route field (cron only, no HTTP ingress)', () => {
+    expect(cronConfig.routes).toBeUndefined();
+    expect(cronConfig.route).toBeUndefined();
+  });
+
+  it('ENG-AC7wc12: vars.MONITOR_BATCH_SIZE is "2"', () => {
+    expect(cronConfig.vars?.['MONITOR_BATCH_SIZE']).toBe('2');
+  });
+
+  it('ENG-AC7wc13: vars.MONITOR_SUBREQUEST_LIMIT is "50"', () => {
+    expect(cronConfig.vars?.['MONITOR_SUBREQUEST_LIMIT']).toBe('50');
+  });
+
+  it('ENG-AC7wc14: vars.MONITOR_SITE_URL is "https://alnyron.dk"', () => {
+    expect(cronConfig.vars?.['MONITOR_SITE_URL']).toBe('https://alnyron.dk');
+  });
+
+  it('ENG-AC7wc15: vars.SUPABASE_URL is "https://xmgpixhxecamtryohgmk.supabase.co"', () => {
+    expect(cronConfig.vars?.['SUPABASE_URL']).toBe('https://xmgpixhxecamtryohgmk.supabase.co');
+  });
+
+  it('ENG-AC7wc16: vars.MAIL_FROM matches root wrangler.jsonc vars.MAIL_FROM', () => {
+    expect(cronConfig.vars?.['MAIL_FROM']).toBe(config.vars?.['MAIL_FROM']);
+    expect(cronConfig.vars?.['MAIL_FROM']).toBeDefined();
   });
 });

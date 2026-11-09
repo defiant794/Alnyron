@@ -620,5 +620,19 @@
       "passwordLead": "Vælg den adgangskode, du vil logge ind med fremover.",
       "passwordConfirm": "Gentag ny kode"
     }
+  },
+  "MonitorEmail": {
+    "changeSubject": "Ændring på {name}",
+    "changeHeading": "{name} har ændret sig",
+    "changeIntro": "Vi tjekkede {url} {when} og fandt ændringer siden sidste tjek.",
+    "added": "Tilføjet",
+    "removed": "Fjernet",
+    "noLines": "Indholdet på siden er ændret.",
+    "cta": "Se overvågningen",
+    "footer": "Du får denne mail, fordi du overvåger siden med Alnyron Monitor. Du kan sætte overvågningen på pause eller slette den under Monitor. Vi tjekker kun sidens tekst.",
+    "errorSubject": "Vi kan ikke hente {name}",
+    "errorHeading": "Vi kan ikke hente {name}",
+    "errorBody": "Vi har forsøgt at hente {url} {failures} gange i træk uden held. Vi prøver igen, men sjældnere. Tjek, at adressen stadig virker.",
+    "errorFooter": "Du får kun denne mail én gang, indtil siden kan hentes igen."
   }
 }

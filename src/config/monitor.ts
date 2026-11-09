@@ -83,7 +83,9 @@ export const MONITOR_DEFAULT_INTERVAL = { value: 1, unit: "days" } as const sati
 
 /**
  * Consecutive failed fetches after which a monitor shows "Kunne ikke hentes"
- * (`monitors.consecutive_errors`, kept by the checker).
+ * (`monitors.consecutive_errors`, kept by the checker). The engine also starts
+ * backing off from here (the due query in `monitor_engine_claim`) and sends the
+ * one "Vi kan ikke hente" email of the error streak.
  */
 export const MONITOR_ERROR_THRESHOLD = 3;
 
@@ -92,3 +94,82 @@ export const MONITOR_URL_MAX_LENGTH = 2048;
 
 /** The longest label `monitors.label` accepts (its CHECK constraint). */
 export const MONITOR_LABEL_MAX_LENGTH = 200;
+
+/** Wall-clock budget of one page check: every DNS lookup and every redirect hop included. */
+export const MONITOR_FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * Wall-clock time one cron run may use: Cloudflare's 15-minute (900 000 ms) limit of a cron
+ * invocation minus a 30-second margin. A run starts no claim, email send or email lookup whose
+ * worst case (every call taking its whole timeout) could end after it, and leases no more monitors
+ * than it can check by then at {@link MONITOR_CHECK_WALL_MS} each once the claim call itself has
+ * taken its whole {@link MONITOR_RPC_TIMEOUT_MS} (at most 24 per run).
+ */
+export const MONITOR_RUN_WALL_LIMIT_MS = 870_000;
+
+/** How long one database call (a Supabase RPC, response included) may take before it is aborted and fails. */
+export const MONITOR_RPC_TIMEOUT_MS = 5_000;
+
+/** How long one email send (a Resend request) may take before it counts as a transient failure. */
+export const MONITOR_EMAIL_SEND_TIMEOUT_MS = 10_000;
+
+/**
+ * Wall-clock time a cron run reserves for each monitor it leases (35 000 ms): the page fetch, the
+ * error email sent during the check, and two database calls (snapshot read and record), each at
+ * its whole timeout. No single check needs all of it (only a change reads the snapshot, only a
+ * failure sends the error email), so every leased monitor is checked before
+ * {@link MONITOR_RUN_WALL_LIMIT_MS}.
+ */
+export const MONITOR_CHECK_WALL_MS =
+  MONITOR_FETCH_TIMEOUT_MS + MONITOR_EMAIL_SEND_TIMEOUT_MS + 2 * MONITOR_RPC_TIMEOUT_MS;
+
+/** Bytes of a page body the checker reads; the rest is cut off (deterministically, so the hash stays stable). */
+export const MONITOR_MAX_BODY_BYTES = 1_048_576;
+
+/** Redirects the checker follows per check, so one check makes at most this + 1 page requests. */
+export const MONITOR_MAX_REDIRECTS = 3;
+
+/**
+ * Subrequests one check may need at worst: two DNS lookups and the request for
+ * the page and each of up to {@link MONITOR_MAX_REDIRECTS} redirects, plus the
+ * snapshot read, the record call and one email. The cron run reserves this many
+ * for every monitor it claims, and starts a check only with this many left.
+ */
+export const MONITOR_CHECK_SUBREQUESTS = (MONITOR_MAX_REDIRECTS + 1) * 3 + 3;
+
+/**
+ * The lowest per-run subrequest limit the cron Worker accepts
+ * (`MONITOR_SUBREQUEST_LIMIT`): the run's two calls before its first check
+ * (pending emails, claim) plus one worst-case check; below it a run could
+ * never claim a monitor.
+ */
+export const MONITOR_MIN_RUN_SUBREQUESTS = 2 + MONITOR_CHECK_SUBREQUESTS;
+
+/** Characters of a page's text stored as `monitors.last_snapshot` (the basis of the next change summary). */
+export const MONITOR_SNAPSHOT_MAX_CHARS = 50_000;
+
+/**
+ * Minutes a monitor may be checked before its interval is up, so a check due
+ * just after a cron run is not pushed to a whole extra run later.
+ */
+export const MONITOR_DUE_GRACE_MINUTES = 5;
+
+/**
+ * Monitor emails (change and error alike) per user per rolling 24 hours, counted
+ * in the engine-only `monitor_email_log` (which users cannot delete); further
+ * changes show only in the panel, and an error streak's notification waits until
+ * the window frees.
+ */
+export const MONITOR_DAILY_EMAIL_CAP = 10;
+
+/** Lines in a change summary (`monitor_events.summary`, the email's added/removed lists). */
+export const MONITOR_SUMMARY_MAX_LINES = 5;
+
+/** Characters per change-summary line, its `+ ` / `− ` prefix included. */
+export const MONITOR_SUMMARY_MAX_LINE_CHARS = 160;
+
+/** Characters in a whole change summary, line breaks included. */
+export const MONITOR_SUMMARY_MAX_CHARS = 1000;
+
+/** User-Agent of every page request the checker makes. */
+export const MONITOR_FETCH_USER_AGENT = "AlnyronMonitor/1.0 (+https://alnyron.dk/monitor)";

@@ -18,6 +18,7 @@ const eslintConfig = [
       ".next*/**",
       ".open-next/**",
       ".wrangler/**",
+      "workers/monitor-cron/.wrangler/**",
       "out/**",
       "build/**",
       "cloudflare-env.d.ts",

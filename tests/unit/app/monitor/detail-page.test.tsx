@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
- * Unit tests: /monitor/(panel)/monitors/[id]/page.tsx — monitor detail + history
- * Journey: monitor-web-area  MON-AC40, MON-AC41
+ * Unit tests: /monitor/(panel)/monitors/[id]/page.tsx — monitor detail + history,
+ * multi-line change summaries kept on their lines.
+ * Journey: monitor-web-area  MON-AC39, MON-AC40, MON-AC41; monitor-engine  ENG-AC1
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
@@ -144,5 +145,22 @@ describe("MON-AC39: another user's (or a missing) monitor → notFound", () => {
     await expect(MonitorDetailPage({ params: Promise.resolve({ id: "other-id" }) })).rejects.toThrow("NEXT_NOT_FOUND");
     expect(mockGetMonitor).not.toHaveBeenCalled();
     expect(notFound).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ENG-AC1: summary element has whitespace-pre-line for multi-line diffs", () => {
+  it("ENG-AC1wp: event summary <p> carries the class whitespace-pre-line", async () => {
+    mockListMonitorEvents.mockResolvedValue([
+      {
+        id: "e-wp",
+        monitor_id: TEST_MONITOR_ID,
+        detected_at: "2026-11-08T10:00:00Z",
+        summary: "+ New paragraph\n\u2212 Old paragraph",
+      },
+    ]);
+    await renderDetail();
+    // Exactly one paragraph renders event.summary, with its line breaks kept for whitespace-pre-line.
+    const summaries = [...document.querySelectorAll("p.whitespace-pre-line")].map((el) => el.textContent);
+    expect(summaries).toEqual(["+ New paragraph\n\u2212 Old paragraph"]);
   });
 });

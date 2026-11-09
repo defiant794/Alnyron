@@ -51,31 +51,47 @@ function isBlockedIpv4(address: number): boolean {
   return BLOCKED_IPV4.some(([base, prefix]) => ((address & (0xffffffff << (32 - prefix))) >>> 0) === base);
 }
 
-/** A dotted-quad hostname as a 32-bit number (the WHATWG parser already turned hex, octal and decimal forms into it). */
-function parseIpv4(hostname: string): number | null {
-  const parts = hostname.split(".");
-  if (parts.length !== 4 || !parts.every((part) => /^\d{1,3}$/.test(part))) return null;
+/**
+ * A dotted quad (four decimal octets 0..255) as a 32-bit number, or null. The
+ * WHATWG parser has already turned a hostname's hex, octal and decimal forms
+ * into a dotted quad; DNS answers are dotted quads too.
+ */
+function parseIpv4(text: string): number | null {
+  const parts = text.split(".");
+  if (parts.length !== 4 || !parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255)) return null;
   const [a = 0, b = 0, c = 0, d = 0] = parts.map(Number);
   return ipv4(a, b, c, d);
 }
 
 /**
- * The eight 16-bit groups of a bracketed IPv6 hostname as the WHATWG URL
- * parser serialises it (lower-case hex groups, at most one `::`, no dotted
- * IPv4 tail), or null for anything else.
+ * The eight 16-bit groups of a bare IPv6 address (no brackets, hex groups in
+ * any case, at most one `::`, optionally a dotted IPv4 tail as in
+ * `::ffff:10.0.0.1`), or null for anything else (zone ids included).
  */
-function parseIpv6(hostname: string): number[] | null {
-  if (!hostname.startsWith("[") || !hostname.endsWith("]")) return null;
-  const [head = "", tail, ...rest] = hostname.slice(1, -1).split("::");
-  if (rest.length > 0) return null;
-  const groups = (part: string) => (part === "" ? [] : part.split(":").map((group) => Number.parseInt(group, 16)));
-  const left = groups(head);
-  const right = tail === undefined ? [] : groups(tail);
-  const zeros = tail === undefined ? 0 : 8 - left.length - right.length;
-  const all = [...left, ...Array<number>(zeros).fill(0), ...right];
-  return all.length === 8 && all.every((group) => Number.isInteger(group) && group >= 0 && group <= 0xffff)
-    ? all
-    : null;
+function parseIpv6(address: string): number[] | null {
+  let text = address.toLowerCase();
+  const lastColon = text.lastIndexOf(":");
+  if (lastColon === -1) return null;
+  const tail = text.slice(lastColon + 1);
+  if (tail.includes(".")) {
+    const embedded = parseIpv4(tail);
+    if (embedded === null) return null;
+    text = `${text.slice(0, lastColon + 1)}${(embedded >>> 16).toString(16)}:${(embedded & 0xffff).toString(16)}`;
+  }
+
+  const halves = text.split("::");
+  if (halves.length > 2) return null;
+  const groups = (part: string): number[] | null => {
+    if (part === "") return [];
+    const hex = part.split(":");
+    return hex.every((group) => /^[0-9a-f]{1,4}$/.test(group)) ? hex.map((group) => Number.parseInt(group, 16)) : null;
+  };
+  const left = groups(halves[0] ?? "");
+  const right = halves.length === 2 ? groups(halves[1] ?? "") : [];
+  if (left === null || right === null) return null;
+  if (halves.length === 1) return left.length === 8 ? left : null;
+  const zeros = 8 - left.length - right.length;
+  return zeros >= 1 ? [...left, ...Array<number>(zeros).fill(0), ...right] : null;
 }
 
 /** The IPv4 address held in two 16-bit groups. */
@@ -84,37 +100,39 @@ function ipv4FromGroups(high: number, low: number): number {
 }
 
 /**
- * Whether an IPv6 address is not public unicast: unspecified, loopback,
- * unique-local (fc00::/7), link-local (fe80::/10), deprecated site-local
- * (fec0::/10), multicast (ff00::/8), documentation (2001:db8::/32), the
- * discard prefix (100::/64) and local-use NAT64 (64:ff9b:1::/48). Forms that
- * carry an IPv4 address (IPv4-mapped ::ffff:0:0/96, IPv4-compatible ::/96,
- * NAT64 64:ff9b::/96, 6to4 2002::/16) are judged by that IPv4 address.
+ * Whether an IPv6 address may not be fetched. An allowlist: only global
+ * unicast (2000::/3) passes, minus the IANA special-purpose blocks inside it:
+ * the IETF protocol assignments 2001::/23 (Teredo 2001::/32, ORCHIDv2
+ * 2001:20::/28 and the rest), documentation 2001:db8::/32 and 3fff::/20, and
+ * 6to4 2002::/16, which is judged by the IPv4 address it embeds. Everything
+ * outside 2000::/3 is blocked (unspecified, loopback, IPv4-compatible ::/96,
+ * discard 100::/64, local-use NAT64 64:ff9b:1::/48, unique-local, link-local,
+ * site-local, multicast, the SRv6 SID block 5f00::/16, unassigned space),
+ * except the three forms that carry an IPv4 address and are judged by it:
+ * IPv4-mapped ::ffff:a.b.c.d (::ffff:0:0/96), IPv4-translated
+ * ::ffff:0:a.b.c.d (::ffff:0:0:0/96) and well-known NAT64 64:ff9b::/96.
  */
 function isBlockedIpv6(groups: readonly number[]): boolean {
   const [g0 = 0, g1 = 0, g2 = 0, g3 = 0, g4 = 0, g5 = 0, g6 = 0, g7 = 0] = groups;
-  const firstFiveZero = g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0;
-
-  if (firstFiveZero && g5 === 0) {
-    // ::, ::1 and the IPv4-compatible ::a.b.c.d.
-    return g6 === 0 || isBlockedIpv4(ipv4FromGroups(g6, g7));
+  const first64Zero = g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0;
+  if (first64Zero && ((g4 === 0 && g5 === 0xffff) || (g4 === 0xffff && g5 === 0))) {
+    return isBlockedIpv4(ipv4FromGroups(g6, g7));
   }
-  if (firstFiveZero && g5 === 0xffff) return isBlockedIpv4(ipv4FromGroups(g6, g7));
   if (g0 === 0x64 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0) {
     return isBlockedIpv4(ipv4FromGroups(g6, g7));
   }
-  if (g0 === 0x64 && g1 === 0xff9b && g2 === 1) return true;
+  if ((g0 & 0xe000) !== 0x2000) return true;
   if (g0 === 0x2002) return isBlockedIpv4(ipv4FromGroups(g1, g2));
-  if ((g0 & 0xfe00) === 0xfc00) return true;
-  if ((g0 & 0xffc0) === 0xfe80 || (g0 & 0xffc0) === 0xfec0) return true;
-  if ((g0 & 0xff00) === 0xff00) return true;
-  if (g0 === 0x2001 && g1 === 0x0db8) return true;
-  return g0 === 0x0100 && g1 === 0 && g2 === 0 && g3 === 0;
+  // 2001::/23 leaves the second group's top seven bits zero.
+  if (g0 === 0x2001 && (g1 < 0x0200 || g1 === 0x0db8)) return true;
+  // 3fff::/20 leaves the second group's top four bits zero.
+  return g0 === 0x3fff && g1 < 0x1000;
 }
 
 /** Whether a (WHATWG-normalised) hostname may not be monitored. */
 function isBlockedHost(hostname: string): boolean {
-  const ipv6 = parseIpv6(hostname);
+  // The WHATWG parser serialises an IPv6 host in brackets (`[::1]`).
+  const ipv6 = hostname.startsWith("[") && hostname.endsWith("]") ? parseIpv6(hostname.slice(1, -1)) : null;
   if (ipv6) return isBlockedIpv6(ipv6);
 
   // One trailing dot names the same host (fully qualified form).
@@ -128,14 +146,31 @@ function isBlockedHost(hostname: string): boolean {
 }
 
 /**
+ * Whether a resolved IP address may not be fetched (second line of the SSRF
+ * defence: the checker runs every DNS answer for a monitored host through it).
+ * Takes a bare IPv4 dotted quad or a bare IPv6 address (no brackets, any case,
+ * `::` compression, optionally a dotted IPv4 tail) and judges it with the same
+ * ranges as {@link checkMonitorUrl}. Anything it cannot parse counts as
+ * blocked (fail closed).
+ */
+export function isBlockedAddress(ip: string): boolean {
+  const ipv4Address = parseIpv4(ip);
+  if (ipv4Address !== null) return isBlockedIpv4(ipv4Address);
+  const ipv6 = parseIpv6(ip);
+  return ipv6 === null || isBlockedIpv6(ipv6);
+}
+
+/**
  * Input check for a URL a user wants monitored (first line of the SSRF
  * defence): an absolute `http:` or `https:` URL without credentials, on the
  * default port, 80 or 443, at most {@link MONITOR_URL_MAX_LENGTH} characters
  * and free of whitespace and `<>"` (what `monitors.url` stores), whose host is
- * neither a private, loopback, link-local, CGNAT, multicast or reserved IP
- * address (IPv4 in any notation the WHATWG parser accepts, IPv6 including
- * IPv4-mapped and NAT64 forms) nor a single-label or local-network name
- * (`localhost`, `*.local`, `*.internal`, `metadata.google.internal`, ...).
+ * neither a private, loopback, link-local, CGNAT, multicast or reserved IPv4
+ * address (in any notation the WHATWG parser accepts), nor an IPv6 address
+ * outside global unicast or in one of its special-purpose blocks (IPv4-mapped,
+ * IPv4-translated, NAT64 and 6to4 forms judged by their IPv4 address), nor a
+ * single-label or local-network name (`localhost`, `*.local`, `*.internal`,
+ * `metadata.google.internal`, ...).
  *
  * A public name can still resolve to a private address, so the checker must
  * re-check the resolved address when it fetches (the change-detection

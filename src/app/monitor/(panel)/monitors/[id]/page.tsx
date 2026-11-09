@@ -123,7 +123,7 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
           <ol className="rounded-card border border-border bg-bg px-6 shadow-card">
             {events.map((event) => (
               <TimelineEntry key={event.id} at={event.detected_at} now={now}>
-                <p className="font-semibold">{event.summary ?? t("detail.changedEntry")}</p>
+                <p className="font-semibold whitespace-pre-line break-words">{event.summary ?? t("detail.changedEntry")}</p>
               </TimelineEntry>
             ))}
             <TimelineEntry at={monitor.created_at} now={now}>

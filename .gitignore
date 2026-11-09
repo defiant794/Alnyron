@@ -18,6 +18,8 @@
 # cloudflare / opennext
 /.open-next/
 /.wrangler/
+# The cron Worker's wrangler output and local state (wrangler resolves them from its config's directory).
+/workers/monitor-cron/.wrangler/
 cloudflare-env.d.ts
 .dev.vars
 

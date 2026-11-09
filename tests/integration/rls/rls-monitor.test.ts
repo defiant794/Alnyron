@@ -18,7 +18,8 @@
  *     last_checked_at, consecutive_errors), id, created_at and updated_at raise 42501 on both,
  *     user_id on UPDATE, also through an upsert
  *   - url is an http(s) URL without whitespace or <>" of at most 2048 characters and label at
- *     most 200 characters (23514); a new url clears last_hash and last_snapshot
+ *     most 200 characters (23514); a new url clears last_hash and last_snapshot (and resets
+ *     consecutive_errors where the target's url trigger does so: rls-monitor-engine covers the rest)
  *   - monitor_events: users hold no INSERT or UPDATE privilege (42501); the service role (the
  *     cron) inserts events and writes the cron columns; an event's user_id is always its
  *     monitor's owner (23503) and deleting the monitor deletes its events
@@ -55,6 +56,11 @@
  * 20261107000300 and 5 on one holding only 20261106000200. The test of the default cap of 2
  * skips while the target lacks 20261107000300; the other tests compare with whatever default
  * the target (or the in-transaction 20261106000200) gives.
+ *
+ * private.monitors_reset_on_url_change also resets consecutive_errors once 20261108000100 has
+ * replaced it. The url test expects that reset exactly when the target's trigger function body
+ * (pg_get_functiondef) mentions consecutive_errors; where the function is missing, the
+ * in-transaction 20261106000200 creates the body without it.
  *
  * The concurrency test needs two connections to share the schema and one user, and neither
  * sees what the other's open transaction wrote. It therefore runs only on the e2e project once
@@ -111,6 +117,12 @@ interface TargetSchema {
   myLifeApplied: boolean;
   /** profiles.monitor_limit defaults to 2 (20261107000300 applied). */
   freeLimitApplied: boolean;
+  /**
+   * The body of private.monitors_reset_on_url_change() mentions consecutive_errors: the function
+   * as replaced by 20261108000100, which also resets it (and error_notified_at) on a new url.
+   * False while the function is missing (the in-transaction 20261106000200 creates the old body).
+   */
+  urlTriggerResetsErrors: boolean;
 }
 
 /** db.ts connects to the isolated e2e project exactly when SUPABASE_E2E_REF is set; else production. */
@@ -395,18 +407,23 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
 
   beforeAll(async () => {
     client = await getClient();
-    const { rows } = await client.query<{ role_committed: boolean; schema_applied: boolean; mylife_applied: boolean }>(
+    const { rows } = await client.query<{
+      role_committed: boolean; schema_applied: boolean; mylife_applied: boolean; url_trigger_resets_errors: boolean;
+    }>(
       `SELECT EXISTS (SELECT 1 FROM pg_enum
                        WHERE enumtypid = 'public.app_role'::regtype AND enumlabel = 'monitor_user') AS role_committed,
               to_regclass('public.monitors') IS NOT NULL AS schema_applied,
               to_regclass('public.mylife_profile') IS NOT NULL AND to_regclass('public.mylife_events') IS NOT NULL
-                AND to_regprocedure('private.is_mylife()') IS NOT NULL AS mylife_applied`,
+                AND to_regprocedure('private.is_mylife()') IS NOT NULL AS mylife_applied,
+              coalesce(pg_get_functiondef(to_regprocedure('private.monitors_reset_on_url_change()'))
+                         LIKE '%consecutive_errors%', false) AS url_trigger_resets_errors`,
     );
     target = {
       roleCommitted: rows[0]!.role_committed,
       schemaApplied: rows[0]!.schema_applied,
       myLifeApplied: rows[0]!.mylife_applied,
       freeLimitApplied: await freeLimitApplied(client),
+      urlTriggerResetsErrors: rows[0]!.url_trigger_resets_errors,
     };
     if (target.schemaApplied && !target.roleCommitted) {
       throw new Error("public.monitors exists but app_role has no committed 'monitor_user'");
@@ -738,7 +755,7 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
     });
   }, 20_000);
 
-  it("a new url clears last_hash and last_snapshot (a new baseline); other edits and re-setting the same url keep them", async () => {
+  it("a new url clears last_hash and last_snapshot (a new baseline) and resets consecutive_errors where the target's url trigger does (20261108000100); other edits and re-setting the same url keep them", async () => {
     await withTx(client, async (c) => {
       await prepare(c, [MONITOR]);
       const monitorId = await seedMonitor(c, MONITOR_UUID);
@@ -755,7 +772,10 @@ describe.skipIf(!DB_AVAILABLE)("RLS — page-change monitor (monitors + monitor_
       ]);
       expect(moved.rowCount).toBe(1);
       expect(await storedMonitor(c, monitorId)).toEqual([
-        { ...edited, url: "https://example.com/moved", last_hash: null, last_snapshot: null },
+        {
+          ...edited, url: "https://example.com/moved", last_hash: null, last_snapshot: null,
+          consecutive_errors: target.urlTriggerResetsErrors ? 0 : SEED.consecutive_errors,
+        },
       ]);
     });
   }, 20_000);

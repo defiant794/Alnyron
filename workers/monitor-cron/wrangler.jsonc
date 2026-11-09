@@ -1,0 +1,46 @@
+{
+  // Cloudflare Worker "alnyron-monitor-cron": the Monitor engine (P4 slice B). A cron trigger
+  // runs index.ts's scheduled() handler, which checks due monitors through the service-role-only
+  // monitor_engine_* functions (migration 20261108000100) and emails changes through Resend.
+  // Separate from the OpenNext web Worker (root wrangler.jsonc) so the Supabase secret key never
+  // sits in the public app's bundle. No HTTP ingress: no routes, no workers.dev, no previews.
+  //
+  // Build / deploy (always pass --config; without it wrangler hands off to OpenNext):
+  //   npm run build:monitor-cron    (wrangler deploy --dry-run … --outdir .wrangler/monitor-cron)
+  //   npm run deploy:monitor-cron   (also chained into `npm run deploy`)
+  // Secrets (never in vars, never in a root .env* file):
+  //   wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc
+  //   wrangler secret put RESEND_API_KEY --config workers/monitor-cron/wrangler.jsonc
+  // Local runs read workers/monitor-cron/.dev.vars (see .dev.vars.example and README.md).
+  //
+  // Profile: Workers Free (10 ms CPU per invocation, 50 subrequests): a run every minute,
+  // 2 monitors per run. Workers Paid profile (no rebuild, config only), at most 288 checks per hour:
+  //   "triggers": { "crons": ["*/5 * * * *"] },
+  //   "limits": { "cpu_ms": 30000 },
+  //   vars MONITOR_BATCH_SIZE "24", MONITOR_SUBREQUEST_LIMIT "10000" (Paid's per-invocation
+  //   limit). A run claims only as many monitors as it can check at their worst case: 15
+  //   subrequests each, and 35 s each (fetch, error email, snapshot, record) within 870 s of run
+  //   time (Cloudflare stops a cron run at 15 minutes), so no batch exceeds 24; a slow first
+  //   email sweep or a subrequest limit under 410 can shrink it, see README.md.
+  // Either profile leases at most one monitor of all owners with strikes per run (the batch's
+  // last check): at most 1440 a day on Free and 288 on Paid, see README.md.
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "alnyron-monitor-cron",
+  "main": "./index.ts",
+  "compatibility_date": "2026-10-23",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  // use-intl/core (email copy) imports react only for rich-text messages, which the emails never
+  // use; react-shim.ts stands in so no React code ships in this Worker.
+  "alias": { "react": "./react-shim.ts" },
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "SUPABASE_URL": "https://xmgpixhxecamtryohgmk.supabase.co",
+    "MAIL_FROM": "Alnyron <noreply@send.alnyron.dk>",
+    "MONITOR_SITE_URL": "https://alnyron.dk",
+    "MONITOR_BATCH_SIZE": "2",
+    "MONITOR_SUBREQUEST_LIMIT": "50"
+  }
+}

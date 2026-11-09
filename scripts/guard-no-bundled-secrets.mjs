@@ -40,7 +40,10 @@ const SECRETS = new Map([
     "RESEND_API_KEY",
     "`wrangler secret put` for the deployed Worker, .dev.vars for `npm run preview`, the shell environment for `next dev`/`next start`",
   ],
-  ["SUPABASE_SECRET_KEY", "test-only: tests/.env.e2e or the shell environment, never the app"],
+  [
+    "SUPABASE_SECRET_KEY",
+    "test tooling + cron Worker secret: tests/.env.e2e or the shell environment for tests, `wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc` for the cron Worker, never the app",
+  ],
   ["SUPABASE_DB_PASSWORD", "test-only: tests/.env.e2e or the shell environment, never the app"],
 ]);
 

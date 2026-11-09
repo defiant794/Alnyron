@@ -18,7 +18,9 @@
     "db:types": "supabase gen types typescript --project-id xmgpixhxecamtryohgmk --schema public > src/types/database.ts",
     "cf:build": "cross-env SWC_NATIVE_BINDING_CACHE_SKIP_SECURITY_CHECK=1 opennextjs-cloudflare build && node scripts/guard-no-bundled-secrets.mjs",
     "preview": "npm run cf:build && opennextjs-cloudflare preview",
-    "deploy": "npm run cf:build && opennextjs-cloudflare deploy",
+    "deploy": "npm run cf:build && opennextjs-cloudflare deploy && npm run deploy:monitor-cron",
+    "build:monitor-cron": "wrangler deploy --dry-run --config workers/monitor-cron/wrangler.jsonc --outdir .wrangler/monitor-cron",
+    "deploy:monitor-cron": "wrangler deploy --config workers/monitor-cron/wrangler.jsonc",
     "upload": "npm run cf:build && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
@@ -31,6 +33,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "server-only": "^0.0.1",
+    "use-intl": "^4.14.9",
     "zod": "^4.6.7"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-// Tests for AC-I18N-07, AC-I18N-08, AC-I18N-09
+// Tests for AC-I18N-07, AC-I18N-08, AC-I18N-09 and the MonitorEmail namespace (ENG-AC1, ENG-AC3)
 // Reads messages/da.json and messages/en.json from the repo root.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
@@ -99,5 +99,54 @@ describe("AC-I18N-09: da.json contains no em-dash character (U+2014)", () => {
     const filePath = resolve(process.cwd(), "messages", "da.json");
     const raw = readFileSync(filePath, "utf-8");
     expect(raw).not.toContain(EM_DASH);
+  });
+});
+
+// ── MonitorEmail keys — ENG-AC1 / ENG-AC3 ────────────────────────────────────
+// Keys pinned from the contract JSON (§3 change-email.ts).
+
+const MONITOR_EMAIL_REQUIRED_KEYS = [
+  "changeSubject",
+  "changeHeading",
+  "changeIntro",
+  "added",
+  "removed",
+  "noLines",
+  "cta",
+  "footer",
+  "errorSubject",
+  "errorHeading",
+  "errorBody",
+  "errorFooter",
+] as const;
+
+describe("ENG-AC1/ENG-AC3: MonitorEmail namespace in da.json", () => {
+  it("ENG-AC1msg1: da.json has a MonitorEmail namespace", () => {
+    const da = loadMessages("da");
+    expect(da).toHaveProperty("MonitorEmail");
+    expect(da["MonitorEmail"]).not.toBeNull();
+    expect(typeof da["MonitorEmail"]).toBe("object");
+  });
+
+  it.each(MONITOR_EMAIL_REQUIRED_KEYS)(
+    "ENG-AC1msg2: MonitorEmail.%s is a non-empty string in da.json",
+    (key) => {
+      const da = loadMessages("da");
+      const me = da["MonitorEmail"] as Record<string, unknown>;
+      expect(typeof me[key]).toBe("string");
+      expect((me[key] as string).trim().length).toBeGreaterThan(0);
+    },
+  );
+
+  it("ENG-AC1msg3: MonitorEmail has exactly the required keys", () => {
+    const da = loadMessages("da");
+    const me = da["MonitorEmail"] as Record<string, unknown>;
+    expect(Object.keys(me).sort()).toEqual([...MONITOR_EMAIL_REQUIRED_KEYS].sort());
+  });
+
+  it("ENG-AC1msg4: da.json MonitorEmail contains no em-dash (U+2014)", () => {
+    const da = loadMessages("da");
+    const serialized = JSON.stringify(da["MonitorEmail"]);
+    expect(serialized).not.toContain("\u2014");
   });
 });
