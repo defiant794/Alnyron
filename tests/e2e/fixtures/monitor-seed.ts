@@ -70,7 +70,12 @@ export const E2E_MONITOR_SHIP_UUID = "00000000-0000-0000-e2e0-000000000027";
 
 // ── Shared insert helper ───────────────────────────────────────────────────────
 
-async function insertUser(
+/**
+ * Insert a password-enabled, confirmed user into auth.users + auth.identities
+ * (allowlist row first for admin/owner/mylife_user; monitor_user gets its
+ * profile from handle_new_user, then an explicit monitor_limit of 5).
+ */
+export async function insertUser(
   client: pg.PoolClient,
   id: string,
   email: string,
@@ -79,6 +84,8 @@ async function insertUser(
   /** When false, skip the explicit monitor_limit upsert so the trigger-created
    *  profile retains the column default. Only meaningful for monitor_user. */
   explicitLimit = true,
+  /** auth.users.created_at (ISO timestamp); now() when omitted. */
+  createdAt?: string,
 ): Promise<void> {
   await client.query("BEGIN");
   try {
@@ -112,9 +119,9 @@ async function insertUser(
           email_change, email_change_token_new, email_change_token_current)
        VALUES ('00000000-0000-0000-0000-000000000000'::uuid, $1,
                'authenticated', 'authenticated', $2, now(), $3,
-               now(), now(), '{}', '{}', false, '', '', '', '', '')
+               coalesce($4::timestamptz, now()), now(), '{}', '{}', false, '', '', '', '', '')
        ON CONFLICT (id) DO NOTHING`,
-      [id, email, encrypted],
+      [id, email, encrypted, createdAt ?? null],
     );
 
     await client.query(
@@ -146,7 +153,8 @@ async function insertUser(
   }
 }
 
-async function deleteUser(client: pg.PoolClient, id: string, email: string): Promise<void> {
+/** Delete the auth user (profile and monitors cascade) and its allowlist row. */
+export async function deleteUser(client: pg.PoolClient, id: string, email: string): Promise<void> {
   await client.query(`DELETE FROM auth.users WHERE id = $1`, [id]);
   await client.query(`DELETE FROM public.user_allowlist WHERE email = $1`, [email]);
 }

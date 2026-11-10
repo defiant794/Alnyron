@@ -4,8 +4,9 @@
  * Covers F0.4 hardening (migration 20261101000400_hardening.sql), the F2.1 catalog
  * grants (migration 20261103000100_catalog_admin.sql), the F2.1 catalog hardening
  * (migration 20261103000300_catalog_hardening.sql), the P3 MyLife role gate
- * (migration 20261105000400_mylife_role_gate.sql) and the P4 monitor role gate
- * (migration 20261106000200_monitor_schema.sql):
+ * (migration 20261105000400_mylife_role_gate.sql), the P4 monitor role gate
+ * (migration 20261106000200_monitor_schema.sql) and the admin Monitor signups list
+ * (migration 20261111000100_admin_monitor_signups.sql):
  *   - a function newly created by postgres in `private` is not executable by PUBLIC,
  *     anon or authenticated (anon/authenticated hold USAGE on `private`, so a PUBLIC
  *     EXECUTE default would expose every future security-definer helper)
@@ -16,7 +17,9 @@
  *     media_mime_type() and media_path_valid() (evaluated as the writer); the trigger functions
  *     media_limit_per_item() / stamp_updated_by() need no grant (triggers are not EXECUTE-checked
  *     when they fire)
- *   - admin RPCs (pages + catalog) are executable by authenticated, never by anon / PUBLIC
+ *   - admin RPCs (pages + catalog + the Monitor signups list admin_list_monitor_signups(),
+ *     expected only where its migration is applied) are executable by authenticated,
+ *     never by anon / PUBLIC
  *
  * Connection: postgres. The probe function is created inside a rolled-back transaction.
  */
@@ -111,6 +114,14 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
 
   it("admin RPCs are executable by authenticated only", async () => {
     await withTx(client, async (c) => {
+      // Pinned only where the function exists on the target.
+      const { rows: probe } = await c.query<{ applied: boolean }>(
+        `SELECT to_regprocedure('public.admin_list_monitor_signups()') IS NOT NULL AS applied`,
+      );
+      const monitorSignups = probe[0]!.applied
+        ? [{ fn: "admin_list_monitor_signups()", public_exec: false, anon_exec: false, authenticated_exec: true }]
+        : [];
+
       expect(await execPrivileges(c, "n.nspname = 'public' AND p.proname LIKE 'admin\\_%'")).toEqual([
         {
           fn: "admin_attach_media(p_item_id uuid, p_path text, p_alt_da text, p_alt_en text, p_width integer, p_height integer)",
@@ -121,6 +132,7 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
         { fn: "admin_check_media_slot(p_item_id uuid)", public_exec: false, anon_exec: false, authenticated_exec: true },
         { fn: "admin_delete_item(p_item_id uuid)", public_exec: false, anon_exec: false, authenticated_exec: true },
         { fn: "admin_detach_media(p_media_id uuid)", public_exec: false, anon_exec: false, authenticated_exec: true },
+        ...monitorSignups,
         {
           fn: "admin_list_orphan_media(p_older_than interval)",
           public_exec: false,

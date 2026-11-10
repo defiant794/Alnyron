@@ -5,7 +5,13 @@ import AdminAccount from "@/components/admin/AdminAccount";
 import AdminNav from "@/components/admin/AdminNav";
 import NavigationPendingContent, { NavigationPendingProvider } from "@/components/admin/NavigationPending";
 import Logo from "@/components/brand/Logo";
-import { ADMIN_CATALOG_PATH, ADMIN_HOME_PATH, ADMIN_PAGES_PATH, adminCatalogKindPath } from "@/config/admin";
+import {
+  ADMIN_CATALOG_PATH,
+  ADMIN_HOME_PATH,
+  ADMIN_MONITOR_USERS_PATH,
+  ADMIN_PAGES_PATH,
+  adminCatalogKindPath,
+} from "@/config/admin";
 import { AUTH_LOCALE } from "@/config/auth-areas";
 import { CATALOG_KINDS } from "@/config/catalog";
 import type { AdminUser } from "@/services/auth/require-admin";
@@ -28,7 +34,9 @@ export type AdminShellProps = {
  * cannot be used meanwhile. Below 768px the sidebar becomes a top bar: logo
  * and a compact account in one row, the navigation under it, then the
  * content, so nothing comes between the navigation and the page (in reading
- * and in tab order).
+ * and in tab order). Beside the sidebar the content column may shrink below
+ * its content's width (`min-w-0`), so a wide table scrolls inside its own
+ * `overflow-x-auto` wrapper instead of widening the page.
  */
 export default async function AdminShell({ user, children }: AdminShellProps) {
   const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Admin" });
@@ -63,11 +71,12 @@ export default async function AdminShell({ user, children }: AdminShellProps) {
                 ],
               },
               { href: ADMIN_PAGES_PATH, label: t("nav.pages") },
+              { href: ADMIN_MONITOR_USERS_PATH, label: t("nav.monitorUsers") },
             ]}
           />
           <AdminAccount user={user} variant="sidebar" labels={accountLabels} />
         </aside>
-        <main id="main" tabIndex={-1} className="flex flex-1 flex-col gap-8 px-4 py-8 focus:outline-none md:px-8">
+        <main id="main" tabIndex={-1} className="flex min-w-0 flex-1 flex-col gap-8 px-4 py-8 focus:outline-none md:px-8">
           <NavigationPendingContent label={t("loading")}>{children}</NavigationPendingContent>
         </main>
       </NavigationPendingProvider>

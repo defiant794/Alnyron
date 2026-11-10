@@ -72,7 +72,8 @@
       "overview": "Oversigt",
       "catalogGroup": "Kataloger",
       "catalog": "Katalog",
-      "pages": "Sider"
+      "pages": "Sider",
+      "monitorUsers": "Monitor-brugere"
     },
     "account": {
       "label": "Konto",
@@ -186,6 +187,22 @@
         "save": "Gem",
         "saved": "Gemt. Ændringerne vises nu på sitet."
       }
+    },
+    "monitorUsers": {
+      "title": "Monitor-brugere",
+      "lead": "Alle der har tilmeldt sig Monitor, nyeste først.",
+      "table": {
+        "caption": "Tilmeldinger",
+        "email": "E-mail",
+        "signedUp": "Tilmeldt",
+        "confirmed": "Bekræftet",
+        "monitors": "Overvågninger"
+      },
+      "confirmed": {
+        "yes": "Ja",
+        "no": "Nej"
+      },
+      "empty": "Ingen tilmeldinger endnu."
     },
     "catalog": {
       "title": "Katalog",

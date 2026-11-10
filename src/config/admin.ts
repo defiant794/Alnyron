@@ -12,6 +12,7 @@ export const ADMIN_SET_PASSWORD_PATH = "/admin/set-password";
 export const ADMIN_NO_ACCESS_PATH = "/admin/no-access";
 export const ADMIN_PAGES_PATH = "/admin/pages";
 export const ADMIN_CATALOG_PATH = "/admin/catalog";
+export const ADMIN_MONITOR_USERS_PATH = "/admin/monitor-users";
 
 /** Sidebar shortcut to a kind's section editor (`catalog/[kind]` redirects to its category). */
 export function adminCatalogKindPath(kind: CatalogKind): string {
