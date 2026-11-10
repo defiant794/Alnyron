@@ -563,6 +563,10 @@ export type Database = {
         Returns: undefined
       }
       admin_delete_item: { Args: { p_item_id: string }; Returns: string[] }
+      admin_delete_monitor_user: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
       admin_detach_media: { Args: { p_media_id: string }; Returns: string }
       admin_list_monitor_signups: {
         Args: never
@@ -571,6 +575,7 @@ export type Database = {
           created_at: string
           email: string
           monitor_count: number
+          user_id: string
         }[]
       }
       admin_list_orphan_media: {

@@ -1,40 +1,61 @@
 // @vitest-environment jsdom
 /**
- * Unit test — `/admin/monitor-users` page (admin-monitor-users)
- * Journey: admin-monitor-users  AC-AMU-01, AC-AMU-02, AC-AMU-03, AC-AMU-04,
- *          AC-AMU-11, AC-AMU-13, AC-AMU-20, AC-AMU-21
+ * Unit test — `/admin/monitor-users` page (admin-monitor-users-cleanup)
+ * Journey: admin-monitor-users       AC-AMU-01, AC-AMU-02, AC-AMU-02c, AC-AMU-04, AC-AMU-11, AC-AMU-13, AC-AMU-20, AC-AMU-21
+ * Journey: admin-monitor-users-cleanup  AMC-16, AMC-21, AMC-27, AMC-28
  *
- * Pattern follows tests/unit/app/admin/pages-page.test.tsx:
- *  - real next-intl server mock (throws on missing keys)
+ * Pattern follows tests/unit/app/monitor/dashboard-page.test.tsx:
+ *  - next-intl/server mocked with the real createTranslator, so the ICU
+ *    plurals (summary, lead) are asserted as the text a user reads; a missing
+ *    key throws
+ *  - the dialog body is formatted in the browser by the page's real
+ *    NextIntlClientProvider (AMC-21c)
  *  - requireAdmin mocked; redirect propagation tested for non-admin + anon
- *  - listMonitorSignups mocked
- *  - real da.json strings pinned literally below
+ *  - listMonitorSignups mocked; monitorSignupStatus uses the real module under
+ *    vi.useFakeTimers() (AMC-27, AMC-28); da.json string pins are literal values
  */
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import type { MonitorSignup } from "@/services/admin/monitor-users";
 import da from "../../../../messages/da.json";
 
-// ── Pinned DA strings (from messages/da.json Admin.monitorUsers) ──────────────
+// ── Pinned DA strings (from messages/da.json Admin.monitorUsers — contract shape) ──
+
 const DA_TITLE        = "Monitor-brugere";
-const DA_LEAD         = "Alle der har tilmeldt sig Monitor, nyeste først.";
 const DA_CAPTION      = "Tilmeldinger";
 const DA_EMAIL        = "E-mail";
-const DA_SIGNED_UP    = "Tilmeldt";
-const DA_CONFIRMED    = "Bekræftet";
+/** Contract: table.signedUp value is "Oprettet" (signup time column heading). */
+const DA_OPRETTET     = "Oprettet";
+const DA_STATUS       = "Status";
 const DA_MONITORS     = "Overvågninger";
-const DA_YES          = "Ja";
-const DA_NO           = "Nej";
+const DA_ACTIONS      = "Handlinger";
+const DA_REGISTERED   = "Tilmeldt";
+const DA_PENDING      = "Afventer bekræftelse";
+const DA_EXPIRED      = "Udløbet";
 const DA_EMPTY        = "Ingen tilmeldinger endnu.";
 const DA_NAV_LABEL    = "Monitor-brugere";
+/** The PageHeader description as a user reads it: the window from the config (10) through the ICU plural. */
+const DA_LEAD =
+  "Alle der har tilmeldt sig Monitor, nyeste først. En tilmelding, der ikke er bekræftet inden for 10 minutter, er udløbet.";
+const DA_DELETE_BODY_MESSAGE =
+  "<strong>{email}</strong> og alle kontoens overvågninger slettes permanent. Det kan ikke fortrydes.";
+
+// ── Fixed "now" for the AMC-27/AMC-28 fake-timer tests ────────────────────────
+
+const FIXED_NOW = new Date("2026-11-10T12:00:00.000Z");
 
 // ── vi.hoisted ─────────────────────────────────────────────────────────────────
 
 const { mockListMonitorSignups, mockRequireAdmin, mockRedirect } = vi.hoisted(() => ({
   mockListMonitorSignups: vi.fn<() => Promise<MonitorSignup[]>>(),
-  mockRequireAdmin: vi.fn(async () => ({ userId: "u-1", email: "ejer@example.com", role: "owner" as const })),
+  mockRequireAdmin: vi.fn(async () => ({
+    userId: "u-1",
+    email: "ejer@example.com",
+    role: "owner" as const,
+  })),
   mockRedirect: vi.fn((url: string): never => {
     throw new Error(`NEXT_REDIRECT:${url}`);
   }),
@@ -42,20 +63,42 @@ const { mockListMonitorSignups, mockRequireAdmin, mockRedirect } = vi.hoisted(()
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
-// vi.mock factories are hoisted above static imports by Vite, so the helper
-// must be imported dynamically inside the factory (static import would not
-// yet exist at hoist time).
-vi.mock("next-intl/server", async () =>
-  (await import("../../../helpers/next-intl-server")).nextIntlServerMock(),
-);
+// Real next-intl formatting (the shared helper returns plural syntax as is), so
+// the summary and the lead are asserted as the full text a user reads. A missing
+// key throws. The factory is hoisted above the static imports, so it loads its
+// modules itself.
+vi.mock("next-intl/server", async () => {
+  const { createTranslator } = await import("next-intl");
+  const { loadMessages } = await import("@/i18n/messages");
+  return {
+    getTranslations: vi.fn(async ({ locale, namespace }: { locale: "da"; namespace: "Admin.monitorUsers" }) =>
+      createTranslator({
+        locale,
+        messages: loadMessages(locale),
+        namespace,
+        onError: (error) => {
+          throw error;
+        },
+      }),
+    ),
+  };
+});
 vi.mock("@/services/auth/require-admin", () => ({
   requireAdmin: mockRequireAdmin,
 }));
 vi.mock("@/services/admin/monitor-users", () => ({
   listMonitorSignups: mockListMonitorSignups,
 }));
+// The table (client component) imports the server action directly; mock it so
+// the server-action module is not loaded in the unit test environment.
+vi.mock("@/app/admin/(panel)/monitor-users/actions", () => ({
+  deleteMonitorSignup: vi.fn(),
+}));
+// The table's catch around the delete action passes navigation errors (a redirect)
+// on with unstable_rethrow, so the mocked module provides it next to redirect.
 vi.mock("next/navigation", () => ({
   redirect: mockRedirect,
+  unstable_rethrow: vi.fn(),
 }));
 
 import AdminMonitorUsersPage, { generateMetadata } from "@/app/admin/(panel)/monitor-users/page";
@@ -64,8 +107,69 @@ import { ADMIN_MONITOR_USERS_PATH } from "@/config/admin";
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const ROWS: MonitorSignup[] = [
-  { email: "a@example.com", signedUpAt: "2026-10-15T09:00:00.000Z", confirmed: true,  monitorCount: 2 },
-  { email: "b@example.com", signedUpAt: "2026-09-01T14:30:00.000Z", confirmed: false, monitorCount: 0 },
+  {
+    userId: "u-newer",
+    email: "a@example.com",
+    signedUpAt: "2026-10-15T09:00:00.000Z",
+    confirmed: true,
+    monitorCount: 2,
+  },
+  {
+    userId: "u-older",
+    email: "b@example.com",
+    signedUpAt: "2026-09-01T14:30:00.000Z",
+    confirmed: false,
+    monitorCount: 0,
+  },
+];
+
+/**
+ * Rows with timestamps relative to FIXED_NOW for AMC-28 (fake-timer tests).
+ * The real monitorSignupStatus runs against these under vi.setSystemTime.
+ *
+ * FIXED_NOW = 2026-11-10T12:00:00.000Z; window = 10 minutes.
+ *   confirmed@: confirmed=true, 30 min old → "registered"
+ *   pending@:   confirmed=false, 5 min old → "pending"
+ *   expired@:   confirmed=false, 11 min old → "expired"
+ */
+const ROWS_STATUS: MonitorSignup[] = [
+  {
+    userId: "u-confirmed",
+    email: "confirmed@example.com",
+    // 30 min before FIXED_NOW; confirmed → "registered"
+    signedUpAt: "2026-11-10T11:30:00.000Z",
+    confirmed: true,
+    monitorCount: 1,
+  },
+  {
+    userId: "u-pending",
+    email: "pending@example.com",
+    // 5 min before FIXED_NOW; unconfirmed, age < 10 min → "pending"
+    signedUpAt: "2026-11-10T11:55:00.000Z",
+    confirmed: false,
+    monitorCount: 0,
+  },
+  {
+    userId: "u-expired",
+    email: "expired@example.com",
+    // 11 min before FIXED_NOW; unconfirmed, age ≥ 10 min → "expired"
+    signedUpAt: "2026-11-10T11:49:00.000Z",
+    confirmed: false,
+    monitorCount: 0,
+  },
+];
+
+/**
+ * Rows for the plural summary under FIXED_NOW (AMC-27): two confirmed signups
+ * and three unconfirmed ones signed up 11 min, 1 h and 1 day before it, so
+ * 2 registered, 0 pending and 3 expired.
+ */
+const ROWS_PLURAL: MonitorSignup[] = [
+  { userId: "u-p1", email: "p1@example.com", signedUpAt: "2026-11-10T11:30:00.000Z", confirmed: true, monitorCount: 1 },
+  { userId: "u-p2", email: "p2@example.com", signedUpAt: "2026-11-09T12:00:00.000Z", confirmed: true, monitorCount: 0 },
+  { userId: "u-p3", email: "p3@example.com", signedUpAt: "2026-11-10T11:49:00.000Z", confirmed: false, monitorCount: 0 },
+  { userId: "u-p4", email: "p4@example.com", signedUpAt: "2026-11-10T11:00:00.000Z", confirmed: false, monitorCount: 0 },
+  { userId: "u-p5", email: "p5@example.com", signedUpAt: "2026-11-09T12:00:00.000Z", confirmed: false, monitorCount: 0 },
 ];
 
 const OWNER_USER = { userId: "u-1", email: "ejer@example.com", role: "owner" as const };
@@ -102,7 +206,7 @@ describe("AC-AMU-20: requireAdmin redirect — non-admin → /admin/no-access", 
 
     render(await AdminMonitorUsersPage());
 
-    expect(callOrder.indexOf("requireAdmin")).toBeLessThan(callOrder.indexOf("listMonitorSignups"));
+    expect(callOrder).toEqual(["requireAdmin", "listMonitorSignups"]);
   });
 
   it("AC-AMU-20b: when requireAdmin redirects to /admin/no-access, listMonitorSignups is not called", async () => {
@@ -124,23 +228,15 @@ describe("AC-AMU-21: requireAdmin redirect — anonymous → /admin/login", () =
   });
 });
 
-// ── AC-AMU-02: PageHeader title + lead ───────────────────────────────────────
+// ── AC-AMU-02: PageHeader title ───────────────────────────────────────────────
 
-describe("AC-AMU-02: AdminMonitorUsersPage — PageHeader title and lead from da.json", () => {
+describe("AC-AMU-02: AdminMonitorUsersPage — PageHeader title from da.json", () => {
   it("AC-AMU-02a: renders a heading with title 'Monitor-brugere'", async () => {
     mockListMonitorSignups.mockResolvedValue(ROWS);
 
     render(await AdminMonitorUsersPage());
 
     expect(screen.getByRole("heading", { name: DA_TITLE })).toBeInTheDocument();
-  });
-
-  it("AC-AMU-02c: renders the lead text 'Alle der har tilmeldt sig Monitor, nyeste først.'", async () => {
-    mockListMonitorSignups.mockResolvedValue(ROWS);
-
-    render(await AdminMonitorUsersPage());
-
-    expect(screen.getByText(DA_LEAD)).toBeInTheDocument();
   });
 });
 
@@ -157,26 +253,27 @@ describe("AC-AMU-13: AdminMonitorUsersPage — table labelled by the h2 'Tilmeld
   });
 });
 
-// ── AC-AMU-03: column headers in order ───────────────────────────────────────
+// ── AMC-16: five column headers in order ─────────────────────────────────────
 
-describe("AC-AMU-03: AdminMonitorUsersPage — four column headers from da.json in order", () => {
-  it("AC-AMU-03: renders column headers E-mail, Tilmeldt, Bekræftet, Overvågninger in order", async () => {
+describe("AMC-16: AdminMonitorUsersPage — five column headers from da.json in order", () => {
+  it("AMC-16: renders column headers E-mail, Oprettet, Status, Overvågninger, Handlinger in order", async () => {
     mockListMonitorSignups.mockResolvedValue(ROWS);
 
     render(await AdminMonitorUsersPage());
 
     const headers = screen.getAllByRole("columnheader");
     expect(headers[0]).toHaveTextContent(DA_EMAIL);
-    expect(headers[1]).toHaveTextContent(DA_SIGNED_UP);
-    expect(headers[2]).toHaveTextContent(DA_CONFIRMED);
+    expect(headers[1]).toHaveTextContent(DA_OPRETTET);
+    expect(headers[2]).toHaveTextContent(DA_STATUS);
     expect(headers[3]).toHaveTextContent(DA_MONITORS);
+    expect(headers[4]).toHaveTextContent(DA_ACTIONS);
   });
 });
 
 // ── AC-AMU-04: rows rendered ──────────────────────────────────────────────────
 
 describe("AC-AMU-04: AdminMonitorUsersPage — rows rendered from listMonitorSignups", () => {
-  it("AC-AMU-04: both fixture email row headers appear in the table in order", async () => {
+  it("AC-AMU-04: fixture email row headers appear in the table in order", async () => {
     mockListMonitorSignups.mockResolvedValue(ROWS);
 
     render(await AdminMonitorUsersPage());
@@ -185,6 +282,114 @@ describe("AC-AMU-04: AdminMonitorUsersPage — rows rendered from listMonitorSig
     const rowHeaders = within(table).getAllByRole("rowheader");
     expect(rowHeaders[0]).toHaveTextContent("a@example.com");
     expect(rowHeaders[1]).toHaveTextContent("b@example.com");
+  });
+});
+
+// ── AMC-28: page computes statuses via real monitorSignupStatus + fake timers ──
+
+describe("AMC-28: AdminMonitorUsersPage — computes status per row via monitorSignupStatus (fake timers)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("AMC-28a: confirmed row renders 'Tilmeldt' status badge", async () => {
+    mockListMonitorSignups.mockResolvedValue(ROWS_STATUS);
+
+    render(await AdminMonitorUsersPage());
+
+    const confirmedRow = screen
+      .getByRole("rowheader", { name: "confirmed@example.com" })
+      .closest("tr") as HTMLElement;
+    expect(within(confirmedRow).getAllByRole("cell")[1]).toHaveTextContent(DA_REGISTERED);
+  });
+
+  it("AMC-28b: unconfirmed-recent row renders 'Afventer bekræftelse' status badge", async () => {
+    mockListMonitorSignups.mockResolvedValue(ROWS_STATUS);
+
+    render(await AdminMonitorUsersPage());
+
+    const pendingRow = screen
+      .getByRole("rowheader", { name: "pending@example.com" })
+      .closest("tr") as HTMLElement;
+    expect(within(pendingRow).getAllByRole("cell")[1]).toHaveTextContent(DA_PENDING);
+  });
+
+  it("AMC-28c: unconfirmed-old row renders 'Udløbet' status badge", async () => {
+    mockListMonitorSignups.mockResolvedValue(ROWS_STATUS);
+
+    render(await AdminMonitorUsersPage());
+
+    const expiredRow = screen
+      .getByRole("rowheader", { name: "expired@example.com" })
+      .closest("tr") as HTMLElement;
+    expect(within(expiredRow).getAllByRole("cell")[1]).toHaveTextContent(DA_EXPIRED);
+  });
+});
+
+// ── AMC-27 / AC-AMU-02c: summary and lead formatted by the real ICU plurals ───
+
+describe("AMC-27 / AC-AMU-02c: AdminMonitorUsersPage — summary of the computed statuses and the lead through the ICU plurals (fake timers)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("AMC-27c: one signup of each status describes the table as '1 tilmeldt · 1 afventer · 1 udløbet'", async () => {
+    mockListMonitorSignups.mockResolvedValue(ROWS_STATUS);
+
+    render(await AdminMonitorUsersPage());
+
+    expect(screen.getByRole("table", { description: "1 tilmeldt · 1 afventer · 1 udløbet" })).toBeInTheDocument();
+  });
+
+  it("AMC-27d: the plural forms — two registered, none pending, three expired → '2 tilmeldte · 0 afventer · 3 udløbne'", async () => {
+    mockListMonitorSignups.mockResolvedValue(ROWS_PLURAL);
+
+    render(await AdminMonitorUsersPage());
+
+    expect(screen.getByRole("table", { description: "2 tilmeldte · 0 afventer · 3 udløbne" })).toBeInTheDocument();
+  });
+
+  it("AC-AMU-02c: the PageHeader description gives the confirm window from the config through the ICU plural ('inden for 10 minutter')", async () => {
+    mockListMonitorSignups.mockResolvedValue(ROWS);
+
+    render(await AdminMonitorUsersPage());
+
+    expect(screen.getByText(DA_LEAD)).toBeInTheDocument();
+  });
+});
+
+// ── AMC-21: dialog body formatted by next-intl in the client ─────────────────
+
+describe("AMC-21: AdminMonitorUsersPage — the delete dialog's body is formatted by the page's client provider", () => {
+  beforeEach(() => {
+    // jsdom: HTMLDialogElement lacks showModal; the polyfill opens the dialog.
+    HTMLDialogElement.prototype.showModal = vi.fn().mockImplementation(function (this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    });
+  });
+
+  it("AMC-21c: Slet opens a dialog described by delete.body with the row's address filled in, in bold", async () => {
+    mockListMonitorSignups.mockResolvedValue(ROWS);
+    const user = userEvent.setup();
+
+    render(await AdminMonitorUsersPage());
+    await user.click(screen.getByRole("button", { name: /^\s*Slet[\s\S]*a@example\.com/ }));
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Slet tilmelding?",
+      description: "a@example.com og alle kontoens overvågninger slettes permanent. Det kan ikke fortrydes.",
+    });
+    expect(within(dialog).getByText("a@example.com", { selector: "strong" })).toBeInTheDocument();
   });
 });
 
@@ -216,7 +421,7 @@ describe("AC-AMU-01: ADMIN_MONITOR_USERS_PATH is '/admin/monitor-users'", () => 
   });
 });
 
-// ── da.json key existence pins ────────────────────────────────────────────────
+// ── da.json key pins ──────────────────────────────────────────────────────────
 
 describe("da.json Admin.monitorUsers — all contract keys pinned", () => {
   function monitorUsers(): Record<string, unknown> {
@@ -228,48 +433,116 @@ describe("da.json Admin.monitorUsers — all contract keys pinned", () => {
     return (monitorUsers()["table"] ?? {}) as Record<string, unknown>;
   }
 
-  function confirmed(): Record<string, unknown> {
-    return (monitorUsers()["confirmed"] ?? {}) as Record<string, unknown>;
+  function status(): Record<string, unknown> {
+    return (monitorUsers()["status"] ?? {}) as Record<string, unknown>;
+  }
+
+  function deleteKeys(): Record<string, unknown> {
+    return (monitorUsers()["delete"] ?? {}) as Record<string, unknown>;
+  }
+
+  function deleteErrors(): Record<string, unknown> {
+    return (deleteKeys()["errors"] ?? {}) as Record<string, unknown>;
   }
 
   it("AC-AMU-02-da: Admin.monitorUsers.title === 'Monitor-brugere'", () => {
     expect(monitorUsers()["title"]).toBe(DA_TITLE);
   });
 
-  it("AC-AMU-02-da: Admin.monitorUsers.lead === 'Alle der har tilmeldt sig Monitor, nyeste først.'", () => {
-    expect(monitorUsers()["lead"]).toBe(DA_LEAD);
-  });
-
   it("AC-AMU-13-da: Admin.monitorUsers.table.caption === 'Tilmeldinger'", () => {
     expect(table()["caption"]).toBe(DA_CAPTION);
   });
 
-  it("AC-AMU-03-da: Admin.monitorUsers.table.email === 'E-mail'", () => {
+  it("AMC-16-da-email: Admin.monitorUsers.table.email === 'E-mail'", () => {
     expect(table()["email"]).toBe(DA_EMAIL);
   });
 
-  it("AC-AMU-03-da: Admin.monitorUsers.table.signedUp === 'Tilmeldt'", () => {
-    expect(table()["signedUp"]).toBe(DA_SIGNED_UP);
+  it("AMC-16-da-signedUp: Admin.monitorUsers.table.signedUp === 'Oprettet'", () => {
+    expect(table()["signedUp"]).toBe(DA_OPRETTET);
   });
 
-  it("AC-AMU-03-da: Admin.monitorUsers.table.confirmed === 'Bekræftet'", () => {
-    expect(table()["confirmed"]).toBe(DA_CONFIRMED);
+  it("AMC-16-da-status: Admin.monitorUsers.table.status === 'Status'", () => {
+    expect(table()["status"]).toBe(DA_STATUS);
   });
 
-  it("AC-AMU-03-da: Admin.monitorUsers.table.monitors === 'Overvågninger'", () => {
+  it("AMC-16-da-monitors: Admin.monitorUsers.table.monitors === 'Overvågninger'", () => {
     expect(table()["monitors"]).toBe(DA_MONITORS);
   });
 
-  it("AC-AMU-06-da: Admin.monitorUsers.confirmed.yes === 'Ja'", () => {
-    expect(confirmed()["yes"]).toBe(DA_YES);
+  it("AMC-16-da-actions: Admin.monitorUsers.table.actions === 'Handlinger'", () => {
+    expect(table()["actions"]).toBe(DA_ACTIONS);
   });
 
-  it("AC-AMU-07-da: Admin.monitorUsers.confirmed.no === 'Nej'", () => {
-    expect(confirmed()["no"]).toBe(DA_NO);
+  it("AMC-17-da: Admin.monitorUsers.table does NOT have key 'confirmed'", () => {
+    expect(Object.keys(table())).not.toContain("confirmed");
+  });
+
+  it("AMC-17-da: Admin.monitorUsers does NOT have key 'confirmed' (no badge namespace)", () => {
+    expect(Object.keys(monitorUsers())).not.toContain("confirmed");
+  });
+
+  it("AMC-18-da: Admin.monitorUsers.status.registered === 'Tilmeldt'", () => {
+    expect(status()["registered"]).toBe(DA_REGISTERED);
+  });
+
+  it("AMC-19-da: Admin.monitorUsers.status.pending === 'Afventer bekræftelse'", () => {
+    expect(status()["pending"]).toBe(DA_PENDING);
+  });
+
+  it("AMC-20-da: Admin.monitorUsers.status.expired === 'Udløbet'", () => {
+    expect(status()["expired"]).toBe(DA_EXPIRED);
+  });
+
+  it("AMC-21-da: Admin.monitorUsers.delete.open === 'Slet'", () => {
+    expect(deleteKeys()["open"]).toBe("Slet");
+  });
+
+  it("AMC-21-da: Admin.monitorUsers.delete.title === 'Slet tilmelding?'", () => {
+    expect(deleteKeys()["title"]).toBe("Slet tilmelding?");
+  });
+
+  it("AMC-21-da-body: Admin.monitorUsers.delete.body names the address in <strong> and the permanent loss", () => {
+    expect(deleteKeys()["body"]).toBe(DA_DELETE_BODY_MESSAGE);
+  });
+
+  it("AMC-23-da: Admin.monitorUsers.delete.confirm === 'Slet tilmelding'", () => {
+    expect(deleteKeys()["confirm"]).toBe("Slet tilmelding");
+  });
+
+  it("AMC-24-da: Admin.monitorUsers.delete.pending === 'Sletter\u2026'", () => {
+    expect(deleteKeys()["pending"]).toBe("Sletter\u2026");
+  });
+
+  it("AMC-22-da: Admin.monitorUsers.delete.cancel === 'Annuller'", () => {
+    expect(deleteKeys()["cancel"]).toBe("Annuller");
+  });
+
+  it("AMC-25-da-failed: Admin.monitorUsers.delete.errors.failed", () => {
+    expect(deleteErrors()["failed"]).toBe("Tilmeldingen kunne ikke slettes. Prøv igen.");
+  });
+
+  it("AMC-25-da-notFound: Admin.monitorUsers.delete.errors.notFound", () => {
+    expect(deleteErrors()["notFound"]).toBe("Tilmeldingen findes ikke længere.");
+  });
+
+  it("AMC-25-da-notMonitorUser: Admin.monitorUsers.delete.errors.notMonitorUser", () => {
+    expect(deleteErrors()["notMonitorUser"]).toBe("Kun Monitor-brugere kan slettes her.");
   });
 
   it("AC-AMU-11-da: Admin.monitorUsers.empty === 'Ingen tilmeldinger endnu.'", () => {
     expect(monitorUsers()["empty"]).toBe(DA_EMPTY);
+  });
+
+  it("AC-AMU-02c-da: Admin.monitorUsers.lead pluralises {minutes}", () => {
+    expect(monitorUsers()["lead"]).toBe(
+      "Alle der har tilmeldt sig Monitor, nyeste først. En tilmelding, der ikke er bekræftet inden for {minutes, plural, one {# minut} other {# minutter}}, er udløbet.",
+    );
+  });
+
+  it("AMC-27-da: Admin.monitorUsers.summary pluralises the registered and expired counts", () => {
+    expect(monitorUsers()["summary"]).toBe(
+      "{registered, plural, one {# tilmeldt} other {# tilmeldte}} · {pending} afventer · {expired, plural, one {# udløbet} other {# udløbne}}",
+    );
   });
 
   it("AC-AMU-01-da: Admin.nav.monitorUsers === 'Monitor-brugere'", () => {

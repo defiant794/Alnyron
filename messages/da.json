@@ -190,19 +190,35 @@
     },
     "monitorUsers": {
       "title": "Monitor-brugere",
-      "lead": "Alle der har tilmeldt sig Monitor, nyeste først.",
+      "lead": "Alle der har tilmeldt sig Monitor, nyeste først. En tilmelding, der ikke er bekræftet inden for {minutes, plural, one {# minut} other {# minutter}}, er udløbet.",
       "table": {
         "caption": "Tilmeldinger",
         "email": "E-mail",
-        "signedUp": "Tilmeldt",
-        "confirmed": "Bekræftet",
-        "monitors": "Overvågninger"
+        "signedUp": "Oprettet",
+        "status": "Status",
+        "monitors": "Overvågninger",
+        "actions": "Handlinger"
       },
-      "confirmed": {
-        "yes": "Ja",
-        "no": "Nej"
+      "status": {
+        "registered": "Tilmeldt",
+        "pending": "Afventer bekræftelse",
+        "expired": "Udløbet"
       },
-      "empty": "Ingen tilmeldinger endnu."
+      "summary": "{registered, plural, one {# tilmeldt} other {# tilmeldte}} · {pending} afventer · {expired, plural, one {# udløbet} other {# udløbne}}",
+      "empty": "Ingen tilmeldinger endnu.",
+      "delete": {
+        "open": "Slet",
+        "title": "Slet tilmelding?",
+        "body": "<strong>{email}</strong> og alle kontoens overvågninger slettes permanent. Det kan ikke fortrydes.",
+        "confirm": "Slet tilmelding",
+        "pending": "Sletter…",
+        "cancel": "Annuller",
+        "errors": {
+          "failed": "Tilmeldingen kunne ikke slettes. Prøv igen.",
+          "notFound": "Tilmeldingen findes ikke længere.",
+          "notMonitorUser": "Kun Monitor-brugere kan slettes her."
+        }
+      }
     },
     "catalog": {
       "title": "Katalog",

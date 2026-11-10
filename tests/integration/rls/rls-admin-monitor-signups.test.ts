@@ -65,12 +65,14 @@ const TS_OLDER = "2026-09-01T14:30:00.000Z";
 
 /** Expected exact shapes (monitor_count is integer → number in node-postgres). */
 const NEWER_ROW = {
+  user_id: MONITOR_NEWER_UUID,
   email: MONITOR_NEWER_EMAIL,
   created_at: new Date(TS_NEWER),
   confirmed: true,
   monitor_count: 2,
 };
 const OLDER_ROW = {
+  user_id: MONITOR_OLDER_UUID,
   email: MONITOR_OLDER_EMAIL,
   created_at: new Date(TS_OLDER),
   confirmed: false,
@@ -147,6 +149,7 @@ async function seedFixtures(c: PoolClient): Promise<void> {
 }
 
 interface SignupRow {
+  user_id: string;
   email: string;
   created_at: Date;
   confirmed: boolean;

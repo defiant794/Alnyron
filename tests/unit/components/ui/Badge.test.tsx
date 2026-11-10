@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// Tests for AC-DS-21 (every tone) and the MyLife login's accent badge (ML-AC1).
+// Tests for AC-DS-21 (every tone), the MyLife login's accent badge (ML-AC1) and
+// the Monitor-brugere "Afventer bekræftelse" info badge (AMC-19).
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
@@ -17,6 +18,7 @@ describe('AC-DS-21: Badge renders text for all tone values', () => {
     { tone: 'success', label: 'Gennemfort' },
     { tone: 'error', label: 'Fejl' },
     { tone: 'accent', label: 'Kun for godkendte brugere' },
+    { tone: 'info', label: 'Afventer bekræftelse' },
   ];
 
   for (const { tone, label } of cases) {
@@ -48,5 +50,16 @@ describe('ML-AC1: Badge accent tone (MyLife login "Kun for godkendte brugere")',
     expect(accent).not.toHaveClass('text-small');
     expect(screen.getByText('Kladde')).toHaveClass('text-small');
     expect(screen.getByText('Neutral')).toHaveClass('text-small');
+  });
+});
+
+// ── AMC-19: the info tone is a status tone in the small text style ─────────
+
+describe('AMC-19: Badge info tone ("Afventer bekræftelse")', () => {
+  it('tone="info" uses the accent tint in the small text style of the other status tones', () => {
+    render(<Badge tone="info">Afventer bekræftelse</Badge>);
+    const badge = screen.getByText('Afventer bekræftelse');
+    expect(badge).toHaveClass('text-small', 'bg-accent/8', 'text-accent');
+    expect(badge).not.toHaveClass('text-xs');
   });
 });

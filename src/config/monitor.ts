@@ -241,6 +241,18 @@ export const MONITOR_SIGNUP_NOTICE_PER_RUN = 1;
  */
 export const MONITOR_UNCONFIRMED_PURGE_BATCH = 5;
 
+/**
+ * Minutes a new public Monitor signup has to confirm its address before
+ * Admin › Monitor-brugere shows it as "Udløbet" instead of "Afventer
+ * bekræftelse": an unconfirmed signup this old or older is treated as not a
+ * real signup in that list (it stays listed and can be deleted). The admin
+ * list's own cut-off only: it neither sets nor reads how long the
+ * confirmation link itself stays valid (an auth setting of the Supabase
+ * project), and the account is only deleted automatically after 24 hours
+ * (`MONITOR_UNCONFIRMED_PURGE_BATCH`).
+ */
+export const MONITOR_SIGNUP_CONFIRM_WINDOW_MINUTES = 10;
+
 /** Lines in a change summary (`monitor_events.summary`, the email's added/removed lists). */
 export const MONITOR_SUMMARY_MAX_LINES = 5;
 
