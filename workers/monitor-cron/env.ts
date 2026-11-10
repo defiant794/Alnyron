@@ -17,11 +17,20 @@ const httpsUrl = z.string().check(z.refine((value) => URL.canParse(value) && new
 
 const nonEmpty = z.string().check(z.minLength(1));
 
+/** A new-format Supabase secret API key: `sb_secret_`, then at least one letter, digit, `_` or `-`. */
+const supabaseSecretKey = z.string().check(z.regex(/^sb_secret_[A-Za-z0-9_-]+$/));
+
 export const monitorCronEnvSchema = z.object({
   /** The Supabase project the engine works on. */
   SUPABASE_URL: httpsUrl,
-  /** Secret (service_role) key: EXECUTE on the monitor_engine_* functions. */
-  SUPABASE_SECRET_KEY: nonEmpty,
+  /**
+   * Supabase secret API key (`sb_secret_…`, service_role): EXECUTE on the monitor_engine_*
+   * functions. Anything else (a legacy JWT key, a publishable key, the key with quotes,
+   * whitespace, a line break or a BOM around or in it) fails the env check, so a mangled
+   * secret fails the run loudly (Cloudflare counts the error) instead of every engine call
+   * failing silently at the Supabase gateway.
+   */
+  SUPABASE_SECRET_KEY: supabaseSecretKey,
   /** Resend sending key (restricted to the sending domain). */
   RESEND_API_KEY: nonEmpty,
   /** From address of every email (`Name <address>`), same as the web app's MAIL_FROM. */

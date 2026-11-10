@@ -117,22 +117,40 @@ export type EngineRpc = {
   purgeUnconfirmed(limit: number): Promise<number>;
 };
 
+/** The name of an {@link EngineRpc} method, e.g. the one a run reports as its first failed engine call. */
+export type EngineOp = keyof EngineRpc;
+
 /**
- * A failed engine call. Carries only the PostgREST/Postgres error code
- * (`unknown` for a request without an answer: a network failure, or one
- * aborted after {@link MONITOR_RPC_TIMEOUT_MS}), never the message or details
- * (which may echo arguments such as URLs).
+ * A failed engine call. Carries only the PostgREST/Postgres error `code` and the
+ * HTTP `status` of the call's answer, never the message, details or hint
+ * (which may echo arguments such as URLs). `code` is `unknown` when the answer
+ * has none: no answer at all, or a rejection before PostgREST (as of 2026-11
+ * the Supabase API gateway answers a key it does not accept with a 401 that
+ * has no code); `no_row` when `monitor_engine_record` answered without its
+ * row. `status` is null when there was no answer: a network failure, or a
+ * request aborted after {@link MONITOR_RPC_TIMEOUT_MS}.
  */
 export class EngineRpcError extends Error {
-  constructor(readonly code: string) {
-    super(`monitor engine rpc failed (${code})`);
+  /**
+   * @param code The PostgREST/Postgres error code, `unknown` or `no_row`.
+   * @param status The HTTP status of the call's answer; null when there was no answer.
+   */
+  constructor(
+    readonly code: string,
+    readonly status: number | null,
+  ) {
+    super(`monitor engine rpc failed (${code}, ${status === null ? "no response" : `HTTP ${status}`})`);
     this.name = "EngineRpcError";
   }
 }
 
-/** Unwraps a supabase-js result, turning an error into an {@link EngineRpcError}. */
-function unwrap<T>({ data, error }: { data: T | null; error: { code?: string } | null }): T | null {
-  if (error) throw new EngineRpcError(error.code || "unknown");
+/**
+ * Unwraps a supabase-js result, turning an error into an {@link EngineRpcError}
+ * with the answer's HTTP status (supabase-js reports a request without an
+ * answer as status 0, kept as null).
+ */
+function unwrap<T>({ data, error, status }: { data: T | null; error: { code?: string } | null; status: number }): T | null {
+  if (error) throw new EngineRpcError(error.code || "unknown", status === 0 ? null : status);
   return data;
 }
 
@@ -178,22 +196,20 @@ export function createSupabaseEngineRpc(url: string, secretKey: string): EngineR
 
     async record(input) {
       // Omitted (undefined) optional arguments take their SQL default, NULL.
-      const rows = unwrap(
-        await client.rpc("monitor_engine_record", {
-          p_monitor_id: input.monitorId,
-          p_claimed_url: input.claimedUrl,
-          p_outcome: input.outcome,
-          p_expected_hash: input.expectedHash ?? undefined,
-          p_new_hash: input.newHash ?? undefined,
-          p_snapshot: input.snapshot ?? undefined,
-          p_summary: input.summary ?? undefined,
-          p_error_threshold: input.errorThreshold,
-          p_daily_cap: input.dailyCap,
-          p_repay: input.repay,
-        }),
-      );
-      const row = rows?.[0];
-      if (row === undefined) throw new EngineRpcError("no_row");
+      const result = await client.rpc("monitor_engine_record", {
+        p_monitor_id: input.monitorId,
+        p_claimed_url: input.claimedUrl,
+        p_outcome: input.outcome,
+        p_expected_hash: input.expectedHash ?? undefined,
+        p_new_hash: input.newHash ?? undefined,
+        p_snapshot: input.snapshot ?? undefined,
+        p_summary: input.summary ?? undefined,
+        p_error_threshold: input.errorThreshold,
+        p_daily_cap: input.dailyCap,
+        p_repay: input.repay,
+      });
+      const row = unwrap(result)?.[0];
+      if (row === undefined) throw new EngineRpcError("no_row", result.status);
       return row;
     },
 

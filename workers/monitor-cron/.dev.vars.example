@@ -1,5 +1,5 @@
 # Copy to workers/monitor-cron/.dev.vars (git-ignored) for `wrangler dev --config workers/monitor-cron/wrangler.jsonc`.
 # Local runs use the ISOLATED e2e Supabase project only, never production: override SUPABASE_URL here.
 SUPABASE_URL=https://<e2e-project-ref>.supabase.co
-SUPABASE_SECRET_KEY=<e2e project secret key>
+SUPABASE_SECRET_KEY=<e2e project secret key, sb_secret_…>
 RESEND_API_KEY=<Resend test or sending key>

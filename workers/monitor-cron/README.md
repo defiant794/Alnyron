@@ -8,8 +8,9 @@ error through the service-role-only `monitor_engine_*` functions (migrations
 `supabase/migrations/20261110000100_monitor_signup_notice.sql`), and emails new changes and the
 first "Vi kan ikke hente" of an error streak through Resend. Last, it deletes stale unconfirmed
 public accounts and tells the site owner about new confirmed ones (see "New signups and
-unconfirmed accounts"). It logs one JSON line per run (`msg: "monitor-cron run"` plus counters;
-never a URL, address, user id, page text or key).
+unconfirmed accounts"). It logs one JSON line per run (`msg: "monitor-cron run"` plus counters
+and `rpcError`, the run's first failed database call, see "Reading the run line"; never a URL,
+address, user id, page text, key or error message).
 
 Separate from the OpenNext web Worker so the Supabase secret key never ships in the public app.
 Always pass `--config workers/monitor-cron/wrangler.jsonc`: without it, `wrangler deploy` hands
@@ -41,8 +42,8 @@ the config's directory, so the bundle lands in `workers/monitor-cron/.wrangler/m
 ## Local run (e2e Supabase project only)
 
 1. Copy `.dev.vars.example` to `workers/monitor-cron/.dev.vars` (git-ignored) and fill in the
-   **isolated e2e project's** URL and secret key, and a Resend key. Never point a local run at
-   production.
+   **isolated e2e project's** URL and secret key (`sb_secret_…`), and a Resend key. Never point
+   a local run at production.
 2. Start it and fire the cron by hand:
 
    ```sh
@@ -52,7 +53,9 @@ the config's directory, so the bundle lands in `workers/monitor-cron/.wrangler/m
 
 The run log line shows in the wrangler output. `tests/integration/monitor-engine/engine-live.test.ts`
 covers the same path against the e2e project with a capturing mailer:
-`npm run test:integration:e2e-project -- tests/integration/monitor-engine/engine-live.test.ts`.
+`npm run test:integration:e2e-project -- tests/integration/monitor-engine/engine-live.test.ts`;
+`worker-runtime-live.test.ts` beside it runs the real Worker in local workerd (see "Incident
+2026-11-10: every database call rejected").
 
 ## Go-live (production)
 
@@ -64,7 +67,9 @@ both secrets every run fails, and without the Monitor domain every email link is
 1. Apply the migrations to production (20261108000100 and 20261110000100): `npm run db:push`,
    then regenerate types with `npm run db:types`.
 2. Create a dedicated, revocable Supabase secret key named `monitor-cron` and store it:
-   `npx wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc`
+   `npx wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc`.
+   Paste the bare `sb_secret_…` value at the prompt, without quotes, spaces or a line break:
+   the env check rejects anything else (see "Incident 2026-11-10: every database call rejected").
 3. Create a Resend sending key restricted to `send.alnyron.dk` (already verified) and store it:
    `npx wrangler secret put RESEND_API_KEY --config workers/monitor-cron/wrangler.jsonc`
 4. `MONITOR_SITE_URL` is `https://monitor.alnyron.dk` (`wrangler.jsonc`): every change email
@@ -73,6 +78,113 @@ both secrets every run fails, and without the Monitor domain every email link is
    Never add a `routes` key to either `wrangler.jsonc`: wrangler would then manage the zone's
    routes and drop the domains attached in the dashboard.
 5. Deploy: `npm run deploy:monitor-cron`, or `npm run deploy` (web Worker, then this one).
+
+## Reading the run line
+
+A failed database call is caught and counted in `rpcErrors`, and the run goes on: the invocation
+still ends without an error, so Cloudflare's error count stays 0 even when every call fails.
+`rpcError`, right after `rpcErrors`, names the run's first failed call (`null` when none failed);
+later failures never replace it:
+
+```json
+"rpcErrors":4,"rpcError":{"op":"pendingEmails","code":"unknown","status":401}
+```
+
+- `op`: the `rpc.ts` method (`pendingEmails`, `claim`, `snapshot`, `record`, `markEmailed`,
+  `purgeUnconfirmed`, `pendingSignups`, `markSignupNotified`). `pendingEmails` is a run's first
+  call, so a fault that breaks every call shows there.
+- `code`: the PostgREST/Postgres error code of the answer; `unknown` when it has none or the call
+  threw an error other than an `EngineRpcError`, `no_row` when `monitor_engine_record` answered
+  without its row. Never the error message, details or hint: they may echo a call's arguments.
+- `status`: the HTTP status of the answer; `null` when there was none, or for an error other than
+  an `EngineRpcError`.
+
+What the common values mean (Supabase and PostgREST behaviour as of 2026-11):
+
+| `rpcError` | meaning |
+|---|---|
+| `code` `unknown`, `status` 401 | Supabase's API gateway rejected the key before PostgREST: a wrong, revoked or mangled `SUPABASE_SECRET_KEY` |
+| `code` `unknown`, `status` `null` | no answer: a network failure, or the call was aborted after 5 seconds (`MONITOR_RPC_TIMEOUT_MS`); or the call threw an error other than an `EngineRpcError` |
+| `PGRST202`, `status` 404 | PostgREST knows no such function: the engine migration is not applied to this project |
+| `22023`, `status` 400 | an engine function refused its arguments |
+| `no_row`, `status` 200 | `monitor_engine_record` answered without its row |
+
+`rpcErrors` above 0 with `rpcError` `null`: what failed was no database call, but a check that
+threw outside one (e.g. its page fetch).
+
+## Incident 2026-11-10: every database call rejected
+
+**Symptom.** Production logged a run line every minute with `"claimed":0`, `"subrequests":4` and
+`"rpcErrors":4` in about 100 ms, and Cloudflare counted 0 errors: all four database calls of
+each run (`pendingEmails`, `claim`, `purgeUnconfirmed`, `pendingSignups`) failed, were caught and
+only counted. The line could not say why: `EngineRpcError` then kept only the PostgREST error
+code, and the gateway's rejection has none (`unknown`).
+
+**Root cause (inferred).** The Worker's `SUPABASE_SECRET_KEY` secret most likely held a value
+that Supabase's API gateway rejected with a 401 ("Invalid API key"), so no call reached
+PostgREST; the env check then accepted any non-empty string. Production's run line held no
+status, so the 401 is inferred from a reproduction: a format-valid but wrong `sb_secret_` key
+run against production reproduced the line exactly (4 subrequests, 4 failures, code `unknown`),
+and the gateway's rejections took about 3–12 ms against 35–45 ms for answered calls, which fits
+the 100 ms runs. What exactly was wrong with the stored value is not known (Cloudflare does not
+show a Worker secret's value, as of 2026-11).
+
+**Ruled out.** The real bundle (`index.ts`'s `scheduled()` built from this `wrangler.jsonc`) ran
+clean against the e2e project (`rpcErrors: 0`, 4 subrequests) on Cloudflare's edge (`wrangler dev
+--remote`, a throwaway Worker) with both compatibility flags (`nodejs_compat`,
+`global_fetch_strictly_public`), again with `global_fetch_strictly_public` off, and in local
+workerd. Raw `fetch`, `rpcFetch` (`AbortSignal.timeout`/`AbortSignal.any`), supabase-js's `rpc`
+and `createSupabaseEngineRpc` all got PostgREST answers there, and api.resend.com was reachable.
+So neither the flag, `rpcFetch`, supabase-js nor the Workers runtime caused it, and none of them
+was changed.
+
+**Fix.**
+
+1. `EngineRpcError` carries the HTTP `status` of the answer (`null` without one), and its
+   message reads `monitor engine rpc failed (<code>, HTTP <status>)` or
+   `monitor engine rpc failed (<code>, no response)`.
+2. The run line has `rpcError`, the run's first failed call (see "Reading the run line"). The
+   incident's line would have shown
+   `"rpcError":{"op":"pendingEmails","code":"unknown","status":401}`.
+3. The env check (`env.ts`) accepts `SUPABASE_SECRET_KEY` only as a secret API key matching
+   `^sb_secret_[A-Za-z0-9_-]+$`. A legacy JWT key, a publishable key, or the key with quotes,
+   spaces, a line break or a BOM around or in it makes `scheduled()` throw
+   `monitor-cron: missing or invalid environment keys: SUPABASE_SECRET_KEY` (never the value)
+   before any subrequest: every run then ends in an exception, which Cloudflare counts as an
+   error (as of 2026-11). A key of the right form that Supabase does not accept (another
+   project's, a revoked one) still passes the check and shows as `"code":"unknown","status":401`
+   in `rpcError`.
+4. Tests run the real Worker in local workerd through wrangler's `createTestHarness` (wrangler
+   4.156; as of 2026-11 `@cloudflare/vitest-pool-workers` 0.23 peers Vitest ^4.1, the repo runs
+   Vitest 5): wrangler's bundle of this `wrangler.jsonc` (the `react` alias included) under its
+   compatibility date and flags, and workerd's `Request`/`Headers`/`AbortSignal` handling. The
+   harness forwards every outbound request through Node's fetch (wrangler 4.156, `cli.js`
+   `outboundService`), so the edge's egress path and `global_fetch_strictly_public` are not
+   covered; those were checked once on the edge (`wrangler dev --remote`, a throwaway Worker)
+   during the diagnosis (see "Ruled out"). Both tests leave `workers/monitor-cron/.wrangler/tmp`
+   behind (git-ignored).
+   - `tests/unit/workers/monitor-cron/worker-runtime.test.ts` is part of `npm test` and makes no
+     network call: a key wrapped in quotes makes `scheduled()` end in an exception, with no run
+     line.
+   - `tests/integration/monitor-engine/worker-runtime-live.test.ts`, e2e project only:
+     `npm run test:integration:e2e-project -- tests/integration/monitor-engine/worker-runtime-live.test.ts`.
+     With the project's key a run in workerd claims a seeded monitor (its `last_checked_at` is
+     set) and records its check (`errors: 1`), and the mailer's request reaches api.resend.com,
+     forwarded by the harness through Node's fetch (`rpcErrors: 0`, `rpcError: null`,
+     `mailStop: "config"` for its fake Resend key); with a random `sb_secret_` key it reproduces
+     the incident's line, `rpcError` included.
+
+**Operator step.** Store the key again, then deploy this build:
+
+```sh
+npx wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc
+npm run deploy:monitor-cron
+```
+
+Paste the bare `sb_secret_…` value at the prompt: no quotes, spaces or line break. The next run
+line (Workers > `alnyron-monitor-cron` > Logs) must show `"rpcErrors":0` and `"rpcError":null`.
+An exception naming `SUPABASE_SECRET_KEY` means the stored value is still malformed;
+`"status":401` in `rpcError` means Supabase does not accept the key.
 
 ## Plan profiles
 

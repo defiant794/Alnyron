@@ -610,7 +610,7 @@ describe("runMonitorChecks — ENG-AC7: the claim asks only for what the budget 
       mailStop: null, budgetStop: true, batchFull: false,
       // pendingEmails + claim + page 1 + record + purge + pendingSignups
       subrequests: 6,
-      rpcErrors: 0, durationMs: 0,
+      rpcErrors: 0, rpcError: null, durationMs: 0,
       purged: 0, signupNotices: 0, signupNoticesDeferred: 0,
     });
   });
@@ -690,7 +690,7 @@ describe("runMonitorChecks — ENG-AC6: exactly one log line per run, no sensiti
       mailStop: null, budgetStop: false, batchFull: false,
       // pendingEmails + claim + purge + pendingSignups (empty run, all budget available)
       subrequests: 4,
-      rpcErrors: 0, durationMs: 0,
+      rpcErrors: 0, rpcError: null, durationMs: 0,
       purged: 0, signupNotices: 0, signupNoticesDeferred: 0,
     });
   });

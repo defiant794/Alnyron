@@ -1,10 +1,12 @@
 /**
  * Unit tests: workers/monitor-cron/env.ts — parseMonitorCronEnv
- * Journey: monitor-engine  ENG-AC6
+ * Journey: monitor-engine  ENG-AC6; monitor-cron-runtime-fix  CRF-AC12–CRF-AC17
  *
  * Covers: valid parse with string coercion, missing/invalid keys → the exact
  *   error naming keys (never values), all schema bounds (the subrequest floor is
- *   2 fixed calls + one worst-case check = 17), and an assertion that
+ *   2 fixed calls + one worst-case check = 17), the SUPABASE_SECRET_KEY format
+ *   (only `^sb_secret_[A-Za-z0-9_-]+$`: no legacy JWT, publishable key, bare prefix,
+ *   quotes, whitespace, line break or BOM), and an assertion that
  *   src/config/env.ts never mentions SUPABASE_SECRET_KEY.
  */
 import { readFileSync } from "node:fs";
@@ -28,7 +30,7 @@ describe("ENG-AC6: src/config/env.ts must never mention SUPABASE_SECRET_KEY", ()
 
 const VALID_RAW = {
   SUPABASE_URL: "https://giokcppmmzrrknmllfjc.supabase.co",
-  SUPABASE_SECRET_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
+  SUPABASE_SECRET_KEY: "sb_secret_unitTestKey123-valid",
   RESEND_API_KEY: "re_test_abc123",
   MAIL_FROM: "Alnyron <noreply@send.alnyron.dk>",
   MONITOR_SITE_URL: "https://alnyron.dk",
@@ -143,5 +145,79 @@ describe("parseMonitorCronEnv — ENG-AC6: invalid values → error names keys, 
         MONITOR_BATCH_SIZE: "1.5",
       }),
     ).toThrow(envError("SUPABASE_URL", "RESEND_API_KEY", "MONITOR_BATCH_SIZE"));
+  });
+});
+
+// ── CRF-AC12–17: SUPABASE_SECRET_KEY format validation ───────────────────────
+
+describe("parseMonitorCronEnv — CRF-AC12–17: SUPABASE_SECRET_KEY must match /^sb_secret_[A-Za-z0-9_-]+$/", () => {
+  // CRF-AC12: valid new-format key accepted
+  it.for([
+    { id: "CRF-AC12env1", label: "alphanumeric suffix", key: "sb_secret_abc123" },
+    { id: "CRF-AC12env2", label: "underscore suffix", key: "sb_secret_abc_def" },
+    { id: "CRF-AC12env3", label: "hyphen suffix", key: "sb_secret_abc-def" },
+    { id: "CRF-AC12env4", label: "long realistic key", key: "sb_secret_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-xyzXYZ" },
+  ])("$id: valid key ($label) → accepted", ({ key }) => {
+    expect(() => parseMonitorCronEnv({ ...VALID_RAW, SUPABASE_SECRET_KEY: key })).not.toThrow();
+  });
+
+  // CRF-AC13: legacy JWT rejected
+  it("CRF-AC13env1: legacy JWT (eyJ…) → throws naming SUPABASE_SECRET_KEY, never the value", () => {
+    // The legacy Supabase key format (a JWT, eyJ…), not a secret API key.
+    expect(() =>
+      parseMonitorCronEnv({ ...VALID_RAW, SUPABASE_SECRET_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test" }),
+    ).toThrow(envError("SUPABASE_SECRET_KEY"));
+  });
+
+  // CRF-AC14: publishable key rejected
+  it("CRF-AC14env1: publishable key (sb_publishable_…) → throws naming SUPABASE_SECRET_KEY", () => {
+    expect(() =>
+      parseMonitorCronEnv({ ...VALID_RAW, SUPABASE_SECRET_KEY: "sb_publishable_abcdefXYZ123" }),
+    ).toThrow(envError("SUPABASE_SECRET_KEY"));
+  });
+
+  // CRF-AC15: prefix alone (no suffix characters) rejected
+  it("CRF-AC15env1: 'sb_secret_' alone (no suffix) → throws naming SUPABASE_SECRET_KEY", () => {
+    expect(() =>
+      parseMonitorCronEnv({ ...VALID_RAW, SUPABASE_SECRET_KEY: "sb_secret_" }),
+    ).toThrow(envError("SUPABASE_SECRET_KEY"));
+  });
+
+  // CRF-AC16: key wrapped in literal quotes (a common paste mangling) rejected
+  it("CRF-AC16env1: key wrapped in literal double-quote characters → throws naming SUPABASE_SECRET_KEY", () => {
+    // A common paste mangling: the secret value includes the surrounding quotes. The exact form
+    // of the production incident's value is not known.
+    expect(() =>
+      parseMonitorCronEnv({ ...VALID_RAW, SUPABASE_SECRET_KEY: '"sb_secret_realkey123"' }),
+    ).toThrow(envError("SUPABASE_SECRET_KEY"));
+  });
+
+  it("CRF-AC16env2: key wrapped in literal single-quote characters → throws naming SUPABASE_SECRET_KEY", () => {
+    expect(() =>
+      parseMonitorCronEnv({ ...VALID_RAW, SUPABASE_SECRET_KEY: "'sb_secret_realkey123'" }),
+    ).toThrow(envError("SUPABASE_SECRET_KEY"));
+  });
+
+  // CRF-AC17: whitespace, newline or BOM rejected
+  it.for([
+    { id: "CRF-AC17env1", label: "leading space",    key: " sb_secret_abc" },
+    { id: "CRF-AC17env2", label: "trailing space",   key: "sb_secret_abc " },
+    { id: "CRF-AC17env3", label: "internal space",   key: "sb_secret_ab cd" },
+    { id: "CRF-AC17env4", label: "trailing newline", key: "sb_secret_abc\n" },
+    { id: "CRF-AC17env5", label: "CRLF suffix",      key: "sb_secret_abc\r\n" },
+    { id: "CRF-AC17env6", label: "BOM prefix",       key: "\uFEFFsb_secret_abc" },
+  ])("$id: $label → throws naming SUPABASE_SECRET_KEY, never exposes the value", ({ key }) => {
+    // toThrow checks the message string; envError returns the exact expected message.
+    // The key must not appear in the error message (it may contain sensitive material).
+    expect(() =>
+      parseMonitorCronEnv({ ...VALID_RAW, SUPABASE_SECRET_KEY: key }),
+    ).toThrow(envError("SUPABASE_SECRET_KEY"));
+  });
+
+  it("CRF-AC17env7: error message names SUPABASE_SECRET_KEY and never echoes the value", () => {
+    const marker = "sb_secret_MARKER_MUST_NOT_LEAK_xyz987\n";
+    expect(() => parseMonitorCronEnv({ ...VALID_RAW, SUPABASE_SECRET_KEY: marker })).toThrow(
+      envError("SUPABASE_SECRET_KEY"),
+    );
   });
 });

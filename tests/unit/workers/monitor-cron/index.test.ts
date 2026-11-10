@@ -1,11 +1,12 @@
 /**
  * Unit tests: workers/monitor-cron/index.ts — scheduled handler
- * Journey: monitor-engine  ENG-AC6
+ * Journey: monitor-engine  ENG-AC6; monitor-cron-runtime-fix  CRF-AC16
  *
  * Covers: invalid env → scheduled() throws naming keys not values and never
- *   starts a run; valid env → scheduled() awaits one runMonitorChecks with the
- *   env-derived rpc, config and a mailer that sends through sendEmail with
- *   RESEND_API_KEY. The handler awaits the run itself (no ctx.waitUntil).
+ *   starts a run, a SUPABASE_SECRET_KEY wrapped in quotes included; valid env →
+ *   scheduled() awaits one runMonitorChecks with the env-derived rpc, config and
+ *   a mailer that sends through sendEmail with RESEND_API_KEY. The handler awaits
+ *   the run itself (no ctx.waitUntil).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EmailMessage } from "@/lib/email/resend";
@@ -16,7 +17,7 @@ const RUN_SUMMARY: RunSummary = {
   errors: 0, staleSkips: 0, emailsSent: 0, emailsDeferred: 0,
   emailsRejected: 0, errorEmails: 0, signupNotices: 0, signupNoticesDeferred: 0, purged: 0, mailStop: null,
   budgetStop: false, batchFull: false, subrequests: 0,
-  rpcErrors: 0, durationMs: 1,
+  rpcErrors: 0, rpcError: null, durationMs: 1,
 };
 
 // Mock runMonitorChecks so the index handler doesn't attempt real Supabase/Resend calls.
@@ -44,7 +45,7 @@ beforeEach(() => {
 
 const VALID_ENV = {
   SUPABASE_URL: "https://giokcppmmzrrknmllfjc.supabase.co",
-  SUPABASE_SECRET_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
+  SUPABASE_SECRET_KEY: "sb_secret_indexTestKey123-valid",
   RESEND_API_KEY: "re_test_abc",
   MAIL_FROM: "Alnyron <noreply@send.alnyron.dk>",
   MONITOR_SITE_URL: "https://alnyron.dk",
@@ -52,12 +53,12 @@ const VALID_ENV = {
   MONITOR_SUBREQUEST_LIMIT: "50",
 };
 
+/** The env error of parseMonitorCronEnv: the keys only. */
+const envError = (key: string) => new Error(`monitor-cron: missing or invalid environment keys: ${key}`);
+
 // ── Invalid env → throws naming the key ──────────────────────────────────────
 
 describe("scheduled handler — ENG-AC6: invalid env → throws naming keys, never values", () => {
-  /** The env error of parseMonitorCronEnv: the keys only. */
-  const envError = (key: string) => new Error(`monitor-cron: missing or invalid environment keys: ${key}`);
-
   it("ENG-AC6idx1: missing SUPABASE_SECRET_KEY → throws the error naming SUPABASE_SECRET_KEY", async () => {
     const badEnv = { ...VALID_ENV, SUPABASE_SECRET_KEY: undefined };
     await expect(workerModule.scheduled({}, badEnv, {})).rejects.toThrow(envError("SUPABASE_SECRET_KEY"));
@@ -71,6 +72,15 @@ describe("scheduled handler — ENG-AC6: invalid env → throws naming keys, nev
   it("ENG-AC6idx3: invalid env → no rpc client is built and runMonitorChecks is never called", async () => {
     const badEnv = { ...VALID_ENV, RESEND_API_KEY: "" };
     await expect(workerModule.scheduled({}, badEnv, {})).rejects.toThrow(envError("RESEND_API_KEY"));
+    expect(createSupabaseEngineRpc).not.toHaveBeenCalled();
+    expect(runMonitorChecks).not.toHaveBeenCalled();
+  });
+});
+
+describe("scheduled handler — CRF-AC16: SUPABASE_SECRET_KEY wrapped in quotes → throws before any call", () => {
+  it("CRF-AC16idx1: '\"sb_secret_x\"' → throws the error naming SUPABASE_SECRET_KEY; no rpc client is built, no run starts", async () => {
+    const badEnv = { ...VALID_ENV, SUPABASE_SECRET_KEY: '"sb_secret_x"' };
+    await expect(workerModule.scheduled({}, badEnv, {})).rejects.toThrow(envError("SUPABASE_SECRET_KEY"));
     expect(createSupabaseEngineRpc).not.toHaveBeenCalled();
     expect(runMonitorChecks).not.toHaveBeenCalled();
   });

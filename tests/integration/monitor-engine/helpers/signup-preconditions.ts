@@ -1,7 +1,7 @@
 /**
  * Shared precondition helpers for monitor-engine integration tests (SNE-AC2i).
- * Used by both signup-notice-live.test.ts and engine-live.test.ts so the guard
- * code is in one place; SNE-AC2i-live1/live2/live3 (signup-notice-live.test.ts)
+ * Used by signup-notice-live.test.ts, engine-live.test.ts and worker-runtime-live.test.ts
+ * so the guard code is in one place; SNE-AC2i-live1/live2/live3 (signup-notice-live.test.ts)
  * test it directly.
  */
 import { MONITOR_SIGNUP_NOTICE_DAILY_CAP } from "@/config/monitor";
@@ -55,7 +55,7 @@ async function capSlotsUsed(): Promise<number> {
 }
 
 /**
- * SNE-AC2i: used in signup-notice-live.test.ts and engine-live.test.ts beforeAlls,
+ * SNE-AC2i: used in the signup-notice-live, engine-live and worker-runtime-live beforeAlls,
  * and directly tested by SNE-AC2i-live1/live2/live3. Throws with a deterministic message
  * when foreign signup or purge work is present, or when foreign stamps inside the 24 h
  * window leave the daily notice cap fewer free slots than `capHeadroomNeeded` (the most

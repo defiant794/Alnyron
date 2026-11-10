@@ -105,6 +105,7 @@ const IDLE_SUMMARY: RunSummary = {
   batchFull: false,
   subrequests: 0,
   rpcErrors: 0,
+  rpcError: null,
   durationMs: 0,
   purged: 0,
   signupNotices: 0,

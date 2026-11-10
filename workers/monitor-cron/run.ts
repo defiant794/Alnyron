@@ -17,14 +17,26 @@ import { summarizeChange } from "@/lib/monitor/change-summary";
 import { fetchMonitorPage, type PageFetchResult } from "@/lib/monitor/page-fetch";
 import { hashPageText, isCurrentPageHash, pageSnapshot, pageText } from "@/lib/monitor/page-text";
 import { buildSignupNoticeEmail } from "@/lib/monitor/signup-notice-email";
-import type { ClaimedMonitor, EngineRpc, PendingEmail, PendingSignup, RecordInput, RecordResult } from "./rpc";
+import {
+  EngineRpcError,
+  type ClaimedMonitor,
+  type EngineOp,
+  type EngineRpc,
+  type PendingEmail,
+  type PendingSignup,
+  type RecordInput,
+  type RecordResult,
+} from "./rpc";
 
 /** Sends one email; `idempotencyKey` makes a retry of the same email a no-op at the provider. */
 export type Mailer = (message: EmailMessage, idempotencyKey: string) => Promise<SendResult>;
 
 export type RunConfig = { batchSize: number; subrequestLimit: number; siteUrl: string; mailFrom: string };
 
-/** Counters of one run: the run's only log line. Holds no URL, address, page text or key. */
+/**
+ * Counters of one run and its first failed engine call: the run's only log line. Holds no URL,
+ * address, page text or key, and no error message (it may echo a call's arguments).
+ */
 export type RunSummary = {
   claimed: number;
   /** Claimed monitors whose owner had strikes before the claim (`prior_strikes > 0`). */
@@ -63,6 +75,15 @@ export type RunSummary = {
   batchFull: boolean;
   subrequests: number;
   rpcErrors: number;
+  /**
+   * The run's first failed engine call, null when none failed: the {@link EngineRpc} method
+   * (`op`), the error code ({@link EngineRpcError}'s; `unknown` for any other error) and the
+   * HTTP status of the call's answer (null when it got none, a network failure or an abort after
+   * {@link MONITOR_RPC_TIMEOUT_MS}, and for any error other than an {@link EngineRpcError}).
+   * Later failed calls never replace it. A failure outside an engine call (a page fetch that
+   * threw) counts in `rpcErrors` but is not reported here.
+   */
+  rpcError: { op: EngineOp; code: string; status: number | null } | null;
   durationMs: number;
 };
 
@@ -168,8 +189,10 @@ const SWEEP_WALL_MS = MONITOR_RPC_TIMEOUT_MS + EMAIL_WALL_MS;
  * or the second sweep skipped for time leaves its events pending, like one
  * skipped for subrequests, and counts as a budget stop; an error notification
  * is skipped for time only after a call ran past its timeout (it is then lost).
- * The run never throws: failed database calls are counted in `rpcErrors`. Logs
- * exactly one line, the {@link RunSummary} as JSON.
+ * The run never throws: failed database calls are counted in `rpcErrors`, and
+ * the first of them is reported in `rpcError` (its {@link EngineRpc} method,
+ * error code and HTTP status). Logs exactly one line, the {@link RunSummary} as
+ * JSON.
  */
 export async function runMonitorChecks(deps: {
   rpc: EngineRpc;
@@ -179,7 +202,7 @@ export async function runMonitorChecks(deps: {
   log?: (line: string) => void;
   now?: () => number;
 }): Promise<RunSummary> {
-  const { rpc, config } = deps;
+  const { config } = deps;
   const fetchPage = deps.fetchPage ?? ((url: string) => fetchMonitorPage(url));
   const now = deps.now ?? Date.now;
   const started = now();
@@ -204,6 +227,7 @@ export async function runMonitorChecks(deps: {
     batchFull: false,
     subrequests: 0,
     rpcErrors: 0,
+    rpcError: null,
     durationMs: 0,
   };
   const remaining = () => config.subrequestLimit - summary.subrequests;
@@ -211,6 +235,36 @@ export async function runMonitorChecks(deps: {
   const elapsed = () => now() - started;
   /** Whether work started now that takes at most `worstCaseMs` still ends by the wall limit. */
   const fitsWall = (worstCaseMs: number) => elapsed() + worstCaseMs <= MONITOR_RUN_WALL_LIMIT_MS;
+
+  /**
+   * Makes one engine call. When it is the run's first to fail, notes it in `summary.rpcError`;
+   * the error is rethrown either way, for the step that counts it in `rpcErrors`.
+   */
+  async function engineCall<T>(op: EngineOp, call: () => Promise<T>): Promise<T> {
+    try {
+      return await call();
+    } catch (error) {
+      if (summary.rpcError === null) {
+        summary.rpcError =
+          error instanceof EngineRpcError
+            ? { op, code: error.code, status: error.status }
+            : { op, code: "unknown", status: null };
+      }
+      throw error;
+    }
+  }
+
+  /** `deps.rpc` with every method called through {@link engineCall} under its own name. */
+  const rpc: EngineRpc = {
+    claim: (...args) => engineCall("claim", () => deps.rpc.claim(...args)),
+    snapshot: (...args) => engineCall("snapshot", () => deps.rpc.snapshot(...args)),
+    record: (...args) => engineCall("record", () => deps.rpc.record(...args)),
+    pendingEmails: (...args) => engineCall("pendingEmails", () => deps.rpc.pendingEmails(...args)),
+    markEmailed: (...args) => engineCall("markEmailed", () => deps.rpc.markEmailed(...args)),
+    pendingSignups: (...args) => engineCall("pendingSignups", () => deps.rpc.pendingSignups(...args)),
+    markSignupNotified: (...args) => engineCall("markSignupNotified", () => deps.rpc.markSignupNotified(...args)),
+    purgeUnconfirmed: (...args) => engineCall("purgeUnconfirmed", () => deps.rpc.purgeUnconfirmed(...args)),
+  };
 
   /** Sends through the mailer, counting the subrequest; a throwing mailer counts as a transient failure. */
   async function send(message: EmailMessage, idempotencyKey: string): Promise<SendResult> {

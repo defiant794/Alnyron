@@ -1,6 +1,8 @@
 /**
- * Unit tests: workers/monitor-cron/rpc.ts — every database call is aborted after 5 s
- * Journey: monitor-engine  ENG-AC7; monitor-signup-notice  SNE-AC4f
+ * Unit tests: workers/monitor-cron/rpc.ts — every database call is aborted after 5 s, and
+ * a failed call's EngineRpcError carries the answer's HTTP status
+ * Journey: monitor-engine  ENG-AC7; monitor-signup-notice  SNE-AC4f;
+ *          monitor-cron-runtime-fix  CRF-AC1–CRF-AC4
  *
  * `rpcFetch` (the engine client's supabase-js `global.fetch`) gives each request
  * the signal AbortSignal.timeout(MONITOR_RPC_TIMEOUT_MS = 5 000 ms), combined
@@ -8,10 +10,12 @@
  * the rest of the request on unchanged. Through createSupabaseEngineRpc, each
  * of the eight engine calls (claim, snapshot, record, pendingEmails, markEmailed,
  * pendingSignups, markSignupNotified, purgeUnconfirmed) whose request is never
- * answered until that timeout aborts it rejects with EngineRpcError("unknown"),
- * naming neither the URL, the key nor the abort reason; an answer in time comes
- * back as usual. The three signup-notice calls send their SQL argument names and
- * pass the RPC result through unchanged.
+ * answered until that timeout aborts it rejects with EngineRpcError("unknown")
+ * and status null ("no response"), naming neither the URL, the key nor the abort
+ * reason; an answer in time comes back as usual. An answered error keeps its HTTP
+ * status (401 without a PostgREST code, 400 with 22023, 200 for record's missing
+ * row). The three signup-notice calls send their SQL argument names and pass the
+ * RPC result through unchanged.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MONITOR_RPC_TIMEOUT_MS } from "@/config/monitor";
@@ -22,7 +26,7 @@ const SECRET_KEY = "sb_secret_engine-unit-test-key";
 
 /**
  * Stands in for AbortSignal.timeout: every call records the requested ms and gets the signal of
- * one controller, which the test aborts by hand in place of the timer firing.
+ * one controller, which a test can abort by hand in place of the timer firing.
  */
 function fakeTimeout() {
   const timer = new AbortController();
@@ -152,11 +156,13 @@ describe("createSupabaseEngineRpc — ENG-AC7: an aborted call is an EngineRpcEr
       const error = await outcome;
 
       expect(error).toBeInstanceOf(EngineRpcError);
-      const { name, code, message } = error as EngineRpcError;
-      expect({ name, code, message }).toEqual({
+      const rpcErr = error as EngineRpcError;
+      // CRF-AC3 (abort path): supabase-js status 0 → status null, message ends with "no response".
+      expect({ name: rpcErr.name, code: rpcErr.code, message: rpcErr.message, status: rpcErr.status }).toEqual({
         name: "EngineRpcError",
         code: "unknown",
-        message: "monitor engine rpc failed (unknown)",
+        message: "monitor engine rpc failed (unknown, no response)",
+        status: null,
       });
       for (const secret of [SUPABASE_URL, SECRET_KEY, "aborted", "example.com"]) {
         expect(String(error)).not.toContain(secret);
@@ -179,6 +185,92 @@ describe("createSupabaseEngineRpc — ENG-AC7: an aborted call is an EngineRpcEr
     expect(signals).toHaveLength(1);
     expect(signals[0]).toBe(timer.signal);
     expect(timeout.mock.calls).toEqual([[5_000]]);
+  });
+});
+
+// ── CRF-AC1/2/3/4: EngineRpcError.status from supabase-js response ────────────
+
+describe("EngineRpcError — CRF-AC1/2/3/4: status field captures the HTTP response status", () => {
+  /** Builds the engine client, runs `rpcFn`, and returns what it threw (null when it resolved). */
+  async function catchRpcError(rpcFn: (rpc: EngineRpc) => Promise<unknown>): Promise<unknown> {
+    const rpc = createSupabaseEngineRpc(SUPABASE_URL, SECRET_KEY);
+    try {
+      await rpcFn(rpc);
+      return null;
+    } catch (err) {
+      return err;
+    }
+  }
+
+  it("CRF-AC1: 401 response with no PostgREST code → code 'unknown', status 401, message 'monitor engine rpc failed (unknown, HTTP 401)'", async () => {
+    // Supabase gateway 401: no 'code' field in the body (as of 2026-11).
+    fakeTimeout();
+    vi.stubGlobal("fetch", async () =>
+      new Response(
+        JSON.stringify({ message: "Invalid API key", details: null, hint: null }),
+        { status: 401, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const err = await catchRpcError((rpc) => rpc.pendingEmails(2, 10));
+    expect(err).toBeInstanceOf(EngineRpcError);
+    const rpcErr = err as EngineRpcError;
+    expect(rpcErr.code).toBe("unknown");
+    expect(rpcErr.message).toBe("monitor engine rpc failed (unknown, HTTP 401)");
+    expect(rpcErr.status).toBe(401);
+  });
+
+  it("CRF-AC2: 400 response with PostgREST code 22023 → code '22023', status 400, message 'monitor engine rpc failed (22023, HTTP 400)'", async () => {
+    fakeTimeout();
+    vi.stubGlobal("fetch", async () =>
+      new Response(
+        JSON.stringify({ code: "22023", message: "invalid input", details: "p_limit < 1", hint: null }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const err = await catchRpcError((rpc) => rpc.pendingSignups(0, 10));
+    expect(err).toBeInstanceOf(EngineRpcError);
+    const rpcErr = err as EngineRpcError;
+    expect(rpcErr.code).toBe("22023");
+    expect(rpcErr.message).toBe("monitor engine rpc failed (22023, HTTP 400)");
+    expect(rpcErr.status).toBe(400);
+  });
+
+  it("CRF-AC3: fetch rejects (network failure, supabase-js status 0 as of 2026-11) → code 'unknown', status null, message 'monitor engine rpc failed (unknown, no response)'", async () => {
+    fakeTimeout();
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("fetch failed")));
+    const err = await catchRpcError((rpc) => rpc.pendingEmails(2, 10));
+    expect(err).toBeInstanceOf(EngineRpcError);
+    const rpcErr = err as EngineRpcError;
+    expect(rpcErr.code).toBe("unknown");
+    expect(rpcErr.message).toBe("monitor engine rpc failed (unknown, no response)");
+    expect(rpcErr.status).toBeNull();
+  });
+
+  it("CRF-AC4: record() empty-row result → EngineRpcError('no_row') with status equal to the HTTP status of the successful-but-empty response (200)", async () => {
+    // monitor_engine_record returns SETOF; 0 rows with status 200 triggers the no_row guard.
+    fakeTimeout();
+    vi.stubGlobal("fetch", async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    const err = await catchRpcError((rpc) =>
+      rpc.record({
+        monitorId: "00000000-0000-0000-0000-0000000000a1",
+        claimedUrl: "https://example.com/p",
+        outcome: "error",
+        expectedHash: null,
+        newHash: null,
+        snapshot: null,
+        summary: null,
+        errorThreshold: 3,
+        dailyCap: 10,
+        repay: false,
+      }),
+    );
+    expect(err).toBeInstanceOf(EngineRpcError);
+    const rpcErr = err as EngineRpcError;
+    expect(rpcErr.code).toBe("no_row");
+    expect(rpcErr.message).toBe("monitor engine rpc failed (no_row, HTTP 200)");
+    expect(rpcErr.status).toBe(200);
   });
 });
 
