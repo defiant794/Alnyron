@@ -13,6 +13,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Metadata } from "next";
+import type * as MonitorLocaleModule from "@/i18n/monitor-locale";
 
 const { mockRequireMonitor, mockGetMonitor } = vi.hoisted(() => ({
   mockRequireMonitor: vi.fn(),
@@ -42,6 +43,12 @@ vi.mock("@/components/monitor/MonitorFormScreen", () => ({
 vi.mock("@/config/env", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/config/env")>()),
   parseSiteEnv: () => ({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" }),
+}));
+
+// The page reads the visitor's Monitor language from a cookie; there is no request here: Danish.
+vi.mock("@/i18n/monitor-locale", async (importOriginal) => ({
+  ...(await importOriginal<typeof MonitorLocaleModule>()),
+  getMonitorLocale: vi.fn(async () => "da" as const),
 }));
 
 import { generateMetadata as generateEditMetadata } from "@/app/monitor/(panel)/monitors/[id]/edit/page";

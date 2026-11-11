@@ -4,9 +4,10 @@
  * Journey: monitor-chrome  MCH-AC4
  * Journey: monitor-ship-routing  SHIP-AC8f
  *
- * Verifies: contains ALNYRON lockup linked to the absolute main-site URL
- * (parseSiteEnv().NEXT_PUBLIC_SITE_URL, evaluated at render time);
- * no footer landmark (contentinfo) rendered by the auth card.
+ * Verifies: contains ALNYRON lockup linked to the absolute main-site frontpage
+ * in the page's language (NEXT_PUBLIC_SITE_URL, evaluated at render time; `/en`
+ * in English); the language switcher slot above the card, before the main
+ * landmark; no footer landmark (contentinfo) rendered by the auth card.
  */
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
@@ -50,7 +51,7 @@ beforeEach(() => {
 describe("MCH-AC4: MonitorAuthFrame renders ALNYRON lockup → main-site URL with no footer", () => {
   it("MCH-AC4a: renders a link with accessible name 'Alnyron'", () => {
     render(
-      <MonitorAuthFrame>
+      <MonitorAuthFrame locale="da">
         <p>child</p>
       </MonitorAuthFrame>,
     );
@@ -61,7 +62,7 @@ describe("MCH-AC4: MonitorAuthFrame renders ALNYRON lockup → main-site URL wit
 
   it("MCH-AC4b: the ALNYRON link href is the absolute main-site URL ('http://localhost:3000')", () => {
     render(
-      <MonitorAuthFrame>
+      <MonitorAuthFrame locale="da">
         <p>child</p>
       </MonitorAuthFrame>,
     );
@@ -71,7 +72,7 @@ describe("MCH-AC4: MonitorAuthFrame renders ALNYRON lockup → main-site URL wit
 
   it("MCH-AC4c: no contentinfo landmark (auth card has no footer)", () => {
     render(
-      <MonitorAuthFrame>
+      <MonitorAuthFrame locale="da">
         <p>child</p>
       </MonitorAuthFrame>,
     );
@@ -80,10 +81,56 @@ describe("MCH-AC4: MonitorAuthFrame renders ALNYRON lockup → main-site URL wit
 
   it("MCH-AC4d: no 'Monitor' text rendered as a brand label", () => {
     render(
-      <MonitorAuthFrame>
+      <MonitorAuthFrame locale="da">
         <p>child</p>
       </MonitorAuthFrame>,
     );
     expect(screen.queryByText(/Monitor/)).toBeNull();
+  });
+});
+
+describe("monitor-i18n: MonitorAuthFrame follows the page's language", () => {
+  it("en: the ALNYRON link leads to the English frontpage (origin + /en)", () => {
+    render(
+      <MonitorAuthFrame locale="en">
+        <p>child</p>
+      </MonitorAuthFrame>,
+    );
+    expect(screen.getByRole("link", { name: "Alnyron" })).toHaveAttribute("href", "http://localhost:3000/en");
+  });
+
+  it("en: the English frontpage follows NEXT_PUBLIC_SITE_URL at render time (https://alnyron.dk)", () => {
+    mockParseSiteEnv.mockReturnValue({ NEXT_PUBLIC_SITE_URL: "https://alnyron.dk" });
+    render(
+      <MonitorAuthFrame locale="en">
+        <p>child</p>
+      </MonitorAuthFrame>,
+    );
+    expect(screen.getByRole("link", { name: "Alnyron" })).toHaveAttribute("href", "https://alnyron.dk/en");
+  });
+
+  it("renders the given localeSwitcher above the card, before the main landmark", () => {
+    render(
+      <MonitorAuthFrame locale="en" localeSwitcher={<nav aria-label="Language">switcher</nav>}>
+        <p>child</p>
+      </MonitorAuthFrame>,
+    );
+    const switcher = screen.getByRole("navigation", { name: "Language" });
+    const main = screen.getByRole("main");
+    expect(main).not.toContainElement(switcher);
+    expect(switcher.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("renders no switcher slot when none is given (the error and 404 pages)", () => {
+    const { container } = render(
+      <MonitorAuthFrame locale="en">
+        <p>child</p>
+      </MonitorAuthFrame>,
+    );
+    expect(screen.queryByRole("navigation")).toBeNull();
+    // The frame's root holds only the main landmark.
+    expect(container.firstElementChild?.children).toHaveLength(1);
   });
 });

@@ -3,8 +3,11 @@
 //
 // Tests that:
 //   - A monitor page row (system_key='monitor', show_in_nav=true) produces a NavItem
-//   - The href is exactly "/monitor" on DA and EN (locale-agnostic, NOT getPathname)
-//   - On EN the monitor item carries hrefLang "da" (the area is Danish only); on DA none
+//   - The href is the Monitor host's root by its absolute URL ("http://monitor.localhost:3000/"
+//     from NEXT_PUBLIC_SITE_URL=http://localhost:3000), the same on DA and EN (no locale
+//     prefix, NOT getPathname)
+//   - The monitor item names no link language on DA or EN: Monitor is bilingual and
+//     opens in the visitor's own choice, so its language is not known from the page
 //   - The monitor item sits after categories (nav_order < 1000) in the final list
 //   - The monitor item key is "system-monitor"
 //
@@ -106,7 +109,7 @@ describe("AC-MONNAV-2: getNavItems — monitor page row produces a NavItem", () 
   });
 });
 
-// ── AC-MONNAV-6: href is raw "/monitor" on DA and EN (locale-agnostic) ─────────
+// ── AC-MONNAV-6: href is the absolute Monitor host root on DA and EN ──────────
 
 describe("AC-MONNAV-6: getNavItems — monitor href is absolute Monitor subdomain URL (locale-agnostic)", () => {
   it("AC-MONNAV-6c: DA locale — monitor item href is 'http://monitor.localhost:3000/'", async () => {
@@ -126,22 +129,14 @@ describe("AC-MONNAV-6: getNavItems — monitor href is absolute Monitor subdomai
   });
 });
 
-// ── AC-MONNAV-6e/f: the Danish-only Monitor area is marked hreflang="da" on EN ──
+// ── AC-MONNAV-6e/f: the bilingual Monitor area's link names no language ──────
 
-describe("AC-MONNAV-6e/f: getNavItems — monitor hrefLang names the area's language when it differs from the page", () => {
-  it("AC-MONNAV-6e: EN locale — monitor item has hrefLang 'da' (the area is Danish only); system pages have none", async () => {
+describe("AC-MONNAV-6e/f: getNavItems — the Monitor link names no language (it opens in the visitor's choice)", () => {
+  it.each(["en", "da"] as const)("AC-MONNAV-6e/f: %s locale — no item, Monitor included, has hrefLang", async (locale) => {
     mockPagesQuery.mockResolvedValue({ data: [homeRow, contactRow, monitorRow], error: null });
-    const items = await getNavItems("en");
-    expect(items.find((item) => item.key === "system-monitor")?.hrefLang).toBe("da");
-    expect(items.find((item) => item.key === "system-home")?.hrefLang).toBeUndefined();
-    expect(items.find((item) => item.key === "system-contact")?.hrefLang).toBeUndefined();
-  });
-
-  it("AC-MONNAV-6f: DA locale — no item carries hrefLang (the area speaks the page's language)", async () => {
-    mockPagesQuery.mockResolvedValue({ data: [homeRow, contactRow, monitorRow], error: null });
-    const items = await getNavItems("da");
+    const items = await getNavItems(locale);
     expect(items.find((item) => item.key === "system-monitor")).toBeDefined();
-    expect(items.every((item) => item.hrefLang === undefined)).toBe(true);
+    for (const item of items) expect(item).not.toHaveProperty("hrefLang");
   });
 });
 

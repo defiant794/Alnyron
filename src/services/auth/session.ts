@@ -1,4 +1,6 @@
+import type { Locale } from "next-intl";
 import { cookies } from "next/headers";
+import { AUTH_LOCALE } from "@/config/auth-areas";
 import { createServerClient } from "@/lib/supabase/server";
 import {
   resetPasswordSchema,
@@ -7,9 +9,9 @@ import {
   type SignInInput,
   type SignUpInput,
 } from "@/lib/validation/auth";
-import { authT, toFieldErrors, type FieldErrors } from "@/services/auth/form-feedback";
+import { authTranslator, toFieldErrors, type FieldErrors } from "@/services/auth/form-feedback";
 
-/** State of a sign-in form (admin and MyLife `signIn`). */
+/** State of a sign-in form (admin, MyLife and Monitor `signIn`). */
 export type SignInState = {
   /** Form-level message (credentials, rate limit, outage). */
   error?: string;
@@ -18,7 +20,7 @@ export type SignInState = {
   email?: string;
 };
 
-/** State of a forgot-password form (admin and MyLife `requestPasswordReset`). */
+/** State of a forgot-password form (admin, MyLife and Monitor `requestPasswordReset`). */
 export type ResetPasswordState = {
   /** True once the request was handed to Supabase, whether or not the address has an account. */
   sent?: boolean;
@@ -61,15 +63,19 @@ function signUpFieldError(email: string, fieldErrors: FieldErrors<SignUpInput>):
  * Every credential failure (wrong password, unknown or unconfirmed account)
  * gets the same message, so the form never reveals whether an account
  * exists. Only rate limiting and an unreachable auth service, which say
- * nothing about the account, get their own message.
+ * nothing about the account, get their own message. Messages are in
+ * `locale`: Danish unless Monitor passes its visitor's language.
  *
  * @returns The state to show, or `null` once signed in.
  */
-export async function signInWithPassword(formData: FormData): Promise<SignInState | null> {
+export async function signInWithPassword(
+  formData: FormData,
+  locale: Locale = AUTH_LOCALE,
+): Promise<SignInState | null> {
   const emailField = formData.get("email");
   const email = typeof emailField === "string" ? emailField : "";
   const parsed = signInSchema.safeParse({ email, password: formData.get("password") });
-  if (!parsed.success) return { email, fieldErrors: toFieldErrors(parsed.error) };
+  if (!parsed.success) return { email, fieldErrors: toFieldErrors(parsed.error, locale) };
 
   const supabase = await createServerClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
@@ -82,7 +88,7 @@ export async function signInWithPassword(formData: FormData): Promise<SignInStat
       : status !== undefined && (status === 0 || status >= 500)
         ? "login.unavailable"
         : "login.invalidCredentials";
-  return { email: parsed.data.email, error: authT(message) };
+  return { email: parsed.data.email, error: authTranslator(locale)(message) };
 }
 
 /**
@@ -101,12 +107,13 @@ export async function signInWithPassword(formData: FormData): Promise<SignInStat
  * `weak_password` and `email_address_invalid`, which describe the input),
  * rate limiting and an unavailable or closed signup get their own state.
  * Supabase's error text is never passed on; refusals are logged by code.
+ * Field messages are in `locale` (the Monitor visitor's language).
  */
-export async function signUpWithPassword(formData: FormData): Promise<SignUpResult> {
+export async function signUpWithPassword(formData: FormData, locale: Locale = AUTH_LOCALE): Promise<SignUpResult> {
   const emailField = formData.get("email");
   const email = typeof emailField === "string" ? emailField : "";
   const parsed = signUpSchema.safeParse({ email, password: formData.get("password") });
-  if (!parsed.success) return signUpFieldError(email, toFieldErrors(parsed.error));
+  if (!parsed.success) return signUpFieldError(email, toFieldErrors(parsed.error, locale));
 
   const supabase = await createServerClient();
   const { error } = await supabase.auth.signUp({
@@ -125,10 +132,10 @@ export async function signUpWithPassword(formData: FormData): Promise<SignUpResu
     return { type: "unavailable", email: typed };
   }
   if (code === "weak_password") {
-    return signUpFieldError(typed, { password: authT("setPassword.weakPassword") });
+    return signUpFieldError(typed, { password: authTranslator(locale)("setPassword.weakPassword") });
   }
   if (code === "email_address_invalid") {
-    return signUpFieldError(typed, { email: authT("validation.emailInvalid") });
+    return signUpFieldError(typed, { email: authTranslator(locale)("validation.emailInvalid") });
   }
   console.error(`signUp refused: ${code ?? status ?? "unknown"}`);
   return { type: "confirmation", email: typed };
@@ -139,7 +146,8 @@ export async function signUpWithPassword(formData: FormData): Promise<SignUpResu
  * and Monitor `requestPasswordReset` actions. The answer is the same whether or not
  * the address has an account (no account enumeration); it echoes the
  * submitted address so the form keeps it. Supabase failures go to the server
- * log only.
+ * log only. A field message is in `locale` (Danish unless Monitor passes its
+ * visitor's language).
  *
  * Without `redirectTo` the DA templates build the link from the project's
  * Site URL, `{{ .SiteURL }}/auth/confirm?token_hash=...&next=/admin/set-password`,
@@ -154,11 +162,12 @@ export async function signUpWithPassword(formData: FormData): Promise<SignUpResu
 export async function sendPasswordResetLink(
   formData: FormData,
   redirectTo: string | null = null,
+  locale: Locale = AUTH_LOCALE,
 ): Promise<ResetPasswordState> {
   const emailField = formData.get("email");
   const email = typeof emailField === "string" ? emailField : "";
   const parsed = resetPasswordSchema.safeParse({ email });
-  if (!parsed.success) return { email, fieldErrors: toFieldErrors(parsed.error) };
+  if (!parsed.success) return { email, fieldErrors: toFieldErrors(parsed.error, locale) };
 
   const supabase = await createServerClient();
   const { error } = redirectTo

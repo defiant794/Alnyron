@@ -32,7 +32,6 @@ export default async function SiteHeader({ locale }: SiteHeaderProps) {
                   <NavLink
                     href={item.href}
                     lang={item.lang}
-                    hrefLang={item.hrefLang}
                     className="flex min-h-11 items-center text-body text-muted transition-colors hover:text-fg active:text-fg"
                   >
                     {item.label}

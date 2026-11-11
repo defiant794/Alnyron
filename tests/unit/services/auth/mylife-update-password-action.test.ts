@@ -4,8 +4,8 @@
  * Journey: mylife-login  ML-AC12
  *
  * The action gates with requireMyLife() and on success redirects to /mylife.
- * The expected Danish copy comes from the message keys (`authT`), so the
- * tests follow the copy instead of repeating it.
+ * The expected Danish copy comes from the message keys
+ * (`authTranslator("da")`), so the tests follow the copy instead of repeating it.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,7 +25,9 @@ vi.mock("next/navigation", () => ({ redirect: mockRedirect }));
 
 import { updatePassword } from "@/app/mylife/(panel)/set-password/actions";
 import { MIN_PASSWORD_LENGTH } from "@/lib/validation/auth";
-import { authT } from "@/services/auth/form-feedback";
+import { authTranslator } from "@/services/auth/form-feedback";
+
+const authT = authTranslator("da");
 
 const VALID_PASSWORD = "NewPassword456!";
 

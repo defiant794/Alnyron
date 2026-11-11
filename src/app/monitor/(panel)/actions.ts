@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { MONITOR_DASHBOARD_PATH, MONITOR_HOME_PATH, monitorDetailPath } from "@/config/monitor";
+import { getMonitorLocale } from "@/i18n/monitor-locale";
 import { intervalToMinutes, monitorIdSchema, monitorSchema, type MonitorInput } from "@/lib/validation/monitor";
 import { requireMonitor } from "@/services/auth/require-role";
-import { monitorT, toMonitorFieldErrors } from "@/services/monitor/form-feedback";
+import { monitorTranslator, toMonitorFieldErrors } from "@/services/monitor/form-feedback";
 import {
   createMonitor,
   deleteMonitor,
@@ -27,7 +28,7 @@ export type MonitorFormState = {
   /** The first invalid field (`field_error`). */
   field?: keyof MonitorFormValues;
   fieldErrors?: { [Field in keyof MonitorFormValues]?: string };
-  /** Form-level Danish message (cap reached). */
+  /** Form-level message (cap reached), in the visitor's Monitor language. */
   error?: string;
   values?: MonitorFormValues;
 };
@@ -43,11 +44,11 @@ function formValues(formData: FormData): MonitorFormValues {
   return { url: text("url"), label: text("label"), intervalValue: text("intervalValue"), intervalUnit: text("intervalUnit") };
 }
 
-/** Validate the form; the columns to write, or the state to show. */
-function parseForm(values: MonitorFormValues): MonitorWrite | MonitorFormState {
+/** Validate the form; the columns to write, or the state to show (its messages in the visitor's Monitor language). */
+async function parseForm(values: MonitorFormValues): Promise<MonitorWrite | MonitorFormState> {
   const parsed = monitorSchema.safeParse(values);
   if (!parsed.success) {
-    const fieldErrors = toMonitorFieldErrors(parsed.error);
+    const fieldErrors = toMonitorFieldErrors(parsed.error, await getMonitorLocale());
     const field = (["url", "label", "intervalValue", "intervalUnit"] as const).find((name) => fieldErrors[name]);
     return { type: "field_error", field, fieldErrors, values };
   }
@@ -75,11 +76,14 @@ export async function createMonitorAction(
   await requireMonitor();
 
   const values = formValues(formData);
-  const write = parseForm(values);
+  const write = await parseForm(values);
   if (!isWrite(write)) return write;
 
   const created = await createMonitor(write);
-  if ("error" in created) return { type: "limit_reached", error: monitorT("form.limitReached"), values };
+  if ("error" in created) {
+    const error = monitorTranslator(await getMonitorLocale())("form.limitReached");
+    return { type: "limit_reached", error, values };
+  }
 
   refreshMonitorPages();
   redirect(monitorDetailPath(created.id));
@@ -101,7 +105,7 @@ export async function updateMonitorAction(
   if (monitorId === undefined || !monitorIdSchema.safeParse(monitorId).success) notFound();
 
   const values = formValues(formData);
-  const write = parseForm(values);
+  const write = await parseForm(values);
   if (!isWrite(write)) return { ...write, monitorId };
 
   if (!(await updateMonitor(monitorId, write))) notFound();

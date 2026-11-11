@@ -57,7 +57,7 @@ describe("MonitorAuthFrame — SHIP-AC8f: ALNYRON lockup href is absolute main-s
   it("SHIP-AC8f-1: href is 'http://localhost:3000' when NEXT_PUBLIC_SITE_URL=http://localhost:3000", () => {
     mockParseSiteEnv.mockReturnValue({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" });
     render(
-      <MonitorAuthFrame>
+      <MonitorAuthFrame locale="da">
         <p>child</p>
       </MonitorAuthFrame>,
     );
@@ -68,7 +68,7 @@ describe("MonitorAuthFrame — SHIP-AC8f: ALNYRON lockup href is absolute main-s
   it("SHIP-AC8f-2: href is 'https://alnyron.dk' when NEXT_PUBLIC_SITE_URL=https://alnyron.dk", () => {
     mockParseSiteEnv.mockReturnValue({ NEXT_PUBLIC_SITE_URL: "https://alnyron.dk" });
     render(
-      <MonitorAuthFrame>
+      <MonitorAuthFrame locale="da">
         <p>child</p>
       </MonitorAuthFrame>,
     );
@@ -79,11 +79,22 @@ describe("MonitorAuthFrame — SHIP-AC8f: ALNYRON lockup href is absolute main-s
   it("SHIP-AC8f-3: href is NOT the static '/' constant", () => {
     mockParseSiteEnv.mockReturnValue({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" });
     render(
-      <MonitorAuthFrame>
+      <MonitorAuthFrame locale="da">
         <p>child</p>
       </MonitorAuthFrame>,
     );
     const link = screen.getByRole("link", { name: /alnyron/i });
     expect(link).not.toHaveAttribute("href", "/");
+  });
+
+  it("SHIP-AC8f-4: in English the href is the English frontpage ('https://alnyron.dk/en'), still absolute", () => {
+    mockParseSiteEnv.mockReturnValue({ NEXT_PUBLIC_SITE_URL: "https://alnyron.dk" });
+    render(
+      <MonitorAuthFrame locale="en">
+        <p>child</p>
+      </MonitorAuthFrame>,
+    );
+    const link = screen.getByRole("link", { name: /alnyron/i });
+    expect(link).toHaveAttribute("href", "https://alnyron.dk/en");
   });
 });

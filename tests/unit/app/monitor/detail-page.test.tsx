@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { notFound } from "next/navigation";
+import type * as NextNavigation from "next/navigation";
+import type * as MonitorLocaleModule from "@/i18n/monitor-locale";
 
 const { mockRequireMonitor, mockGetMonitor, mockListMonitorEvents } = vi.hoisted(() => ({
   mockRequireMonitor: vi.fn(),
@@ -19,7 +21,9 @@ vi.mock("next-intl/server", async () => {
   const { nextIntlServerMock } = await import("../../../helpers/next-intl-server");
   return nextIntlServerMock();
 });
-vi.mock("next/navigation", () => ({
+// Partial: the locale-aware frontpage link builds on next-intl's navigation, which needs the real module.
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof NextNavigation>()),
   redirect: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
   }),
@@ -51,6 +55,12 @@ vi.mock("@/components/monitor/MonitorMainNav", () => ({
 // current route, which a page test has no context for; render its contents.
 vi.mock("@/components/site/SiteMenu", () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+// The page reads the visitor's Monitor language from a cookie; there is no request here: Danish.
+vi.mock("@/i18n/monitor-locale", async (importOriginal) => ({
+  ...(await importOriginal<typeof MonitorLocaleModule>()),
+  getMonitorLocale: vi.fn(async () => "da" as const),
 }));
 
 import MonitorDetailPage, { generateMetadata as generateDetailMetadata } from "@/app/monitor/(panel)/monitors/[id]/page";

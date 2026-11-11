@@ -2,8 +2,8 @@
  * Unit tests: MyLife auth Server Actions signIn, requestPasswordReset, signOut.
  * Journey: mylife-login  ML-AC2, ML-AC3, ML-AC4, ML-AC10, ML-AC16, ML-AC22, ML-AC25
  *
- * The expected Danish copy comes from the message keys (`authT`), the same
- * no-enumeration mapping the admin actions use.
+ * The expected Danish copy comes from the message keys (`authTranslator("da")`),
+ * the same no-enumeration mapping the admin actions use.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,7 +28,9 @@ vi.mock("next/headers", () => ({
 }));
 
 import { requestPasswordReset, signIn, signOut } from "@/app/mylife/(auth)/actions";
-import { authT } from "@/services/auth/form-feedback";
+import { authTranslator } from "@/services/auth/form-feedback";
+
+const authT = authTranslator("da");
 
 function form(fields: Record<string, string>): FormData {
   const fd = new FormData();

@@ -17,6 +17,7 @@ const {
   mockRedirect,
   mockNotFound,
   mockRevalidatePath,
+  mockGetMonitorLocale,
 } = vi.hoisted(() => ({
   mockRequireMonitor: vi.fn(),
   mockCreateMonitor: vi.fn(),
@@ -30,6 +31,7 @@ const {
     throw new Error("NEXT_NOT_FOUND");
   }),
   mockRevalidatePath: vi.fn(),
+  mockGetMonitorLocale: vi.fn(),
 }));
 
 vi.mock("@/services/auth/require-role", () => ({ requireMonitor: mockRequireMonitor }));
@@ -41,6 +43,8 @@ vi.mock("@/services/monitor/monitors", () => ({
 }));
 vi.mock("next/navigation", () => ({ redirect: mockRedirect, notFound: mockNotFound }));
 vi.mock("next/cache", () => ({ revalidatePath: mockRevalidatePath }));
+// The visitor's Monitor language (a cookie; there is no request here).
+vi.mock("@/i18n/monitor-locale", () => ({ getMonitorLocale: mockGetMonitorLocale }));
 
 import {
   createMonitorAction,
@@ -49,6 +53,7 @@ import {
   pauseMonitorAction,
   resumeMonitorAction,
 } from "@/app/monitor/(panel)/actions";
+import { loadMessages } from "@/i18n/messages";
 
 function form(fields: Record<string, string>): FormData {
   const fd = new FormData();
@@ -62,6 +67,7 @@ const SESSION = { userId: "00000000-0000-0000-0000-000000000099", email: "mon@te
 beforeEach(() => {
   vi.clearAllMocks();
   mockRequireMonitor.mockResolvedValue(SESSION);
+  mockGetMonitorLocale.mockResolvedValue("da");
 });
 
 // ── createMonitorAction — MON-AC35a user_id from session ─────────────────────
@@ -121,6 +127,40 @@ describe("createMonitorAction — MON-AC27/MON-AC32/MON-AC35", () => {
         form({ url: "https://example.com/", intervalValue: "1", intervalUnit: "days" }),
       ),
     ).rejects.toThrow(/NEXT_REDIRECT.*\/monitor\/monitors\//);
+  });
+});
+
+// ── Form messages follow the visitor's Monitor language (monitor-i18n) ──────
+
+describe("create/update monitor — messages in the visitor's Monitor language", () => {
+  const { Monitor: daMonitor } = loadMessages("da");
+  const { Monitor: enMonitor } = loadMessages("en");
+
+  it("AC-I18N-MON-act-a: a Danish visitor gets the Danish field error", async () => {
+    const result = await createMonitorAction({}, form({ url: "http://localhost/", intervalValue: "1", intervalUnit: "days" }));
+    expect(result.fieldErrors?.url).toBe(daMonitor.form.errors.urlBlockedHost);
+  });
+
+  it("AC-I18N-MON-act-b: an English visitor gets the English field error (edit form too)", async () => {
+    mockGetMonitorLocale.mockResolvedValue("en");
+    const result = await updateMonitorAction(
+      { monitorId: VALID_MONITOR_ID },
+      form({ url: "http://localhost/", intervalValue: "1", intervalUnit: "days" }),
+    );
+    // loadMessages("en") falls back to Danish: prove the expected copy really is English.
+    expect(enMonitor.form.errors.urlBlockedHost).not.toBe(daMonitor.form.errors.urlBlockedHost);
+    expect(result.fieldErrors?.url).toBe(enMonitor.form.errors.urlBlockedHost);
+  });
+
+  it("AC-I18N-MON-act-c: an English visitor at the cap gets the English cap message", async () => {
+    mockGetMonitorLocale.mockResolvedValue("en");
+    mockCreateMonitor.mockResolvedValue({ error: "limit_reached" });
+    const result = await createMonitorAction(
+      {},
+      form({ url: "https://example.com/", intervalValue: "1", intervalUnit: "days" }),
+    );
+    expect(enMonitor.form.limitReached).not.toBe(daMonitor.form.limitReached);
+    expect(result).toMatchObject({ type: "limit_reached", error: enMonitor.form.limitReached });
   });
 });
 

@@ -11,9 +11,10 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSendPasswordResetLink, mockHeaders } = vi.hoisted(() => ({
+const { mockSendPasswordResetLink, mockHeaders, mockGetMonitorLocale } = vi.hoisted(() => ({
   mockSendPasswordResetLink: vi.fn(),
   mockHeaders: vi.fn(),
+  mockGetMonitorLocale: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -29,6 +30,8 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("next/headers", () => ({
   headers: mockHeaders,
 }));
+// The visitor's Monitor language (a cookie; there is no request here).
+vi.mock("@/i18n/monitor-locale", () => ({ getMonitorLocale: mockGetMonitorLocale }));
 import { requestPasswordReset } from "@/app/monitor/(auth)/actions";
 
 function form(email: string): FormData {
@@ -44,6 +47,7 @@ function fakeHeaders(host: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockSendPasswordResetLink.mockResolvedValue(null);
+  mockGetMonitorLocale.mockResolvedValue("da");
 });
 
 // ── SHIP-AC5a: monitor.localhost:3000 → redirectTo = http://monitor.localhost:3000 ─
@@ -58,6 +62,7 @@ describe("requestPasswordReset — SHIP-AC5a: monitor.localhost:3000 redirectTo"
     expect(mockSendPasswordResetLink).toHaveBeenCalledWith(
       expect.any(FormData),
       "http://monitor.localhost:3000",
+      "da",
     );
   });
 });
@@ -74,6 +79,7 @@ describe("requestPasswordReset — SHIP-AC5b: monitor.alnyron.dk redirectTo", ()
     expect(mockSendPasswordResetLink).toHaveBeenCalledWith(
       expect.any(FormData),
       "https://monitor.alnyron.dk",
+      "da",
     );
   });
 });
@@ -87,6 +93,17 @@ describe("requestPasswordReset — SHIP-AC5c: main host (localhost:3000) → red
 
   it("SHIP-AC5c-1: sendPasswordResetLink called with redirectTo=null", async () => {
     await requestPasswordReset(null, form("user@example.dk"));
-    expect(mockSendPasswordResetLink).toHaveBeenCalledWith(expect.any(FormData), null);
+    expect(mockSendPasswordResetLink).toHaveBeenCalledWith(expect.any(FormData), null, "da");
+  });
+});
+
+// ── monitor-i18n: the form's messages follow the visitor's Monitor language ──
+
+describe("requestPasswordReset — the visitor's Monitor language", () => {
+  it("AC-I18N-MON-act-d: an English visitor's request is answered in English", async () => {
+    mockHeaders.mockResolvedValue(fakeHeaders("monitor.alnyron.dk"));
+    mockGetMonitorLocale.mockResolvedValue("en");
+    await requestPasswordReset(null, form("user@example.dk"));
+    expect(mockSendPasswordResetLink).toHaveBeenCalledWith(expect.any(FormData), "https://monitor.alnyron.dk", "en");
   });
 });

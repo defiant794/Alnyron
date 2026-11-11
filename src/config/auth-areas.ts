@@ -33,7 +33,11 @@ export const AUTH_AREAS = ["admin", "mylife", "monitor"] as const;
 
 export type AuthArea = (typeof AUTH_AREAS)[number];
 
-/** Every area, and the auth copy they share (`Auth` in `messages/da.json`), is Danish only. */
+/**
+ * The admin and MyLife areas are Danish only, as is the auth copy they share
+ * (`Auth` in `messages/da.json`). Monitor starts in Danish and lets the
+ * visitor switch to English (`getMonitorLocale`, a cookie).
+ */
 export const AUTH_LOCALE: Locale = "da";
 
 /** Value of the `error` query param a login page explains: a dead invite or reset link (set by `/auth/confirm`). */

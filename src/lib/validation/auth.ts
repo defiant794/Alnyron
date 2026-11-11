@@ -2,9 +2,10 @@ import type { Messages } from "next-intl";
 import { z } from "zod";
 
 /**
- * Key of a validation message in `messages/da.json` (`Auth.validation`).
+ * Key of a validation message in `messages/*.json` (`Auth.validation`).
  * Every issue these schemas raise carries such a key as its message, so the
- * caller shows Danish copy from the message file instead of zod's English.
+ * caller shows copy from the message files (in the area's language) instead
+ * of zod's English.
  */
 export type AuthValidationKey = keyof Messages["Auth"]["validation"];
 

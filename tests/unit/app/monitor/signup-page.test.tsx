@@ -10,6 +10,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
+import type * as NextNavigation from "next/navigation";
+import type * as MonitorLocaleModule from "@/i18n/monitor-locale";
 
 const { mockSignUp, mockParseSiteEnv } = vi.hoisted(() => ({
   mockSignUp: vi.fn(),
@@ -20,7 +22,10 @@ vi.mock("next-intl/server", async () => {
   const { nextIntlServerMock } = await import("../../../helpers/next-intl-server");
   return nextIntlServerMock();
 });
-vi.mock("next/navigation", () => ({
+// Partial: the page's privacy link is built with next-intl's `getPathname`, whose
+// navigation module reads the rest of `next/navigation` when it loads.
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof NextNavigation>()),
   redirect: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
   }),
@@ -29,6 +34,21 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/monitor/(auth)/actions", () => ({ signUp: mockSignUp }));
 vi.mock("@/config/env", () => ({
   parseSiteEnv: mockParseSiteEnv,
+}));
+// The page reads the visitor's Monitor language from a cookie; there is no request here: Danish.
+vi.mock("@/i18n/monitor-locale", async (importOriginal) => ({
+  ...(await importOriginal<typeof MonitorLocaleModule>()),
+  getMonitorLocale: vi.fn(async () => "da" as const),
+}));
+// The card frame (brand, layout) has its own tests; here it renders the switcher it is given, then
+// the page's content, in the frame's own order.
+vi.mock("@/components/monitor/MonitorAuthFrame", () => ({
+  default: ({ localeSwitcher, children }: { localeSwitcher?: React.ReactNode; children: React.ReactNode }) => (
+    <>
+      {localeSwitcher}
+      {children}
+    </>
+  ),
 }));
 
 

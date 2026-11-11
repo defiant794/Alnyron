@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { MONITOR_DASHBOARD_PATH, MONITOR_LOGIN_PATH, monitorOrigin } from "@/config/monitor";
+import { getMonitorLocale } from "@/i18n/monitor-locale";
 import { safeNext } from "@/lib/safe-next";
 import { requireMonitor } from "@/services/auth/require-role";
 import {
@@ -21,12 +22,13 @@ import { setPassword, type SetPasswordState } from "@/services/auth/set-password
  * path (open-redirect guarded, Monitor area only) or the dashboard, whose
  * gate checks the role (`requireMonitor()`). An account whose email is not
  * confirmed yet cannot sign in (Supabase refuses it like a wrong password).
+ * Every message is in the visitor's Monitor language, as are those below.
  */
 export async function signIn(
   _previous: SignInState | null,
   formData: FormData,
 ): Promise<SignInState> {
-  const failure = await signInWithPassword(formData);
+  const failure = await signInWithPassword(formData, await getMonitorLocale());
   if (failure) return failure;
 
   redirect(safeNext(formData.get("next"), "monitor") ?? MONITOR_DASHBOARD_PATH);
@@ -38,7 +40,7 @@ export async function signIn(
  * URL link, which `/auth/confirm` forwards to the Monitor host).
  */
 export async function signUp(_previous: SignUpResult | null, formData: FormData): Promise<SignUpResult> {
-  return signUpWithPassword(formData);
+  return signUpWithPassword(formData, await getMonitorLocale());
 }
 
 /**
@@ -61,7 +63,7 @@ export async function requestPasswordReset(
   _previous: ResetPasswordState | null,
   formData: FormData,
 ): Promise<ResetPasswordState> {
-  return sendPasswordResetLink(formData, monitorOrigin((await headers()).get("host")));
+  return sendPasswordResetLink(formData, monitorOrigin((await headers()).get("host")), await getMonitorLocale());
 }
 
 /**
@@ -75,7 +77,7 @@ export async function updatePassword(
 ): Promise<SetPasswordState> {
   await requireMonitor();
 
-  const failure = await setPassword(formData);
+  const failure = await setPassword(formData, await getMonitorLocale());
   if (failure) return failure;
 
   redirect(MONITOR_DASHBOARD_PATH);

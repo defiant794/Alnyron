@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import MonitorAuthFrame from "@/components/monitor/MonitorAuthFrame";
@@ -13,16 +13,18 @@ type MonitorErrorProps = {
 
 /**
  * Error boundary for every Monitor route (500: our fault, offer a retry),
- * in the Monitor card frame. The retry re-requests the server components,
- * then re-renders the segment.
+ * in the Monitor card frame, in the visitor's Monitor language (the root
+ * layout's provider). The retry re-requests the server components, then
+ * re-renders the segment.
  */
 export default function MonitorError({ reset }: MonitorErrorProps) {
+  const locale = useLocale();
   const t = useTranslations("Auth.error");
   const router = useRouter();
   const [retrying, startRetry] = useTransition();
 
   return (
-    <MonitorAuthFrame>
+    <MonitorAuthFrame locale={locale}>
       <header className="flex flex-col gap-2 text-center">
         <h1 className="text-h2 font-semibold">{t("title")}</h1>
         <p className="text-muted">{t("body")}</p>

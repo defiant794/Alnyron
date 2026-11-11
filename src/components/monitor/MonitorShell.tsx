@@ -1,28 +1,41 @@
 import NextLink from "next/link";
-import { createTranslator } from "next-intl";
+import { createTranslator, type Locale } from "next-intl";
 import type { ReactNode } from "react";
 import { signOut } from "@/app/monitor/(auth)/actions";
 import MonitorBrand from "@/components/monitor/MonitorBrand";
+import MonitorLocaleSwitcher from "@/components/monitor/MonitorLocaleSwitcher";
 import MonitorMainNav from "@/components/monitor/MonitorMainNav";
 import SiteFooter from "@/components/site/SiteFooter";
 import SiteMenu from "@/components/site/SiteMenu";
 import SubmitButton from "@/components/ui/SubmitButton";
-import { AUTH_LOCALE } from "@/config/auth-areas";
 import { MONITOR_DASHBOARD_PATH, MONITOR_SETTINGS_PATH } from "@/config/monitor";
-import { siteOrigin } from "@/config/site-origin";
+import { siteHomeUrl, siteOrigin } from "@/config/site-origin";
 import { loadMessages } from "@/i18n/messages";
 import { cx } from "@/lib/cx";
 
 /** Panel destinations in the slim app bar. */
 export type MonitorSection = "dashboard" | "settings";
 
+/** Each section's start page. */
+const SECTION_PATHS = {
+  dashboard: MONITOR_DASHBOARD_PATH,
+  settings: MONITOR_SETTINGS_PATH,
+} as const satisfies Record<MonitorSection, string>;
+
 export type MonitorShellProps = {
   /** The signed-in account, shown beside "Log ud". */
   email: string;
   /** The section the page belongs to (its nav link is marked current). */
   section: MonitorSection;
-  /** Whether the page IS the section's start page (`aria-current="page"`) or a page below it (`"true"`). */
-  sectionPage?: boolean;
+  /** The page's UI language (`getMonitorLocale()`): the shell's copy, the lockup's frontpage, the site nav and footer, the switcher. */
+  locale: Locale;
+  /**
+   * The page's Monitor path (and query), where the language switcher
+   * returns; defaults to the section's start page. The section's link is
+   * `aria-current="page"` on that start page and `"true"` on a page below
+   * it (`monitorDetailPath(id)`).
+   */
+  currentPath?: string;
   children: ReactNode;
 };
 
@@ -34,50 +47,58 @@ const CURRENT =
  * Monitor panel frame (approved dashboard mock): a two-row header that
  * mirrors the rest of the site. Row 1 is the site-style top bar, as
  * `SiteHeader`: the site's ALNYRON lockup on the left, linked to the main
- * site's frontpage (`siteOrigin`, from `NEXT_PUBLIC_SITE_URL`), and the main
- * site's own navigation on the right (`MonitorMainNav`, the admin-controlled
- * nav as absolute links to the main site). Below 768px that navigation
- * collapses behind a "Menu" button (`SiteMenu`, DESIGN.md Nav); from 768px
- * up it sits inline. The top bar is the menu's positioned container, so the
- * open menu spans the bar and drops down right under it, over the app bar:
- * its links follow the button on screen as in the focus order (WCAG 2.4.3).
- * Row 2, under a divider, is the slim Monitor app bar: the panel's two
- * destinations (no sidebar, per the brief) on the left, the account and
- * "Log ud" on the right; it wraps on small screens in reading order. The
- * two navigation landmarks carry distinct labels; no language switcher (the
- * panel is Danish only). Both rows and the page sit in a centered column up
- * to 1120px; the site footer (Danish) below, whose privacy link is the main
- * site's absolute URL. Each panel page renders it with its own
- * `requireMonitor()` user (a synchronous component, so pages render it like
- * any element; the async `MonitorMainNav` and `SiteFooter` are server
+ * site's frontpage in `locale` (`siteHomeUrl`: `/` or `/en` on
+ * `NEXT_PUBLIC_SITE_URL`), and on the right the main site's own navigation
+ * (`MonitorMainNav`, the admin-controlled nav as absolute links to the main
+ * site) followed by the `DA | EN` switcher (`MonitorLocaleSwitcher`, back to
+ * `currentPath`). Below 768px both collapse behind a "Menu" button
+ * (`SiteMenu`, DESIGN.md Nav); from 768px up they sit inline. The top bar is
+ * the menu's positioned container, so the open menu spans the bar and drops
+ * down right under it, over the app bar: its links follow the button on
+ * screen as in the focus order (WCAG 2.4.3). Row 2, under a divider, is the
+ * slim Monitor app bar: the panel's two destinations (no sidebar, per the
+ * brief) on the left, the account and "Log ud" on the right; it wraps on
+ * small screens in reading order. The three navigation landmarks carry
+ * distinct labels. Both rows and the page sit in a centered column up to
+ * 1120px; the site footer below, whose privacy link is the main site's
+ * absolute URL. Everything follows `locale`. Each panel page renders it with
+ * its own `requireMonitor()` user (a synchronous component, so pages render
+ * it like any element; the async `MonitorMainNav` and `SiteFooter` are server
  * component children, rendered by RSC).
  */
-export default function MonitorShell({ email, section, sectionPage = true, children }: MonitorShellProps) {
-  const messages = loadMessages(AUTH_LOCALE);
-  const t = createTranslator({ locale: AUTH_LOCALE, messages, namespace: "Monitor" });
+export default function MonitorShell({
+  email,
+  section,
+  locale,
+  currentPath = SECTION_PATHS[section],
+  children,
+}: MonitorShellProps) {
+  const messages = loadMessages(locale);
+  const t = createTranslator({ locale, messages, namespace: "Monitor" });
   const items = [
-    { key: "dashboard", href: MONITOR_DASHBOARD_PATH, label: t("shell.dashboard") },
-    { key: "settings", href: MONITOR_SETTINGS_PATH, label: t("shell.settings") },
-  ] as const satisfies readonly { key: MonitorSection; href: string; label: string }[];
+    { key: "dashboard", label: t("shell.dashboard") },
+    { key: "settings", label: t("shell.settings") },
+  ] as const satisfies readonly { key: MonitorSection; label: string }[];
 
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-border">
         <div className="relative z-10 mx-auto flex max-w-content flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-3">
-          <MonitorBrand href={siteOrigin()} />
+          <MonitorBrand href={siteHomeUrl(locale)} />
           <SiteMenu toggleLabel={messages.Nav.menu}>
-            <MonitorMainNav />
+            <MonitorMainNav locale={locale} />
+            <MonitorLocaleSwitcher locale={locale} currentPath={currentPath} />
           </SiteMenu>
         </div>
         <div className="border-t border-border">
           <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-x-6 gap-y-1 px-6 py-2">
             <nav aria-label={t("shell.navLabel")}>
               <ul className="flex flex-wrap items-center gap-x-4">
-                {items.map(({ key, href, label }) => (
+                {items.map(({ key, label }) => (
                   <li key={key}>
                     <NextLink
-                      href={href}
-                      aria-current={key === section ? (sectionPage ? "page" : "true") : undefined}
+                      href={SECTION_PATHS[key]}
+                      aria-current={key === section ? (currentPath === SECTION_PATHS[key] ? "page" : "true") : undefined}
                       className={cx(
                         "inline-flex min-h-11 items-center rounded-btn px-1 text-muted transition-colors hover:text-fg",
                         CURRENT,
@@ -107,7 +128,7 @@ export default function MonitorShell({ email, section, sectionPage = true, child
       >
         {children}
       </main>
-      <SiteFooter locale={AUTH_LOCALE} siteOrigin={siteOrigin()} />
+      <SiteFooter locale={locale} siteOrigin={siteOrigin()} />
     </div>
   );
 }

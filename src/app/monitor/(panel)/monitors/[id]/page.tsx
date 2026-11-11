@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { Locale } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { deleteMonitorAction, pauseMonitorAction, resumeMonitorAction } from "@/app/monitor/(panel)/actions";
@@ -7,8 +8,8 @@ import MonitorShell from "@/components/monitor/MonitorShell";
 import Link from "@/components/ui/Link";
 import LinkButton from "@/components/ui/LinkButton";
 import SubmitButton from "@/components/ui/SubmitButton";
-import { AUTH_LOCALE } from "@/config/auth-areas";
-import { MONITOR_DASHBOARD_PATH, MONITOR_ROBOTS, monitorEditPath } from "@/config/monitor";
+import { MONITOR_DASHBOARD_PATH, MONITOR_ROBOTS, monitorDetailPath, monitorEditPath } from "@/config/monitor";
+import { getMonitorLocale } from "@/i18n/monitor-locale";
 import { cx } from "@/lib/cx";
 import { describeInterval, displayUrl, formatDateTime, formatRelative, monitorHealth } from "@/lib/monitor/format";
 import { monitorIdSchema } from "@/lib/validation/monitor";
@@ -26,19 +27,21 @@ type MonitorDetailPageProps = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: MonitorDetailPageProps): Promise<Metadata> {
   const { id } = await params;
   const monitor = monitorIdSchema.safeParse(id).success ? await getMonitor(id) : null;
-  if (!monitor) return monitorNotFoundMetadata();
+  if (!monitor) return monitorNotFoundMetadata(await getMonitorLocale());
   return { title: monitor.label ?? displayUrl(monitor.url), robots: MONITOR_ROBOTS };
 }
 
 const DOT = { active: "bg-success", paused: "bg-muted", error: "bg-error" } as const;
 
-/** One timeline entry: when (relative, then date and time) beside what happened. */
-function TimelineEntry({ at, now, children }: { at: string; now: number; children: React.ReactNode }) {
+type TimelineEntryProps = { at: string; now: number; locale: Locale; children: React.ReactNode };
+
+/** One timeline entry: when (relative, then date and time, in `locale`) beside what happened. */
+function TimelineEntry({ at, now, locale, children }: TimelineEntryProps) {
   return (
     <li className="grid gap-x-4 gap-y-1 border-b border-border py-4 last:border-b-0 sm:grid-cols-[10rem_1fr]">
       <time dateTime={at} className="flex flex-col text-small text-muted">
-        <span>{formatRelative(at, now)}</span>
-        <span>{formatDateTime(at)}</span>
+        <span>{formatRelative(at, locale, now)}</span>
+        <span>{formatDateTime(at, locale)}</span>
       </time>
       <div className="flex flex-col gap-1">{children}</div>
     </li>
@@ -52,7 +55,7 @@ function TimelineEntry({ at, now, children }: { at: string; now: number; childre
  * change history, newest first, ending with "Overvågning oprettet" (below
  * which a monitor without changes says "Ingen ændringer endnu"). Owner and
  * `monitor_user` only; another account's monitor (hidden by RLS) or an
- * unknown id is a 404.
+ * unknown id is a 404. In the visitor's Monitor language.
  */
 export default async function MonitorDetailPage({ params }: MonitorDetailPageProps) {
   const user = await requireMonitor();
@@ -60,10 +63,8 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
   const monitor = monitorIdSchema.safeParse(id).success ? await getMonitor(id) : null;
   if (!monitor) notFound();
 
-  const [events, t] = await Promise.all([
-    listMonitorEvents(monitor.id),
-    getTranslations({ locale: AUTH_LOCALE, namespace: "Monitor" }),
-  ]);
+  const [events, locale] = await Promise.all([listMonitorEvents(monitor.id), getMonitorLocale()]);
+  const t = await getTranslations({ locale, namespace: "Monitor" });
   const now = Date.now();
   const health = monitorHealth(monitor);
   const interval = describeInterval(monitor.interval_minutes);
@@ -74,12 +75,12 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
     t(`status.${health}`),
     t("detail.checksEvery", { interval: t(`interval.${interval.key}`, { count: interval.count }) }),
     monitor.last_checked_at
-      ? t("detail.lastChecked", { when: formatRelative(monitor.last_checked_at, now) })
+      ? t("detail.lastChecked", { when: formatRelative(monitor.last_checked_at, locale, now) })
       : t("detail.notCheckedYet"),
   ];
 
   return (
-    <MonitorShell email={user.email} section="dashboard" sectionPage={false}>
+    <MonitorShell email={user.email} section="dashboard" locale={locale} currentPath={monitorDetailPath(monitor.id)}>
       <div className="mx-auto flex w-full max-w-205 flex-col gap-8">
         <header className="flex flex-col gap-4">
           <Link href={MONITOR_DASHBOARD_PATH} className="inline-flex min-h-11 items-center self-start text-small">
@@ -129,11 +130,11 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
           <h2 className="text-h3 font-semibold">{t("detail.historyTitle")}</h2>
           <ol className="rounded-card border border-border bg-bg px-6 shadow-card">
             {events.map((event) => (
-              <TimelineEntry key={event.id} at={event.detected_at} now={now}>
+              <TimelineEntry key={event.id} at={event.detected_at} now={now} locale={locale}>
                 <p className="font-semibold whitespace-pre-line break-words">{event.summary ?? t("detail.changedEntry")}</p>
               </TimelineEntry>
             ))}
-            <TimelineEntry at={monitor.created_at} now={now}>
+            <TimelineEntry at={monitor.created_at} now={now} locale={locale}>
               <p className="font-semibold">{t("detail.createdEntry")}</p>
             </TimelineEntry>
             {events.length === 0 && (

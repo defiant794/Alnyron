@@ -1,8 +1,7 @@
-import { createTranslator } from "next-intl";
+import { createTranslator, type Locale } from "next-intl";
 import type { MonitorFormState, MonitorFormValues } from "@/app/monitor/(panel)/actions";
 import MonitorForm from "@/components/monitor/MonitorForm";
 import Link from "@/components/ui/Link";
-import { AUTH_LOCALE } from "@/config/auth-areas";
 import {
   MONITOR_DASHBOARD_PATH,
   MONITOR_INTERVAL_RANGES,
@@ -12,6 +11,8 @@ import {
 import { loadMessages } from "@/i18n/messages";
 
 export type MonitorFormScreenProps = {
+  /** The page's UI language (`getMonitorLocale()`). */
+  locale: Locale;
   title: string;
   lead: string;
   submit: string;
@@ -27,6 +28,7 @@ export type MonitorFormScreenProps = {
  * at most 640px wide. Synchronous, so pages render it like any element.
  */
 export default function MonitorFormScreen({
+  locale,
   title,
   lead,
   submit,
@@ -35,7 +37,7 @@ export default function MonitorFormScreen({
   initialValues,
   cancelHref,
 }: MonitorFormScreenProps) {
-  const t = createTranslator({ locale: AUTH_LOCALE, messages: loadMessages(AUTH_LOCALE), namespace: "Monitor.form" });
+  const t = createTranslator({ locale, messages: loadMessages(locale), namespace: "Monitor.form" });
 
   return (
     <div className="mx-auto flex w-full max-w-160 flex-col gap-4">

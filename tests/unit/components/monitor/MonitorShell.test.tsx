@@ -2,7 +2,8 @@
 /**
  * Unit tests: src/components/monitor/MonitorShell.tsx
  * Journey: monitor-chrome  MCH-AC3; monitor-ship-routing  SHIP-AC8c
- * Journey: monitor-panel-nav  MPN-AC1a, MPN-AC1b, MPN-AC1c, MPN-AC2, MPN-AC2d, MPN-AC2e, MPN-AC3a, MPN-AC3b, MPN-AC3c, MPN-AC4a, MPN-AC4b, MPN-AC4c
+ * Journey: monitor-panel-nav  MPN-AC1a, MPN-AC1b, MPN-AC1c, MPN-AC2, MPN-AC2d, MPN-AC2e, MPN-AC3a, MPN-AC3b, MPN-AC4a, MPN-AC4b, MPN-AC4c
+ * Journey: monitor-i18n  AC-I18N-MON-22 (supersedes MPN-AC3c "no language switcher")
  *
  * Verifies: brand link accessible name is "Alnyron" (no "Monitor" suffix),
  * brand link href is the MAIN-SITE ORIGIN (not MONITOR_DASHBOARD_PATH — MPN-AC1a),
@@ -14,10 +15,11 @@
  * left, account right). The main-site nav sits in the small-screen "Menu"
  * disclosure (MPN-AC4a) opening under the top bar, before the app bar's panel nav
  * and account in focus order (MPN-AC4c),
- * and the panel's own Dashboard/Settings nav + account/Log ud remain intact (MPN-AC3a, MPN-AC3b, MPN-AC3c).
+ * and the panel's own Dashboard/Settings nav + account/Log ud remain intact (MPN-AC3a, MPN-AC3b),
+ * and the DA | EN switcher follows the main-site nav in the top bar's menu (AC-I18N-MON-22).
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 const { mockParseSiteEnv } = vi.hoisted(() => ({
@@ -85,7 +87,7 @@ beforeEach(() => {
 
 function renderShell() {
   return render(
-    <MonitorShell email="test@test.local" section="dashboard">
+    <MonitorShell email="test@test.local" section="dashboard" locale="da">
       <p>page content</p>
     </MonitorShell>,
   );
@@ -281,18 +283,28 @@ describe("MPN-AC3b: MonitorShell account area — email and Log ud button still 
   });
 });
 
-describe("MPN-AC3c: MonitorShell — NO language switcher present", () => {
-  it("MPN-AC3c: no nav landmark labelled 'Sprog' (or similar) is rendered", () => {
+// MPN-AC3c ("no language switcher") is superseded by monitor-i18n AC-I18N-MON-22:
+// the panel is bilingual, and its DA | EN switcher sits in the site-style top bar.
+describe("AC-I18N-MON-22: MonitorShell — the DA | EN switcher follows the main-site nav", () => {
+  it("AC-I18N-MON-22f: a nav landmark labelled 'Sprog' marks DA as the current language", () => {
     renderShell();
-    // No navigation whose accessible name suggests a language switcher
-    expect(screen.queryByRole("navigation", { name: /sprog/i })).toBeNull();
+    const switcher = screen.getByRole("navigation", { name: "Sprog" });
+    expect(within(switcher).getByText("DA", { selector: "[aria-current]" })).toBeInTheDocument();
   });
 
-  it("MPN-AC3c: page contains at most two nav landmarks (panel nav + main-site nav)", () => {
+  it("AC-I18N-MON-22g: it sits after the main-site nav inside the small-screen menu panel", () => {
     renderShell();
-    // A language switcher would add a third nav; guard that it stays absent.
-    const navs = screen.getAllByRole("navigation");
-    expect(navs.length).toBeLessThanOrEqual(2);
+    const toggle = screen.getByRole("button", { name: "Menu" });
+    const panel = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
+    const mainNav = screen.getByRole("navigation", { name: "Hovednavigation" });
+    const switcher = screen.getByRole("navigation", { name: "Sprog" });
+    expect(panel).toContainElement(switcher);
+    expect(mainNav.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("AC-I18N-MON-22h: the page has exactly three nav landmarks (main-site nav, language, panel nav)", () => {
+    renderShell();
+    expect(screen.getAllByRole("navigation")).toHaveLength(3);
   });
 });
 

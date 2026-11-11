@@ -5,15 +5,15 @@ import MonitorShell from "@/components/monitor/MonitorShell";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LinkButton from "@/components/ui/LinkButton";
-import { AUTH_LOCALE } from "@/config/auth-areas";
 import { MONITOR_NEW_PATH, MONITOR_ROBOTS, MONITOR_URL_MAX_LENGTH, monitorDetailPath } from "@/config/monitor";
+import { getMonitorLocale } from "@/i18n/monitor-locale";
 import { cx } from "@/lib/cx";
 import { describeInterval, displayUrl, formatRelative, monitorHealth, type MonitorHealth } from "@/lib/monitor/format";
 import { requireMonitor } from "@/services/auth/require-role";
 import { getMonitorUsage, listMonitors } from "@/services/monitor/monitors";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Monitor.dashboard" });
+  const t = await getTranslations({ locale: await getMonitorLocale(), namespace: "Monitor.dashboard" });
   return { title: t("metaTitle"), robots: MONITOR_ROBOTS };
 }
 
@@ -33,16 +33,17 @@ const DOT: Record<MonitorHealth, string> = {
  * ("1 / 2 overvågninger brugt", or just the count when uncapped). Without
  * monitors a first-run card takes a URL and opens the add form with it.
  * Owner and `monitor_user` only; RLS returns only the user's own monitors.
+ * In the visitor's Monitor language.
  */
 export default async function MonitorDashboardPage() {
   const user = await requireMonitor();
-  const [monitors, usage] = await Promise.all([listMonitors(), getMonitorUsage()]);
-  const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Monitor" });
+  const [monitors, usage, locale] = await Promise.all([listMonitors(), getMonitorUsage(), getMonitorLocale()]);
+  const t = await getTranslations({ locale, namespace: "Monitor" });
   const now = Date.now();
   const atLimit = usage.limit !== null && usage.count >= usage.limit;
 
   return (
-    <MonitorShell email={user.email} section="dashboard">
+    <MonitorShell email={user.email} section="dashboard" locale={locale}>
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-h2 font-semibold">{t("dashboard.title")}</h1>
@@ -126,7 +127,7 @@ export default async function MonitorDashboardPage() {
                     {health === "error"
                       ? t("status.error")
                       : changed
-                        ? t("dashboard.changed", { when: formatRelative(changed, now) })
+                        ? t("dashboard.changed", { when: formatRelative(changed, locale, now) })
                         : t("dashboard.noChanges")}
                   </span>
                   <span aria-hidden="true" className="hidden text-h3 text-muted sm:block">

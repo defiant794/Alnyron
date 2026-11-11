@@ -8,7 +8,7 @@ import { useFormResultFocus } from "@/hooks/use-form-result-focus";
 import type { SetPasswordState } from "@/services/auth/set-password";
 
 export type SetPasswordFormProps = {
-  /** The area's `updatePassword` Server Action (admin or MyLife). */
+  /** The area's `updatePassword` Server Action (admin, MyLife or Monitor). */
   action: (previous: SetPasswordState, formData: FormData) => Promise<SetPasswordState>;
   /** The account's email, offered to password managers alongside the new password. */
   email: string;

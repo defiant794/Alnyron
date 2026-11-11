@@ -9,9 +9,10 @@ import {
 import { checkMonitorUrl, type MonitorUrlCheck, type MonitorUrlRejection } from "@/lib/monitor/url-guard";
 
 /**
- * Key of a monitor form message in `messages/da.json`
+ * Key of a monitor form message in `messages/*.json`
  * (`Monitor.form.errors`). Every issue these schemas raise carries such a key
- * as its message, so the caller shows Danish copy instead of zod's English.
+ * as its message, so the caller shows copy in the visitor's Monitor language
+ * instead of zod's English.
  */
 export type MonitorValidationKey = keyof Messages["Monitor"]["form"]["errors"];
 

@@ -4,8 +4,8 @@ import { notFound } from "next/navigation";
 import { updateMonitorAction } from "@/app/monitor/(panel)/actions";
 import MonitorFormScreen from "@/components/monitor/MonitorFormScreen";
 import MonitorShell from "@/components/monitor/MonitorShell";
-import { AUTH_LOCALE } from "@/config/auth-areas";
-import { MONITOR_ROBOTS, monitorDetailPath } from "@/config/monitor";
+import { MONITOR_ROBOTS, monitorDetailPath, monitorEditPath } from "@/config/monitor";
+import { getMonitorLocale } from "@/i18n/monitor-locale";
 import { minutesToInterval, monitorIdSchema } from "@/lib/validation/monitor";
 import { requireMonitor } from "@/services/auth/require-role";
 import { getMonitor } from "@/services/monitor/monitors";
@@ -21,15 +21,17 @@ type EditMonitorPageProps = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: EditMonitorPageProps): Promise<Metadata> {
   const { id } = await params;
   const monitor = monitorIdSchema.safeParse(id).success ? await getMonitor(id) : null;
-  if (!monitor) return monitorNotFoundMetadata();
-  const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Monitor.monitors.edit" });
+  const locale = await getMonitorLocale();
+  if (!monitor) return monitorNotFoundMetadata(locale);
+  const t = await getTranslations({ locale, namespace: "Monitor.monitors.edit" });
   return { title: t("metaTitle"), robots: MONITOR_ROBOTS };
 }
 
 /**
  * `/monitor/monitors/<id>/edit`: the add form, filled with the monitor's
- * URL, name and interval. Owner and `monitor_user` only; another account's
- * monitor (hidden by RLS) or an unknown id is a 404.
+ * URL, name and interval, in the visitor's Monitor language. Owner and
+ * `monitor_user` only; another account's monitor (hidden by RLS) or an
+ * unknown id is a 404.
  */
 export default async function EditMonitorPage({ params }: EditMonitorPageProps) {
   const user = await requireMonitor();
@@ -37,12 +39,14 @@ export default async function EditMonitorPage({ params }: EditMonitorPageProps) 
   const monitor = monitorIdSchema.safeParse(id).success ? await getMonitor(id) : null;
   if (!monitor) notFound();
 
-  const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Monitor.monitors.edit" });
+  const locale = await getMonitorLocale();
+  const t = await getTranslations({ locale, namespace: "Monitor.monitors.edit" });
   const interval = minutesToInterval(monitor.interval_minutes);
 
   return (
-    <MonitorShell email={user.email} section="dashboard" sectionPage={false}>
+    <MonitorShell email={user.email} section="dashboard" locale={locale} currentPath={monitorEditPath(monitor.id)}>
       <MonitorFormScreen
+        locale={locale}
         title={t("title")}
         lead={t("lead")}
         submit={t("submit")}

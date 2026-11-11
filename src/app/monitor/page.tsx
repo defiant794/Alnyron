@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import MonitorBrand from "@/components/monitor/MonitorBrand";
+import MonitorLocaleSwitcher from "@/components/monitor/MonitorLocaleSwitcher";
 import SiteFooter from "@/components/site/SiteFooter";
 import Button from "@/components/ui/Button";
 import Link from "@/components/ui/Link";
 import LinkButton from "@/components/ui/LinkButton";
-import { AUTH_LOCALE } from "@/config/auth-areas";
 import {
   MONITOR_FREE_LIMIT,
   MONITOR_LOGIN_PATH,
@@ -14,41 +14,50 @@ import {
   MONITOR_SIGNUP_PATH,
   MONITOR_URL_MAX_LENGTH,
 } from "@/config/monitor";
-import { siteOrigin } from "@/config/site-origin";
+import { siteHomeUrl, siteOrigin } from "@/config/site-origin";
+import { getMonitorLocale } from "@/i18n/monitor-locale";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Monitor.landing" });
+  const t = await getTranslations({ locale: await getMonitorLocale(), namespace: "Monitor.landing" });
   return { title: t("metaTitle"), robots: MONITOR_ROBOTS };
 }
 
 const STEPS = ["add", "watch", "mail"] as const;
 
+/** Where the landing page is served: the Monitor host's root (the main host redirects `/monitor` there). */
+const LANDING_PATH = "/";
+
 /**
  * `/monitor` (the Monitor host's `/`): the public landing page (approved
  * landing mock), framed like the main site: the ALNYRON lockup in the header
- * links to the main site's frontpage and the site footer (Danish) closes the
- * page, both with the main site's absolute URL (`NEXT_PUBLIC_SITE_URL`): on
- * the Monitor host a path would stay there.
- * The header offers "Log ind" and "Opret gratis"; the hero states the
- * promise and the free cap (`MONITOR_FREE_LIMIT`, the database default) and
- * takes a URL straight away: it opens the add form with the URL filled in
- * (signed-out visitors pass the login page first, which keeps it and links
- * to signup). Three steps explain how it works.
+ * links to the main site's frontpage in the page's language and the site
+ * footer closes the page, both with the main site's absolute URL
+ * (`siteHomeUrl`, `siteOrigin`, from `NEXT_PUBLIC_SITE_URL`): on the Monitor
+ * host a path would stay there.
+ * The header offers "Log ind" and "Opret gratis", then the `DA | EN`
+ * switcher (the page follows the visitor's Monitor language); the hero
+ * states the promise and the free cap (`MONITOR_FREE_LIMIT`, the database
+ * default) and takes a URL straight away: it opens the add form with the URL
+ * filled in (signed-out visitors pass the login page first, which keeps it
+ * and links to signup). Three steps explain how it works.
  */
 export default async function MonitorLandingPage() {
-  const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Monitor" });
-  const mainSite = siteOrigin();
+  const locale = await getMonitorLocale();
+  const t = await getTranslations({ locale, namespace: "Monitor" });
 
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="mx-auto flex w-full max-w-content flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-4">
-        <MonitorBrand href={mainSite} />
-        <nav aria-label={t("shell.navLabel")} className="flex items-center gap-4">
-          <Link href={MONITOR_LOGIN_PATH} className="inline-flex min-h-11 items-center">
-            {t("landing.ctaLogin")}
-          </Link>
-          <LinkButton href={MONITOR_SIGNUP_PATH}>{t("landing.ctaSignup")}</LinkButton>
-        </nav>
+        <MonitorBrand href={siteHomeUrl(locale)} />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <nav aria-label={t("shell.navLabel")} className="flex items-center gap-4">
+            <Link href={MONITOR_LOGIN_PATH} className="inline-flex min-h-11 items-center">
+              {t("landing.ctaLogin")}
+            </Link>
+            <LinkButton href={MONITOR_SIGNUP_PATH}>{t("landing.ctaSignup")}</LinkButton>
+          </nav>
+          <MonitorLocaleSwitcher locale={locale} currentPath={LANDING_PATH} />
+        </div>
       </header>
 
       <main id="main" tabIndex={-1} className="flex flex-1 flex-col focus:outline-none">
@@ -102,7 +111,7 @@ export default async function MonitorLandingPage() {
         </section>
       </main>
 
-      <SiteFooter locale={AUTH_LOCALE} siteOrigin={mainSite} />
+      <SiteFooter locale={locale} siteOrigin={siteOrigin()} />
     </div>
   );
 }

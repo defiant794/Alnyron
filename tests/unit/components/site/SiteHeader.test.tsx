@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
  * Unit tests — SiteHeader nav links (src/components/site/SiteHeader.tsx)
- * Journey: monitor-nav  AC-MONNAV-6 (design review #6: the Monitor link on an
- * English page says it leads into the Danish-only area, `hreflang="da"`).
+ * Journey: monitor-nav  AC-MONNAV-6 (design review #6). Monitor is bilingual
+ * (it opens in the visitor's own choice), so its link names no `hreflang`.
  *
  * The header is an async server component: it is awaited and its element
  * rendered. The nav items are mocked (getNavItems has its own tests); NavLink,
@@ -37,7 +37,7 @@ import { getNavItems, type NavItem } from "@/services/content/nav";
 const EN_ITEMS: NavItem[] = [
   { key: "system-home", label: "Home", href: "/en", navOrder: 0, isHome: true },
   { key: "category-apps", label: "Apps", href: "/en/apps", navOrder: 10, isHome: false, lang: "da" },
-  { key: "system-monitor", label: "Monitor", href: "/monitor", navOrder: 1100, isHome: false, hrefLang: "da" },
+  { key: "system-monitor", label: "Monitor", href: "http://monitor.localhost:3000/", navOrder: 1100, isHome: false },
 ];
 
 beforeEach(() => {
@@ -48,13 +48,13 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("AC-MONNAV-6h: SiteHeader renders each nav item's link attributes", () => {
-  it("AC-MONNAV-6h: the Monitor link carries hreflang='da' from its nav item; links without hrefLang get none", async () => {
+  it("AC-MONNAV-6h: each link keeps its item's href and lang; no link, Monitor included, has hreflang", async () => {
     render(await SiteHeader({ locale: "en" }));
     const nav = within(screen.getByRole("navigation", { name: "Main navigation" }));
 
     const monitor = nav.getByRole("link", { name: "Monitor" });
-    expect(monitor).toHaveAttribute("href", "/monitor");
-    expect(monitor).toHaveAttribute("hreflang", "da");
+    expect(monitor).toHaveAttribute("href", "http://monitor.localhost:3000/");
+    expect(monitor).not.toHaveAttribute("hreflang");
     expect(monitor).not.toHaveAttribute("lang");
 
     expect(nav.getByRole("link", { name: "Apps" })).toHaveAttribute("lang", "da");

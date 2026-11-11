@@ -5,12 +5,20 @@
  * Journey: monitor-chrome    MCH-AC1, MCH-AC2, MCH-AC5
  *
  * Verifies: noindex meta, signup CTA, login link, free-cap copy (2),
- * ALNYRON lockup linked to /, SiteFooter as the page footer,
- * lang=da enforced by layout.
+ * ALNYRON lockup linked to the main-site frontpage by its absolute URL
+ * (siteHomeUrl), SiteFooter as the page footer in the Monitor language
+ * (Danish: there is no monitor-locale cookie here).
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import type * as MonitorLocaleModule from "@/i18n/monitor-locale";
+
+// The page reads the visitor's Monitor language from a cookie; there is no request here: Danish.
+vi.mock("@/i18n/monitor-locale", async (importOriginal) => ({
+  ...(await importOriginal<typeof MonitorLocaleModule>()),
+  getMonitorLocale: vi.fn(async () => "da" as const),
+}));
 
 // SiteFooter is an async server component; stub it in every landing-page render.
 // Its own data/content is covered by tests/unit/components/site/SiteFooter.test.tsx.
@@ -97,9 +105,9 @@ describe("MON-AC1: /monitor landing page renders per design", () => {
   });
 });
 
-// ── MCH-AC1: brand is linked ALNYRON lockup pointing to / ────────────────────
+// ── MCH-AC1: brand is the ALNYRON lockup linked to the main-site frontpage ───
 
-describe("MCH-AC1: landing header contains ALNYRON lockup linked to /", () => {
+describe("MCH-AC1: landing header contains ALNYRON lockup linked to the absolute main-site frontpage (siteHomeUrl)", () => {
   it("MCH-AC1a: renders a link with accessible name 'Alnyron'", async () => {
     render(await MonitorLandingPage());
     const link = screen.getByRole("link", { name: "Alnyron" });

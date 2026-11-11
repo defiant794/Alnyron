@@ -248,14 +248,14 @@ test.describe("Monitor nav — needs DB", () => {
     const link = header.getByRole("link", { name: MONITOR, exact: true });
     // href is now the absolute Monitor subdomain URL, not a relative path
     await expect(link).toHaveAttribute("href", "http://monitor.localhost:3000/");
-    // The Danish page links the Danish area: no language change to announce.
+    // Monitor opens in the visitor's own language choice: the link names none.
     await expect(link).not.toHaveAttribute("hreflang");
   });
 
 
   // ── AC-MONNAV-E05/AC6: href is absolute Monitor subdomain URL on /en ──────
 
-  test("AC-MONNAV-E05: Monitor link on /en has absolute Monitor subdomain href (AC6) and hreflang 'da'", async ({
+  test("AC-MONNAV-E05: Monitor link on /en has absolute Monitor subdomain href (AC6) and no hreflang", async ({
     page,
   }) => {
     await page.goto("/en");
@@ -264,8 +264,8 @@ test.describe("Monitor nav — needs DB", () => {
     await expect(link).toBeVisible();
     // href is absolute, not '/monitor' or '/en/monitor'
     await expect(link).toHaveAttribute("href", "http://monitor.localhost:3000/");
-    // The Monitor area is Danish only: the English page's link says so.
-    await expect(link).toHaveAttribute("hreflang", "da");
+    // Monitor is bilingual and opens in the visitor's own choice: the link names no language.
+    await expect(link).not.toHaveAttribute("hreflang");
   });
 
   // ── AC-MONNAV-E06: clicking Monitor link opens the Monitor area ──────────

@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import type * as MonitorLocaleModule from "@/i18n/monitor-locale";
 
 vi.mock("next-intl/server", async () => {
   const { nextIntlServerMock } = await import("../../../helpers/next-intl-server");
@@ -21,6 +22,21 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/monitor/login",
 }));
 vi.mock("@/app/monitor/(auth)/actions", () => ({ signIn: vi.fn() }));
+// The page reads the visitor's Monitor language from a cookie; there is no request here: Danish.
+vi.mock("@/i18n/monitor-locale", async (importOriginal) => ({
+  ...(await importOriginal<typeof MonitorLocaleModule>()),
+  getMonitorLocale: vi.fn(async () => "da" as const),
+}));
+// The card frame (brand, layout) has its own tests; here it renders the switcher it is given, then
+// the page's content, in the frame's own order.
+vi.mock("@/components/monitor/MonitorAuthFrame", () => ({
+  default: ({ localeSwitcher, children }: { localeSwitcher?: React.ReactNode; children: React.ReactNode }) => (
+    <>
+      {localeSwitcher}
+      {children}
+    </>
+  ),
+}));
 
 import MonitorLoginPage, { generateMetadata } from "@/app/monitor/(auth)/login/page";
 import { loadMessages } from "@/i18n/messages";
@@ -86,15 +102,41 @@ describe("MON-AC15/MON-AC44: error=link_invalid shows role=alert", () => {
 });
 
 describe("MON-AC22: login page passes only an accepted monitor next param", () => {
+  /** The sign-in form's own hidden `next` (the language switcher posts one too). */
+  function signInNext() {
+    const form = screen.getByRole("button", { name: Auth.login.submit }).closest("form");
+    return form?.querySelector<HTMLInputElement>('input[type="hidden"][name="next"]') ?? null;
+  }
+
   it("MON-AC22f: /monitor/dashboard is passed through as next", async () => {
     await renderLogin({ next: "/monitor/dashboard" });
-    const hidden = document.querySelector<HTMLInputElement>('input[type="hidden"][name="next"]');
-    expect(hidden?.value).toBe("/monitor/dashboard");
+    expect(signInNext()?.value).toBe("/monitor/dashboard");
   });
 
   it("MON-AC22g: /admin/x is rejected and not placed in the form", async () => {
     await renderLogin({ next: "/admin/set-password" });
-    const hidden = document.querySelector<HTMLInputElement>('input[type="hidden"][name="next"]');
-    expect(hidden?.value ?? "").not.toBe("/admin/set-password");
+    expect(signInNext()?.value ?? "").not.toBe("/admin/set-password");
+  });
+});
+
+describe("AC-I18N-MON-15 (login page): the DA | EN switcher returns to this login page", () => {
+  function switcherNext() {
+    const nav = screen.getByRole("navigation", { name: "Sprog" });
+    return nav.querySelector<HTMLInputElement>('input[name="next"]')?.value;
+  }
+
+  it("AC-I18N-MON-15-login-a: without a query, it returns to /monitor/login", async () => {
+    await renderLogin();
+    expect(switcherNext()).toBe("/monitor/login");
+  });
+
+  it("AC-I18N-MON-15-login-b: the accepted next and the link-invalid notice survive the switch", async () => {
+    await renderLogin({ next: "/monitor/dashboard", error: "link_invalid" });
+    expect(switcherNext()).toBe("/monitor/login?next=%2Fmonitor%2Fdashboard&error=link_invalid");
+  });
+
+  it("AC-I18N-MON-15-login-c: a rejected next is not carried into the switch", async () => {
+    await renderLogin({ next: "/admin/set-password" });
+    expect(switcherNext()).toBe("/monitor/login");
   });
 });

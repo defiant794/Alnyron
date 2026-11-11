@@ -1,3 +1,4 @@
+import type { Locale } from "next-intl";
 import { AUTH_LOCALE } from "@/config/auth-areas";
 import { MONITOR_ERROR_THRESHOLD, MONITOR_INTERVAL_RANGES } from "@/config/monitor";
 
@@ -44,10 +45,16 @@ const RELATIVE_UNITS: readonly [Intl.RelativeTimeFormatUnit, number][] = [
   ["minute", 60],
 ];
 
-const relativeFormat = new Intl.RelativeTimeFormat(AUTH_LOCALE, { numeric: "auto" });
+/** One formatter per UI language, built once. */
+function perLocale<Formatter>(create: (locale: Locale) => Formatter): Record<Locale, Formatter> {
+  return { da: create("da"), en: create("en") };
+}
 
-/** Danish relative time of a past moment ("for 3 dage siden", "i går", "nu"). */
-export function formatRelative(iso: string, now: number = Date.now()): string {
+const relativeFormats = perLocale((locale) => new Intl.RelativeTimeFormat(locale, { numeric: "auto" }));
+
+/** Relative time of a past moment in `locale` ("for 3 dage siden", "i går", "nu"; "3 days ago"). */
+export function formatRelative(iso: string, locale: Locale, now: number = Date.now()): string {
+  const relativeFormat = relativeFormats[locale];
   const seconds = Math.round((Date.parse(iso) - now) / 1000);
   for (const [unit, size] of RELATIVE_UNITS) {
     if (Math.abs(seconds) >= size) return relativeFormat.format(Math.round(seconds / size), unit);
@@ -55,13 +62,16 @@ export function formatRelative(iso: string, now: number = Date.now()): string {
   return relativeFormat.format(seconds, "second");
 }
 
-const dateTimeFormat = new Intl.DateTimeFormat(AUTH_LOCALE, {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "Europe/Copenhagen",
-});
+const dateTimeFormats = perLocale(
+  (locale) =>
+    new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Copenhagen" }),
+);
 
-/** Danish date and time in Danish time ("5. nov. 2026 11.00"). */
-export function formatDateTime(iso: string): string {
-  return dateTimeFormat.format(new Date(iso));
+/**
+ * Date and time in Copenhagen time, written in `locale` ("5. nov. 2026
+ * 11.00"; "Nov 5, 2026, 11:00 AM"). Danish unless given: the emails and the
+ * admin are Danish only; the Monitor panel passes its UI language.
+ */
+export function formatDateTime(iso: string, locale: Locale = AUTH_LOCALE): string {
+  return dateTimeFormats[locale].format(new Date(iso));
 }

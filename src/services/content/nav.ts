@@ -1,6 +1,5 @@
 import type { Locale } from "next-intl";
 import { getTranslations } from "next-intl/server";
-import { AUTH_LOCALE } from "@/config/auth-areas";
 import { URL_SLUG_LOCALE } from "@/config/catalog";
 import { parseSiteEnv } from "@/config/env";
 import { SYSTEM_PAGE_AREA_ORIGIN, SYSTEM_PAGE_PATHNAMES } from "@/config/system-pages";
@@ -26,8 +25,6 @@ export interface NavItem {
   isHome: boolean;
   /** Set when the label's language differs from the page (Danish fallback on an English page). */
   lang?: Locale;
-  /** Set when the linked page's language differs from the page (the Danish-only Monitor area on an English page). */
-  hrefLang?: Locale;
 }
 
 /**
@@ -50,8 +47,8 @@ export function buildNavItems(items: readonly NavItem[]): NavItem[] {
  * without one is left out. An app area (Monitor) is served on its own host,
  * so it links that host's root (`SYSTEM_PAGE_AREA_ORIGIN`, from the site URL
  * read at call time: no redirect hop through the main host) on every locale;
- * it is Danish only (`AUTH_LOCALE`), which an English page's link says
- * (`hrefLang`).
+ * the link names no language, as the area opens in whichever language the
+ * visitor last chose there (Danish until then).
  *
  * @throws when a query fails, so a broken read never caches an empty nav.
  */
@@ -75,11 +72,7 @@ export async function getNavItems(locale: Locale): Promise<NavItem[]> {
       items.push(
         isContentPage(key)
           ? { ...item, href: getPathname({ href: SYSTEM_PAGE_PATHNAMES[key], locale }) }
-          : {
-              ...item,
-              href: `${SYSTEM_PAGE_AREA_ORIGIN[key](parseSiteEnv().NEXT_PUBLIC_SITE_URL)}/`,
-              hrefLang: locale === AUTH_LOCALE ? undefined : AUTH_LOCALE,
-            },
+          : { ...item, href: `${SYSTEM_PAGE_AREA_ORIGIN[key](parseSiteEnv().NEXT_PUBLIC_SITE_URL)}/` },
       );
       continue;
     }

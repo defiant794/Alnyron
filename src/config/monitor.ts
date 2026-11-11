@@ -2,8 +2,9 @@ import { allowlistedOrigin, type HostSchemes } from "@/lib/host-origin";
 
 /**
  * Monitor: the public website-change monitor. A route group outside
- * `[locale]` (like the admin and MyLife), Danish only (`AUTH_LOCALE` in
- * `config/auth-areas`), served at the root of the Monitor host (the
+ * `[locale]` (like the admin and MyLife), in Danish until the visitor picks
+ * English with its `DA | EN` switcher (a cookie, `getMonitorLocale`: the
+ * paths carry no locale), served at the root of the Monitor host (the
  * middleware rewrites `monitor.alnyron.dk/login` to `/monitor/login` and
  * serves `/monitor/*` there as it is); the main host's `/monitor*` redirects
  * there. Unlike the other areas its home is a public landing page and anyone

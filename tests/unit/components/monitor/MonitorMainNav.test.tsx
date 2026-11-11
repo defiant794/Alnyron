@@ -97,13 +97,13 @@ const RELATIVE_PAGE_ITEM = {
 describe("MPN-AC2a: MonitorMainNav renders a labelled nav landmark", () => {
   it("MPN-AC2a-1: renders a <nav> landmark", async () => {
     mockGetNavItems.mockResolvedValue([RELATIVE_ITEM]);
-    render(await MonitorMainNav());
+    render(await MonitorMainNav({ locale: "da" }));
     expect(screen.getByRole("navigation")).toBeInTheDocument();
   });
 
   it("MPN-AC2a-2: the nav aria-label is 'Hovednavigation' (reused from Nav.label / SiteHeader)", async () => {
     mockGetNavItems.mockResolvedValue([RELATIVE_ITEM]);
-    render(await MonitorMainNav());
+    render(await MonitorMainNav({ locale: "da" }));
     const nav = screen.getByRole("navigation");
     // Real label confirmed from implementation: Nav.label = "Hovednavigation".
     // Must differ from panel nav label "Monitor" (Monitor.shell.navLabel).
@@ -111,13 +111,20 @@ describe("MPN-AC2a: MonitorMainNav renders a labelled nav landmark", () => {
   });
 });
 
-// ── locale pin: getNavItems must be called with "da" ─────────────────────────
+// ── locale: the nav follows the panel's language (monitor-i18n) ─────────────
 
-describe("MPN-locale: MonitorMainNav fetches nav items in Danish", () => {
-  it("MPN-locale-1: calls getNavItems with AUTH_LOCALE ('da')", async () => {
+describe("MPN-locale: MonitorMainNav fetches nav items in the panel's language", () => {
+  it("MPN-locale-1: calls getNavItems with 'da' for a Danish panel", async () => {
     mockGetNavItems.mockResolvedValue([RELATIVE_ITEM]);
-    render(await MonitorMainNav());
+    render(await MonitorMainNav({ locale: "da" }));
     expect(mockGetNavItems).toHaveBeenCalledWith("da");
+  });
+
+  it("MPN-locale-2: calls getNavItems with 'en' and labels the nav in English for an English panel", async () => {
+    mockGetNavItems.mockResolvedValue([RELATIVE_ITEM]);
+    render(await MonitorMainNav({ locale: "en" }));
+    expect(mockGetNavItems).toHaveBeenCalledWith("en");
+    expect(screen.getByRole("navigation")).toHaveAttribute("aria-label", "Main navigation");
   });
 });
 
@@ -126,7 +133,7 @@ describe("MPN-locale: MonitorMainNav fetches nav items in Danish", () => {
 describe("MPN-AC2b: MonitorMainNav absolutizes relative hrefs to main-site origin", () => {
   it("MPN-AC2b-1: a relative '/' href becomes 'http://localhost:3000/'", async () => {
     mockGetNavItems.mockResolvedValue([RELATIVE_ITEM]);
-    render(await MonitorMainNav());
+    render(await MonitorMainNav({ locale: "da" }));
     const nav = screen.getByRole("navigation");
     const link = within(nav).getByRole("link", { name: "Forside" });
     expect(link).toHaveAttribute("href", "http://localhost:3000/");
@@ -134,7 +141,7 @@ describe("MPN-AC2b: MonitorMainNav absolutizes relative hrefs to main-site origi
 
   it("MPN-AC2b-2: a relative '/kontakt' href becomes 'http://localhost:3000/kontakt'", async () => {
     mockGetNavItems.mockResolvedValue([RELATIVE_PAGE_ITEM]);
-    render(await MonitorMainNav());
+    render(await MonitorMainNav({ locale: "da" }));
     const nav = screen.getByRole("navigation");
     const link = within(nav).getByRole("link", { name: "Kontakt" });
     expect(link).toHaveAttribute("href", "http://localhost:3000/kontakt");
@@ -143,7 +150,7 @@ describe("MPN-AC2b: MonitorMainNav absolutizes relative hrefs to main-site origi
   it("MPN-AC2b-3: absolutization follows NEXT_PUBLIC_SITE_URL at render time (https://alnyron.dk)", async () => {
     mockParseSiteEnv.mockReturnValue({ NEXT_PUBLIC_SITE_URL: "https://alnyron.dk" });
     mockGetNavItems.mockResolvedValue([RELATIVE_PAGE_ITEM]);
-    render(await MonitorMainNav());
+    render(await MonitorMainNav({ locale: "da" }));
     const nav = screen.getByRole("navigation");
     const link = within(nav).getByRole("link", { name: "Kontakt" });
     expect(link).toHaveAttribute("href", "https://alnyron.dk/kontakt");
@@ -156,7 +163,7 @@ describe("MPN-AC2c: MonitorMainNav leaves already-absolute hrefs unchanged", () 
   it("MPN-AC2c-1: https://monitor.alnyron.dk/ href is not re-joined to siteOrigin", async () => {
     mockParseSiteEnv.mockReturnValue({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" });
     mockGetNavItems.mockResolvedValue([ABSOLUTE_ITEM]);
-    render(await MonitorMainNav());
+    render(await MonitorMainNav({ locale: "da" }));
     const nav = screen.getByRole("navigation");
     const link = within(nav).getByRole("link", { name: "Monitor" });
     // Must equal the original absolute href, not 'http://localhost:3000/https://monitor…'
@@ -166,7 +173,7 @@ describe("MPN-AC2c: MonitorMainNav leaves already-absolute hrefs unchanged", () 
   it("MPN-AC2c-2: a mix of relative and absolute items both resolve correctly", async () => {
     mockParseSiteEnv.mockReturnValue({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" });
     mockGetNavItems.mockResolvedValue([RELATIVE_ITEM, ABSOLUTE_ITEM]);
-    render(await MonitorMainNav());
+    render(await MonitorMainNav({ locale: "da" }));
     const nav = screen.getByRole("navigation");
     expect(within(nav).getByRole("link", { name: "Forside" })).toHaveAttribute(
       "href",
@@ -184,7 +191,7 @@ describe("MPN-AC2c: MonitorMainNav leaves already-absolute hrefs unchanged", () 
 describe("MPN-AC2f: MonitorMainNav — every nav link has min-h-11 tap target class", () => {
   it("MPN-AC2f-1: each link in the nav carries a class containing 'min-h-11'", async () => {
     mockGetNavItems.mockResolvedValue([RELATIVE_ITEM, RELATIVE_PAGE_ITEM, ABSOLUTE_ITEM]);
-    render(await MonitorMainNav());
+    render(await MonitorMainNav({ locale: "da" }));
     const nav = screen.getByRole("navigation");
     const links = within(nav).getAllByRole("link");
     expect(links.length).toBeGreaterThan(0);
