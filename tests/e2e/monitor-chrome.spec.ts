@@ -6,7 +6,9 @@
  *   MCH-AC1 — landing header: ALNYRON lockup linked to the main site (absolute URL),
  *             no "Monitor" suffix, 320px viewport fits without horizontal scroll
  *   MCH-AC2 — landing footer: SiteFooter (copyright, CVR if set, mailto, Privatliv → absolute main-site URL)
- *   MCH-AC3 — signed-in dashboard: ALNYRON lockup → /monitor/dashboard, SiteFooter present
+ *   MCH-AC3 — signed-in dashboard: ALNYRON lockup → main-site origin (MPN-AC1, supersedes /monitor/dashboard),
+ *             main-site nav behind a "Menu" disclosure below 768px, inline from 768px (MPN-AC4),
+ *             SiteFooter present
  *   MCH-AC4 — auth-card pages (login, signup): ALNYRON lockup → main-site absolute URL, no footer
  *   MCH-AC5 — lead copy "2 sider", fresh signup default cap 2 (MCH-E10 skips
  *             on a target without migration 20261107000300)
@@ -175,14 +177,66 @@ test.describe("MCH-AC3: signed-in dashboard — lockup and footer", () => {
     client.release();
   });
 
-  test("MCH-E8a: header ALNYRON link points to /monitor/dashboard", async ({ page }) => {
+  test("MPN-E1: header ALNYRON link points to the main-site origin", async ({ page }) => {
     test.skip(!DB_AVAILABLE, "Requires DB credentials");
     await signIn(page, E2E_MONITOR_EMAIL, password);
     await expect(page).toHaveURL(/\/monitor\/dashboard/);
     const header = page.locator("header").first();
     const link = header.getByRole("link", { name: "Alnyron" });
     await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute("href", "/monitor/dashboard");
+    await expect(link).toHaveAttribute("href", MAIN);
+  });
+
+  test("MPN-E2: below 768px a 'Menu' disclosure collapses the main-site nav; from 768px it sits inline", async ({
+    page,
+  }) => {
+    test.skip(!DB_AVAILABLE, "Requires DB credentials");
+    await page.setViewportSize({ width: 375, height: 800 });
+    await signIn(page, E2E_MONITOR_EMAIL, password);
+    await expect(page).toHaveURL(/\/monitor\/dashboard/);
+    const header = page.getByRole("banner");
+    const toggle = header.getByRole("button", { name: Nav.menu });
+    const nav = header.getByRole("navigation", { name: Nav.label });
+    // The toggle is a client island: a click before hydration hits the static
+    // HTML and does nothing. React stores the props on each element it hydrates
+    // (`__reactProps$<id>`), so the toggle has its click handler once it has them.
+    await expect(toggle).toBeVisible();
+    await expect
+      .poll(() => toggle.evaluate((el) => Object.keys(el).some((key) => key.startsWith("__reactProps$"))))
+      .toBe(true);
+
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(nav).toBeHidden();
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(nav).toBeVisible();
+
+    // MPN-AC4c: the open nav stacks its links vertically — in DOM order each
+    // link's box starts at or below the previous one's bottom edge.
+    const links = nav.getByRole("link");
+    await expect(links.first()).toBeVisible();
+    const linkCount = await links.count();
+    if (linkCount > 1) {
+      const boxes = await links.evaluateAll((els) =>
+        els.map((el) => {
+          const rect = el.getBoundingClientRect();
+          return { top: rect.top, bottom: rect.bottom };
+        }),
+      );
+      for (let index = 1; index < boxes.length; index++) {
+        expect(boxes[index]!.top).toBeGreaterThanOrEqual(boxes[index - 1]!.bottom - 1);
+      }
+    }
+
+    await page.keyboard.press("Escape");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(nav).toBeHidden();
+
+    // From 768px the disclosure is hidden and the nav shows while still closed: inline.
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await expect(toggle).toBeHidden();
+    await expect(nav).toBeVisible();
   });
 
   test("MCH-E8b: contentinfo landmark is rendered after main on the dashboard", async ({ page }) => {

@@ -3,7 +3,9 @@ import { createTranslator } from "next-intl";
 import type { ReactNode } from "react";
 import { signOut } from "@/app/monitor/(auth)/actions";
 import MonitorBrand from "@/components/monitor/MonitorBrand";
+import MonitorMainNav from "@/components/monitor/MonitorMainNav";
 import SiteFooter from "@/components/site/SiteFooter";
+import SiteMenu from "@/components/site/SiteMenu";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { AUTH_LOCALE } from "@/config/auth-areas";
 import { MONITOR_DASHBOARD_PATH, MONITOR_SETTINGS_PATH } from "@/config/monitor";
@@ -30,15 +32,24 @@ const CURRENT =
 
 /**
  * Monitor panel frame (approved dashboard mock): a top bar with the site's
- * ALNYRON lockup (linked back to the dashboard, the panel's home), the two
- * destinations (no sidebar, per the brief), the account and "Log ud"; the
- * page in a centered column up to 1120px; the site footer (Danish) below,
- * whose privacy link is the main site's absolute URL (`NEXT_PUBLIC_SITE_URL`).
- * The bar wraps on small screens in reading order (brand, then navigation
- * and account), so nothing comes between the navigation and the page. Each
- * panel page renders it with its own `requireMonitor()` user (a synchronous
- * component, so pages render it like any element; the async `SiteFooter` is
- * a server component child, rendered by RSC).
+ * ALNYRON lockup, linked to the main site's frontpage (`siteOrigin`, from
+ * `NEXT_PUBLIC_SITE_URL`), and the main site's own navigation beside it
+ * (`MonitorMainNav`, absolute links to the main site); then the panel's two
+ * destinations (no sidebar, per the brief), the account and "Log ud". The
+ * two navigation landmarks carry distinct labels. The page sits in a
+ * centered column up to 1120px; the site footer (Danish) below, whose
+ * privacy link is the main site's absolute URL. Below 768px the site
+ * navigation collapses behind a "Menu" button (`SiteMenu`, as in the main
+ * site's header, DESIGN.md Nav); from 768px up it sits inline. The bar wraps
+ * on small screens in reading order (the brand row with the menu, then the
+ * panel navigation and account on their own row), so nothing comes between
+ * the panel navigation and the page. The brand row is the menu's positioned
+ * container, so the open menu drops down right under its button (over the
+ * row below): its links come next on screen as in the focus order, before
+ * the panel navigation (WCAG 2.4.3). Each panel page renders
+ * it with its own `requireMonitor()` user (a synchronous component, so pages
+ * render it like any element; the async `MonitorMainNav` and `SiteFooter`
+ * are server component children, rendered by RSC).
  */
 export default function MonitorShell({ email, section, sectionPage = true, children }: MonitorShellProps) {
   const messages = loadMessages(AUTH_LOCALE);
@@ -51,9 +62,15 @@ export default function MonitorShell({ email, section, sectionPage = true, child
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-border">
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-3">
-          <MonitorBrand href={MONITOR_DASHBOARD_PATH} />
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        {/* Below 768px the rows carry the side padding, so the brand row (and the menu panel under it) spans the bar. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3 md:px-6">
+          <div className="relative z-10 flex w-full flex-wrap items-center gap-x-6 gap-y-2 px-6 md:w-auto md:px-0">
+            <MonitorBrand href={siteOrigin()} />
+            <SiteMenu toggleLabel={messages.Nav.menu}>
+              <MonitorMainNav />
+            </SiteMenu>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 md:px-0">
             <nav aria-label={t("shell.navLabel")}>
               <ul className="flex flex-wrap items-center gap-x-4">
                 {items.map(({ key, href, label }) => (

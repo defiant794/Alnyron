@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import MonitorAuthFrame from "@/components/monitor/MonitorAuthFrame";
 import LinkButton from "@/components/ui/LinkButton";
 import { AUTH_LOCALE } from "@/config/auth-areas";
 import { MONITOR_DASHBOARD_PATH } from "@/config/monitor";
+import { monitorNotFoundMetadata } from "@/services/monitor/not-found-metadata";
+
+/** The 404's own title and robots (WCAG 2.4.2). */
+export async function generateMetadata(): Promise<Metadata> {
+  return monitorNotFoundMetadata();
+}
 
 /**
  * 404 inside Monitor: an unknown monitor id, or a monitor of another

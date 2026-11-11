@@ -2,7 +2,7 @@ import Logo from "@/components/brand/Logo";
 import { cx } from "@/lib/cx";
 
 export type MonitorBrandProps = {
-  /** Where the lockup leads: the main site's frontpage (absolute URL) outside the panel, the dashboard inside it. */
+  /** Where the lockup leads: always the main site's frontpage (absolute origin), in every Monitor area (landing, auth card and panel). */
   href: string;
   className?: string;
 };

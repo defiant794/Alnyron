@@ -53,7 +53,8 @@ export default function CatalogOverviewTable({ rows, labelledBy, labels }: Catal
   };
 
   return (
-    <div className="overflow-x-auto">
+    // `relative`: the sr-only (absolute) count separators are placed and clipped here, not on the page.
+    <div className="relative overflow-x-auto">
       <table aria-labelledby={labelledBy} className="w-full min-w-xl text-left">
         {labels.columns && (
           <thead>

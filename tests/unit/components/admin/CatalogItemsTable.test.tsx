@@ -196,3 +196,36 @@ describe("AC-CATADM-15: CatalogItemsTable — status toggle calls onStatusChange
     expect(onStatusChange).toHaveBeenCalledWith("item-2", "published");
   });
 });
+
+// ── A11Y-13: scroll wrapper is positioned, sr-only contained ─────────────────
+
+describe("A11Y-13: CatalogItemsTable — scroll wrapper is positioned so sr-only spans are contained within it", () => {
+  it("A11Y-13: the overflow-x-auto wrapper has 'relative', every sr-only inside has its nearest positioned ancestor within the wrapper", () => {
+    render(
+      <CatalogItemsTable
+        categoryId={CAT_ID}
+        rows={ITEM_ROWS}
+        labels={LABELS}
+        onStatusChange={vi.fn()}
+        reorder={{
+          onReorder: vi.fn().mockResolvedValue({ ok: true } satisfies CatalogActionResult),
+          labels: { moveUp: "Flyt op", moveDown: "Flyt ned", hint: "Træk for at omsortere" },
+        }}
+      />,
+    );
+
+    const wrapper = screen.getByRole("table").parentElement;
+    expect(wrapper).toHaveClass("relative", "overflow-x-auto");
+
+    const srOnlySpans = [...(wrapper?.querySelectorAll(".sr-only") ?? [])];
+    expect(srOnlySpans.length).toBeGreaterThan(0);
+
+    for (const span of srOnlySpans) {
+      const containingBlock = span.parentElement?.closest(".relative, .absolute, .fixed, .sticky") ?? null;
+      expect(
+        containingBlock !== null && wrapper?.contains(containingBlock),
+        `sr-only "${span.textContent?.trim()}" must have its nearest positioned ancestor inside the scroll wrapper`,
+      ).toBe(true);
+    }
+  });
+});

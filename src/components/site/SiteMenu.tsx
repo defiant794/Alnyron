@@ -7,16 +7,17 @@ import { cx } from "@/lib/cx";
 export type SiteMenuProps = {
   /** Visible label of the small-screen toggle ("Menu"). */
   toggleLabel: string;
-  /** Header contents that collapse: the site nav and the language switcher. */
+  /** The collapsible header content (a nav, and optionally a language switcher). */
   children: ReactNode;
 };
 
 /**
- * Below 768px the header nav and language switcher collapse behind a "Menu"
- * disclosure button that opens them as a panel under the header (DESIGN.md
- * Nav); from 768px up they sit inline and the button is hidden. The panel
- * closes on Escape (focus returns to the button), on a link click and on
- * any navigation.
+ * Below 768px the collapsible header content (a nav, and optionally a
+ * language switcher) sits behind a "Menu" disclosure button that opens it as
+ * a full-width panel under the caller's positioned container (the header, or
+ * the header row the menu sits in; DESIGN.md Nav); from 768px up it sits
+ * inline and the button is hidden. The panel closes on Escape (focus returns
+ * to the button), on a link click and on any navigation.
  */
 export default function SiteMenu({ toggleLabel, children }: SiteMenuProps) {
   const currentPath = useCurrentPath();

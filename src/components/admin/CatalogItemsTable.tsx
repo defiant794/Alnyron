@@ -173,7 +173,8 @@ export default function CatalogItemsTable({
           {labels.empty}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        // `relative`: the sr-only (absolute) move-button names are placed and clipped here, not on the page.
+        <div className="relative overflow-x-auto">
           <table aria-labelledby={labelledBy} aria-busy={pending || undefined} className="w-full min-w-xl text-left">
             {labels.columns && (
               <thead>

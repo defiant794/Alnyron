@@ -262,4 +262,22 @@ test.describe("Pages editor — needs DB", () => {
 
     expect(hasUpDown || hasDragHandle).toBe(true);
   });
+
+  // ── A11Y-17: 768px — no page overflow (PagesTable has no min-w, wrapper scroll not asserted) ─
+
+  test("A11Y-17: at 768px wide /admin/pages has no page-level horizontal overflow", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await loginAs(page, E2E_PAGES_ADMIN_EMAIL, password, "/admin/pages");
+
+    await expect(page.getByRole("table")).toBeVisible();
+
+    const metrics = await page.evaluate(() => ({
+      pageScrollWidth: document.documentElement.scrollWidth,
+      pageClientWidth: document.documentElement.clientWidth,
+    }));
+
+    // PagesTable has no min-w-* so internal wrapper overflow is not guaranteed;
+    // the firm assertion is that the page itself does not scroll sideways.
+    expect(metrics.pageScrollWidth).toBeLessThanOrEqual(metrics.pageClientWidth);
+  });
 });

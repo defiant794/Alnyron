@@ -44,8 +44,16 @@ vi.mock("@/components/site/SiteFooter", () => ({
     <footer data-testid="site-footer" data-locale={locale} />
   ),
 }));
+vi.mock("@/components/monitor/MonitorMainNav", () => ({
+  default: () => <nav aria-label="Hovednavigation" data-testid="monitor-main-nav" />,
+}));
+// SiteMenu (the shell's small-screen "Menu" disclosure) reads the App Router's
+// current route, which a page test has no context for; render its contents.
+vi.mock("@/components/site/SiteMenu", () => ({
+  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
 
-import MonitorDetailPage from "@/app/monitor/(panel)/monitors/[id]/page";
+import MonitorDetailPage, { generateMetadata as generateDetailMetadata } from "@/app/monitor/(panel)/monitors/[id]/page";
 import { loadMessages } from "@/i18n/messages";
 
 const { Monitor } = loadMessages("da");
@@ -167,5 +175,68 @@ describe("ENG-AC1: summary element has whitespace-pre-line for multi-line diffs"
     // Exactly one paragraph renders event.summary, with its line breaks kept for whitespace-pre-line.
     const summaries = [...document.querySelectorAll("p.whitespace-pre-line")].map((el) => el.textContent);
     expect(summaries).toEqual(["+ New paragraph\n\u2212 Old paragraph"]);
+  });
+});
+
+// ── A11Y-06/07/08: generateMetadata — 404 cases return "Siden findes ikke" ────
+
+describe("A11Y-06: detail generateMetadata — non-UUID id resolves 'Siden findes ikke' without querying DB", () => {
+  it("A11Y-06a: title is 'Siden findes ikke'", async () => {
+    const metadata = await generateDetailMetadata({ params: Promise.resolve({ id: "not-a-uuid" }) });
+    expect(metadata.title).toBe("Siden findes ikke");
+  });
+
+  it("A11Y-06b: robots is 'noindex, nofollow'", async () => {
+    const metadata = await generateDetailMetadata({ params: Promise.resolve({ id: "not-a-uuid" }) });
+    expect(metadata.robots).toBe("noindex, nofollow");
+  });
+
+  it("A11Y-06c: getMonitor is NOT called for a non-UUID id", async () => {
+    await generateDetailMetadata({ params: Promise.resolve({ id: "not-a-uuid" }) });
+    expect(mockGetMonitor).not.toHaveBeenCalled();
+  });
+
+  it("A11Y-06d: does not throw for a non-UUID id", async () => {
+    await expect(generateDetailMetadata({ params: Promise.resolve({ id: "not-a-uuid" }) })).resolves.toBeDefined();
+  });
+});
+
+describe("A11Y-07: detail generateMetadata — valid UUID, getMonitor returns null, resolves 'Siden findes ikke'", () => {
+  const MISSING_ID = "00000000-0000-0000-0000-000000000099";
+
+  beforeEach(() => {
+    mockGetMonitor.mockResolvedValue(null);
+  });
+
+  it("A11Y-07a: title is 'Siden findes ikke'", async () => {
+    const metadata = await generateDetailMetadata({ params: Promise.resolve({ id: MISSING_ID }) });
+    expect(metadata.title).toBe("Siden findes ikke");
+  });
+
+  it("A11Y-07b: robots is 'noindex, nofollow'", async () => {
+    const metadata = await generateDetailMetadata({ params: Promise.resolve({ id: MISSING_ID }) });
+    expect(metadata.robots).toBe("noindex, nofollow");
+  });
+
+  it("A11Y-07c: does not throw when monitor is null", async () => {
+    await expect(generateDetailMetadata({ params: Promise.resolve({ id: MISSING_ID }) })).resolves.toBeDefined();
+  });
+});
+
+describe("A11Y-08: detail generateMetadata — found monitor keeps its label as title (unchanged behaviour)", () => {
+  it("A11Y-08a: title equals monitor.label ('My Site')", async () => {
+    const metadata = await generateDetailMetadata({ params: Promise.resolve({ id: TEST_MONITOR_ID }) });
+    expect(metadata.title).toBe("My Site");
+  });
+
+  it("A11Y-08b: robots is 'noindex, nofollow'", async () => {
+    const metadata = await generateDetailMetadata({ params: Promise.resolve({ id: TEST_MONITOR_ID }) });
+    expect(metadata.robots).toBe("noindex, nofollow");
+  });
+
+  it("A11Y-08c: title is a non-empty string", async () => {
+    const metadata = await generateDetailMetadata({ params: Promise.resolve({ id: TEST_MONITOR_ID }) });
+    expect(typeof metadata.title).toBe("string");
+    expect((metadata.title as string).length).toBeGreaterThan(0);
   });
 });

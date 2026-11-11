@@ -598,25 +598,36 @@ test.describe("MON-AC39: another user's (or a missing) monitor → 404", () => {
     };
   }
 
-  test("MON-AC39k: GET another user's monitor → 404 page; nothing of it shown", async ({ page }) => {
+  test("MON-AC39k / A11Y-01: GET another user's monitor → 404 page titled 'Siden findes ikke'; nothing of it shown", async ({ page }) => {
     await signInToDashboard(page, E2E_MONITOR_EMAIL, password);
     const response = await page.goto(`${BASE}/monitor/monitors/${foreignId}`);
     expect(response?.status()).toBe(404);
     await expectNotFoundPage(page);
+    await expect(page).toHaveTitle(/^Siden findes ikke/);
   });
 
-  test("MON-AC39l: GET another user's monitor edit page → 404 page", async ({ page }) => {
+  test("MON-AC39l / A11Y-04: GET another user's monitor edit page → 404 page titled 'Siden findes ikke'", async ({ page }) => {
     await signInToDashboard(page, E2E_MONITOR_EMAIL, password);
     const response = await page.goto(`${BASE}/monitor/monitors/${foreignId}/edit`);
     expect(response?.status()).toBe(404);
     await expectNotFoundPage(page);
+    await expect(page).toHaveTitle(/^Siden findes ikke/);
   });
 
-  test("MON-AC39m: GET a monitor id that does not exist → 404 page", async ({ page }) => {
+  test("MON-AC39m / A11Y-02: GET a monitor id that does not exist → 404 page titled 'Siden findes ikke'", async ({ page }) => {
     await signInToDashboard(page, E2E_MONITOR_EMAIL, password);
     const response = await page.goto(`${BASE}/monitor/monitors/${randomUUID()}`);
     expect(response?.status()).toBe(404);
     await expectNotFoundPage(page);
+    await expect(page).toHaveTitle(/^Siden findes ikke/);
+  });
+
+  test("A11Y-03 / MON-AC39q: GET /monitor/monitors/not-a-uuid → 404 page titled 'Siden findes ikke'", async ({ page }) => {
+    await signInToDashboard(page, E2E_MONITOR_EMAIL, password);
+    const response = await page.goto(`${BASE}/monitor/monitors/not-a-uuid`);
+    expect(response?.status()).toBe(404);
+    await expectNotFoundPage(page);
+    await expect(page).toHaveTitle(/^Siden findes ikke/);
   });
 
   test("MON-AC39n: saving the edit form of a monitor that became another user's → 404; nothing changed", async ({ page }) => {

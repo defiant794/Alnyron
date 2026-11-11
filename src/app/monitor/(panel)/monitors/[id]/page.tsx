@@ -14,13 +14,20 @@ import { describeInterval, displayUrl, formatDateTime, formatRelative, monitorHe
 import { monitorIdSchema } from "@/lib/validation/monitor";
 import { requireMonitor } from "@/services/auth/require-role";
 import { getMonitor, listMonitorEvents } from "@/services/monitor/monitors";
+import { monitorNotFoundMetadata } from "@/services/monitor/not-found-metadata";
 
 type MonitorDetailPageProps = { params: Promise<{ id: string }> };
 
+/**
+ * The monitor's name, or the 404's title for an unknown or foreign id (a page
+ * that calls `notFound()` keeps its own metadata). No `notFound()` here: the
+ * page's `requireMonitor()` gate must decide first.
+ */
 export async function generateMetadata({ params }: MonitorDetailPageProps): Promise<Metadata> {
   const { id } = await params;
   const monitor = monitorIdSchema.safeParse(id).success ? await getMonitor(id) : null;
-  return { title: monitor ? (monitor.label ?? displayUrl(monitor.url)) : undefined, robots: MONITOR_ROBOTS };
+  if (!monitor) return monitorNotFoundMetadata();
+  return { title: monitor.label ?? displayUrl(monitor.url), robots: MONITOR_ROBOTS };
 }
 
 const DOT = { active: "bg-success", paused: "bg-muted", error: "bg-error" } as const;

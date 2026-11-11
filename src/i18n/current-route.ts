@@ -40,12 +40,15 @@ function fillTemplate(template: string, params: RouteParams): string {
  *
  * Client components rendered by the `[locale]` layout (site header and
  * footer): `useSelectedLayoutSegments` is relative to the calling layout, so
- * inside a page it would miss the page's own segments. One caller renders
- * outside `[locale]`: SiteFooter's privacy `NavLink` under the raw `/monitor`
- * area (the landing page and `MonitorShell`), with the locale from the
- * monitor layout's `NextIntlClientProvider`. There the route is built from
- * Monitor's own segments, and no Monitor route equals `/privacy`, so the
- * footer's current-page mark stays inert.
+ * inside a page it would miss the page's own segments. Two callers render
+ * outside `[locale]`, under the raw `/monitor` area, with the locale from the
+ * monitor layout's `NextIntlClientProvider`, and both inside a page (the
+ * landing page, or a panel page's `MonitorShell`), so there the route is `/`
+ * on every Monitor page: SiteFooter's privacy `NavLink`, whose absolute
+ * main-site href never equals it, so its current-page mark stays inert; and
+ * `SiteMenu` in `MonitorShell`'s header, which keys its open state to it, so
+ * there the menu closes on navigation because each panel page renders its
+ * own `MonitorShell`, which a new page mounts closed.
  */
 export function useCurrentRoute(): RouteHref {
   const params = useParams<RouteParams>();
@@ -60,9 +63,10 @@ export function useCurrentRoute(): RouteHref {
 /**
  * Locale-aware path of the current page (`/`, `/en`, `/contact`,
  * `/en/apps`): the same form as server-built nav hrefs, so equality marks the
- * current page. Client components rendered by the `[locale]` layout, plus
- * SiteFooter's `NavLink` under `/monitor`, where it never marks (see
- * {@link useCurrentRoute}).
+ * current page. Client components rendered by the `[locale]` layout, plus two
+ * under `/monitor` (see {@link useCurrentRoute}): SiteFooter's `NavLink`,
+ * where it never marks, and `MonitorShell`'s `SiteMenu`, which keys its open
+ * state to it.
  */
 export function useCurrentPath(): string {
   const href = useCurrentRoute();

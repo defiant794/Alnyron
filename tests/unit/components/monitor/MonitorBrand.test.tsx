@@ -49,15 +49,15 @@ describe("MCH-AC1/AC3/AC4: MonitorBrand renders an accessible ALNYRON link", () 
   });
 
   it("MCH-AC1b: link href matches the required href prop", () => {
-    render(<MonitorBrand href="/monitor/dashboard" />);
+    render(<MonitorBrand href="https://alnyron.dk" />);
     const link = screen.getByRole("link", { name: "Alnyron" });
-    expect(link).toHaveAttribute("href", "/monitor/dashboard");
+    expect(link).toHaveAttribute("href", "https://alnyron.dk");
   });
 
-  it("MCH-AC1c: href='/' for the landing / auth-card usage", () => {
-    render(<MonitorBrand href="/" />);
+  it("MCH-AC1c: passes the given href through unchanged", () => {
+    render(<MonitorBrand href="http://localhost:3000" />);
     const link = screen.getByRole("link", { name: "Alnyron" });
-    expect(link).toHaveAttribute("href", "/");
+    expect(link).toHaveAttribute("href", "http://localhost:3000");
   });
 
   it("MCH-AC1d: no 'Monitor' text rendered as a brand suffix", () => {

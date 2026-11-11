@@ -166,7 +166,8 @@ export default function PagesTable({ rows, labelledBy, reorder, setPageNav, labe
           {labels.errors[error]}
         </Notice>
       )}
-      <div className="overflow-x-auto">
+      {/* `relative`: the sr-only (absolute) row-name suffixes are placed and clipped here, not on the page. */}
+      <div className="relative overflow-x-auto">
         <table aria-labelledby={labelledBy} aria-busy={pending || undefined} className="w-full text-left">
           <thead>
             <tr className="border-b border-border text-small tracking-widest text-muted uppercase">

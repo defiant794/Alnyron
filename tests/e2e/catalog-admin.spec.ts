@@ -1328,4 +1328,51 @@ test.describe("Catalog admin editors (DB fixture, serial)", () => {
     // afterAll collects this path via getUploadedMediaPaths (DB JOIN) and
     // removes the bucket object via removeStorageObjects.
   });
+
+  // ── A11Y-15/16: 768px — no page overflow; table wrapper scrolls ──────────────
+
+  test("A11Y-15: at 768px wide /admin/catalog has no page overflow and CatalogOverviewTable wrapper scrolls internally", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await loginAdmin(page, adminPassword, "/admin/catalog");
+
+    const table = page.getByRole("table").first();
+    await expect(table).toBeVisible();
+
+    const metrics = await table.locator("xpath=..").evaluate((wrapper) => ({
+      wrapperScrollWidth: wrapper.scrollWidth,
+      wrapperClientWidth: wrapper.clientWidth,
+      pageScrollWidth: document.documentElement.scrollWidth,
+      pageClientWidth: document.documentElement.clientWidth,
+    }));
+
+    // The table (min-w-xl) overflows the card at 768px — the wrapper must scroll.
+    expect(metrics.wrapperScrollWidth).toBeGreaterThan(metrics.wrapperClientWidth);
+    // The page itself must not overflow.
+    expect(metrics.pageScrollWidth).toBeLessThanOrEqual(metrics.pageClientWidth);
+  });
+
+  test("A11Y-16: at 768px wide a catalog section editor has no page overflow and CatalogItemsTable wrapper scrolls internally", async ({ page }) => {
+    const appsId = await getCategoryId(pgClient, "apps");
+    // Seed a published item so CatalogItemsTable renders the table (not the empty state).
+    // The e2e-cat- prefix ensures removeCatalogTestItems() sweeps it in afterAll.
+    await addCatalogTestItem("apps", "published");
+
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await loginAdmin(page, adminPassword, `/admin/catalog/categories/${appsId}`);
+
+    const table = page.getByRole("table").first();
+    await expect(table).toBeVisible();
+
+    const metrics = await table.locator("xpath=..").evaluate((wrapper) => ({
+      wrapperScrollWidth: wrapper.scrollWidth,
+      wrapperClientWidth: wrapper.clientWidth,
+      pageScrollWidth: document.documentElement.scrollWidth,
+      pageClientWidth: document.documentElement.clientWidth,
+    }));
+
+    // The table (min-w-xl) overflows the card at 768px — the wrapper must scroll.
+    expect(metrics.wrapperScrollWidth).toBeGreaterThan(metrics.wrapperClientWidth);
+    // The page itself must not overflow.
+    expect(metrics.pageScrollWidth).toBeLessThanOrEqual(metrics.pageClientWidth);
+  });
 });

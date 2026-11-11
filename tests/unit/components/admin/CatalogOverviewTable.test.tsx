@@ -169,3 +169,25 @@ describe("AC-CATADM-05: each row has a Rediger link pointing to /admin/catalog/c
     expect(link).toHaveAttribute("href", "/admin/catalog/categories/cat-models3d");
   });
 });
+
+// ── A11Y-12: scroll wrapper is positioned, sr-only contained ─────────────────
+
+describe("A11Y-12: CatalogOverviewTable — scroll wrapper is positioned so sr-only spans are contained within it", () => {
+  it("A11Y-12: the overflow-x-auto wrapper has 'relative', every sr-only inside has its nearest positioned ancestor within the wrapper", () => {
+    render(<CatalogOverviewTable rows={BASE_ROWS} labels={LABELS} />);
+
+    const wrapper = screen.getByRole("table").parentElement;
+    expect(wrapper).toHaveClass("relative", "overflow-x-auto");
+
+    const srOnlySpans = [...(wrapper?.querySelectorAll(".sr-only") ?? [])];
+    expect(srOnlySpans.length).toBeGreaterThan(0);
+
+    for (const span of srOnlySpans) {
+      const containingBlock = span.parentElement?.closest(".relative, .absolute, .fixed, .sticky") ?? null;
+      expect(
+        containingBlock !== null && wrapper?.contains(containingBlock),
+        `sr-only "${span.textContent?.trim()}" must have its nearest positioned ancestor inside the scroll wrapper`,
+      ).toBe(true);
+    }
+  });
+});

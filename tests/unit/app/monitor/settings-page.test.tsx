@@ -38,6 +38,14 @@ vi.mock("@/components/site/SiteFooter", () => ({
     <footer data-testid="site-footer" data-locale={locale} />
   ),
 }));
+vi.mock("@/components/monitor/MonitorMainNav", () => ({
+  default: () => <nav aria-label="Hovednavigation" data-testid="monitor-main-nav" />,
+}));
+// SiteMenu (the shell's small-screen "Menu" disclosure) reads the App Router's
+// current route, which a page test has no context for; render its contents.
+vi.mock("@/components/site/SiteMenu", () => ({
+  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
 
 import SettingsPage from "@/app/monitor/(panel)/settings/page";
 import { loadMessages } from "@/i18n/messages";

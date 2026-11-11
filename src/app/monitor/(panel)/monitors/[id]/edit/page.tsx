@@ -9,10 +9,19 @@ import { MONITOR_ROBOTS, monitorDetailPath } from "@/config/monitor";
 import { minutesToInterval, monitorIdSchema } from "@/lib/validation/monitor";
 import { requireMonitor } from "@/services/auth/require-role";
 import { getMonitor } from "@/services/monitor/monitors";
+import { monitorNotFoundMetadata } from "@/services/monitor/not-found-metadata";
 
 type EditMonitorPageProps = { params: Promise<{ id: string }> };
 
-export async function generateMetadata(): Promise<Metadata> {
+/**
+ * "Rediger overvågning", or the 404's title for an unknown or foreign id (a
+ * page that calls `notFound()` keeps its own metadata). No `notFound()` here:
+ * the page's `requireMonitor()` gate must decide first.
+ */
+export async function generateMetadata({ params }: EditMonitorPageProps): Promise<Metadata> {
+  const { id } = await params;
+  const monitor = monitorIdSchema.safeParse(id).success ? await getMonitor(id) : null;
+  if (!monitor) return monitorNotFoundMetadata();
   const t = await getTranslations({ locale: AUTH_LOCALE, namespace: "Monitor.monitors.edit" });
   return { title: t("metaTitle"), robots: MONITOR_ROBOTS };
 }
