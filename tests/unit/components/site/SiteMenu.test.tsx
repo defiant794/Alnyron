@@ -7,11 +7,16 @@
 //   at the panel that holds the header contents;
 // - Escape closes the open panel and returns focus to the toggle;
 // - a link click inside the panel closes it (also a link to the page shown);
-// - navigating to another page closes it.
+// - navigating to another page closes it;
+// - focus moving to an element outside the menu closes it (WCAG 2.4.7 / 2.4.11:
+//   the open panel overlays the content below the header and would hide the
+//   next focus ring), while focus moving within the menu keeps it open, and so
+//   does focus moving to nothing (no focus ring to hide; closing on it breaks
+//   the toggle in WebKit, which drops focus when a button is clicked).
 // jsdom loads no CSS, so "open" is asserted through aria-expanded and the
 // `hidden` class that hides the panel below md.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { NextIntlClientProvider } from "next-intl";
@@ -36,10 +41,10 @@ import SiteMenu from "@/components/site/SiteMenu";
 afterEach(cleanup);
 
 /**
- * Renders the menu around header-like contents on the DA page with the
- * internal `segments` (`[]` is the home page). `navigate` re-renders on
- * another page, as a client-side navigation does (the header layout, and so
- * the menu state, survives it).
+ * Renders the menu around header-like contents, followed by a link outside
+ * it, on the DA page with the internal `segments` (`[]` is the home page).
+ * `navigate` re-renders on another page, as a client-side navigation does
+ * (the header layout, and so the menu state, survives it).
  */
 function renderMenu(segments: string[] = []) {
   route.segments = segments;
@@ -55,6 +60,8 @@ function renderMenu(segments: string[] = []) {
         </nav>
         <p>Sprog</p>
       </SiteMenu>
+      {/* Focusable content after the menu, as the Monitor app bar under the header row. */}
+      <a href="#efter">Efter menuen</a>
     </NextIntlClientProvider>
   );
   const { rerender } = render(ui());
@@ -131,12 +138,14 @@ describe("SiteMenu: closes on a link click and on navigation", () => {
     expect(panel).toHaveClass("hidden");
   });
 
-  it("a click on non-link content in the panel keeps it open", async () => {
-    const { user, toggle } = renderMenu();
+  it("a click on non-link content in the panel keeps it open, also while the toggle has focus", async () => {
+    const { user, toggle, panel } = renderMenu();
     await user.click(toggle);
+    expect(toggle).toHaveFocus();
 
     await user.click(screen.getByText("Sprog"));
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(panel).not.toHaveClass("hidden");
   });
 
   it("navigating to another page closes the open panel", async () => {
@@ -147,5 +156,72 @@ describe("SiteMenu: closes on a link click and on navigation", () => {
     navigate(["contact"]);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(panel).toHaveClass("hidden");
+  });
+});
+
+// ── Focus leaving the menu ───────────────────────────────────────────────────
+
+describe("SiteMenu: closes when focus leaves the menu", () => {
+  it("Tab from the last panel link to content after the menu closes the panel, so that content's focus is not hidden", async () => {
+    const { user, toggle, panel } = renderMenu();
+    await user.click(toggle);
+    screen.getByRole("link", { name: "Kontakt" }).focus();
+
+    await user.tab();
+    expect(screen.getByRole("link", { name: "Efter menuen" })).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(panel).toHaveClass("hidden");
+  });
+
+  it("focus moving to nothing (a click on non-focusable page content, a window switch) keeps the panel open: no focus ring is hidden", async () => {
+    const { user, toggle, panel } = renderMenu();
+    await user.click(toggle);
+    expect(toggle).toHaveFocus();
+
+    await user.click(document.body);
+    expect(document.body).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(panel).not.toHaveClass("hidden");
+  });
+
+  it("the toggle still closes the panel when the click first drops focus to nothing, as in WebKit", async () => {
+    const { user, toggle, panel } = renderMenu();
+    await user.click(toggle);
+    const link = screen.getByRole("link", { name: "Kontakt" });
+    link.focus();
+
+    // WebKit does not focus a clicked button: mousedown drops focus from the
+    // panel link to nothing (focusout with a null relatedTarget), then the
+    // click lands on the unfocused toggle.
+    fireEvent.focusOut(link, { relatedTarget: null });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(panel).toHaveClass("hidden");
+  });
+
+  it("Tab and Shift+Tab between the toggle and the panel links keep the panel open", async () => {
+    const { user, toggle, panel } = renderMenu();
+    await user.click(toggle);
+
+    await user.tab();
+    expect(screen.getByRole("link", { name: "Kontakt" })).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.tab({ shift: true });
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(panel).not.toHaveClass("hidden");
+  });
+
+  it("focus leaving the closed menu leaves it closed", async () => {
+    const { user, toggle } = renderMenu();
+    toggle.focus();
+
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole("link", { name: "Efter menuen" })).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 });

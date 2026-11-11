@@ -13,7 +13,7 @@ import { siteOrigin } from "@/config/site-origin";
 import { loadMessages } from "@/i18n/messages";
 import { cx } from "@/lib/cx";
 
-/** Panel destinations in the top bar. */
+/** Panel destinations in the slim app bar. */
 export type MonitorSection = "dashboard" | "settings";
 
 export type MonitorShellProps = {
@@ -31,25 +31,26 @@ const CURRENT =
   "aria-[current]:font-semibold aria-[current]:text-fg aria-[current]:underline aria-[current]:decoration-accent aria-[current]:decoration-2 aria-[current]:underline-offset-8";
 
 /**
- * Monitor panel frame (approved dashboard mock): a top bar with the site's
- * ALNYRON lockup, linked to the main site's frontpage (`siteOrigin`, from
- * `NEXT_PUBLIC_SITE_URL`), and the main site's own navigation beside it
- * (`MonitorMainNav`, absolute links to the main site); then the panel's two
- * destinations (no sidebar, per the brief), the account and "Log ud". The
- * two navigation landmarks carry distinct labels. The page sits in a
- * centered column up to 1120px; the site footer (Danish) below, whose
- * privacy link is the main site's absolute URL. Below 768px the site
- * navigation collapses behind a "Menu" button (`SiteMenu`, as in the main
- * site's header, DESIGN.md Nav); from 768px up it sits inline. The bar wraps
- * on small screens in reading order (the brand row with the menu, then the
- * panel navigation and account on their own row), so nothing comes between
- * the panel navigation and the page. The brand row is the menu's positioned
- * container, so the open menu drops down right under its button (over the
- * row below): its links come next on screen as in the focus order, before
- * the panel navigation (WCAG 2.4.3). Each panel page renders
- * it with its own `requireMonitor()` user (a synchronous component, so pages
- * render it like any element; the async `MonitorMainNav` and `SiteFooter`
- * are server component children, rendered by RSC).
+ * Monitor panel frame (approved dashboard mock): a two-row header that
+ * mirrors the rest of the site. Row 1 is the site-style top bar, as
+ * `SiteHeader`: the site's ALNYRON lockup on the left, linked to the main
+ * site's frontpage (`siteOrigin`, from `NEXT_PUBLIC_SITE_URL`), and the main
+ * site's own navigation on the right (`MonitorMainNav`, the admin-controlled
+ * nav as absolute links to the main site). Below 768px that navigation
+ * collapses behind a "Menu" button (`SiteMenu`, DESIGN.md Nav); from 768px
+ * up it sits inline. The top bar is the menu's positioned container, so the
+ * open menu spans the bar and drops down right under it, over the app bar:
+ * its links follow the button on screen as in the focus order (WCAG 2.4.3).
+ * Row 2, under a divider, is the slim Monitor app bar: the panel's two
+ * destinations (no sidebar, per the brief) on the left, the account and
+ * "Log ud" on the right; it wraps on small screens in reading order. The
+ * two navigation landmarks carry distinct labels; no language switcher (the
+ * panel is Danish only). Both rows and the page sit in a centered column up
+ * to 1120px; the site footer (Danish) below, whose privacy link is the main
+ * site's absolute URL. Each panel page renders it with its own
+ * `requireMonitor()` user (a synchronous component, so pages render it like
+ * any element; the async `MonitorMainNav` and `SiteFooter` are server
+ * component children, rendered by RSC).
  */
 export default function MonitorShell({ email, section, sectionPage = true, children }: MonitorShellProps) {
   const messages = loadMessages(AUTH_LOCALE);
@@ -62,15 +63,14 @@ export default function MonitorShell({ email, section, sectionPage = true, child
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-border">
-        {/* Below 768px the rows carry the side padding, so the brand row (and the menu panel under it) spans the bar. */}
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3 md:px-6">
-          <div className="relative z-10 flex w-full flex-wrap items-center gap-x-6 gap-y-2 px-6 md:w-auto md:px-0">
-            <MonitorBrand href={siteOrigin()} />
-            <SiteMenu toggleLabel={messages.Nav.menu}>
-              <MonitorMainNav />
-            </SiteMenu>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 md:px-0">
+        <div className="relative z-10 mx-auto flex max-w-content flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-3">
+          <MonitorBrand href={siteOrigin()} />
+          <SiteMenu toggleLabel={messages.Nav.menu}>
+            <MonitorMainNav />
+          </SiteMenu>
+        </div>
+        <div className="border-t border-border">
+          <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-x-6 gap-y-1 px-6 py-2">
             <nav aria-label={t("shell.navLabel")}>
               <ul className="flex flex-wrap items-center gap-x-4">
                 {items.map(({ key, href, label }) => (

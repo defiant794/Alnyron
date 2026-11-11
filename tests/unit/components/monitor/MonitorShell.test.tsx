@@ -2,15 +2,18 @@
 /**
  * Unit tests: src/components/monitor/MonitorShell.tsx
  * Journey: monitor-chrome  MCH-AC3; monitor-ship-routing  SHIP-AC8c
- * Journey: monitor-panel-nav  MPN-AC1a, MPN-AC1b, MPN-AC1c, MPN-AC2d, MPN-AC2e, MPN-AC3a, MPN-AC3b, MPN-AC3c, MPN-AC4a, MPN-AC4c
+ * Journey: monitor-panel-nav  MPN-AC1a, MPN-AC1b, MPN-AC1c, MPN-AC2, MPN-AC2d, MPN-AC2e, MPN-AC3a, MPN-AC3b, MPN-AC3c, MPN-AC4a, MPN-AC4b, MPN-AC4c
  *
  * Verifies: brand link accessible name is "Alnyron" (no "Monitor" suffix),
  * brand link href is the MAIN-SITE ORIGIN (not MONITOR_DASHBOARD_PATH — MPN-AC1a),
  * SiteFooter is rendered after <main> with locale="da",
  * SiteFooter gets the main site's origin (`siteOrigin`, from NEXT_PUBLIC_SITE_URL),
  * the main-site nav landmark is present and distinct from the panel nav (MPN-AC2d, MPN-AC2e),
- * the main-site nav sits in the small-screen "Menu" disclosure (MPN-AC4a), apart from the brand,
- * panel nav and account, and ahead of the panel nav in focus order (MPN-AC4c),
+ * the header is two rows (MPN-AC2): the site-style top bar (brand left, main-site
+ * nav right — MPN-AC4b) and, under a divider, the slim Monitor app bar (panel nav
+ * left, account right). The main-site nav sits in the small-screen "Menu"
+ * disclosure (MPN-AC4a) opening under the top bar, before the app bar's panel nav
+ * and account in focus order (MPN-AC4c),
  * and the panel's own Dashboard/Settings nav + account/Log ud remain intact (MPN-AC3a, MPN-AC3b, MPN-AC3c).
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
@@ -177,6 +180,10 @@ describe("MPN-AC4: the main-site nav collapses behind a 'Menu' hamburger below 7
     const toggle = screen.getByRole("button", { name: "Menu" });
     return { toggle, panel: document.getElementById(toggle.getAttribute("aria-controls") ?? "") };
   }
+  /** The top bar: the menu panel is `absolute top-full`, so it opens under its nearest positioned (`relative`) ancestor. */
+  function topBar() {
+    return menuPanel().panel?.parentElement?.closest<HTMLElement>(".relative") ?? null;
+  }
   /** Whether `b` comes after `a` in document (and so focus) order. */
   const follows = (a: Node | null, b: Node | null) =>
     a !== null && b !== null && Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -196,22 +203,49 @@ describe("MPN-AC4: the main-site nav collapses behind a 'Menu' hamburger below 7
     expect(panel).not.toContainElement(screen.getByRole("button", { name: "Log ud" }));
   });
 
-  it("MPN-AC4c: in focus order the toggle comes first, then its panel, then the panel nav and the account", () => {
+  it("MPN-AC4c: focus order is brand, toggle, its panel, then the app bar's panel nav and Log ud", () => {
     renderShell();
     const { toggle, panel } = menuPanel();
+    const brand = screen.getByRole("link", { name: "Alnyron" });
     const dashboard = screen.getByRole("link", { name: "Overvågninger" });
+    const signOut = screen.getByRole("button", { name: "Log ud" });
+    expect(follows(brand, toggle)).toBe(true);
     expect(follows(toggle, panel)).toBe(true);
     expect(follows(panel, dashboard)).toBe(true);
-    expect(follows(dashboard, screen.getByRole("button", { name: "Log ud" }))).toBe(true);
+    expect(follows(dashboard, signOut)).toBe(true);
   });
 
-  it("MPN-AC4c: the open panel drops down under the brand row, not under the whole wrapped bar", () => {
+  it("MPN-AC2/MPN-AC4b: the menu opens under the site-style top bar, which holds the brand (left) and the main-site nav (right) only", () => {
     renderShell();
-    const { panel } = menuPanel();
-    // The panel is `absolute top-full`: it opens under its nearest positioned (`relative`) ancestor.
-    const container = panel?.parentElement?.closest(".relative") ?? null;
-    expect(container).toContainElement(screen.getByRole("link", { name: "Alnyron" }));
-    expect(container).not.toContainElement(screen.getByRole("link", { name: "Overvågninger" }));
+    const bar = topBar();
+    // Row 1 of the header, and the menu's positioned container (so the open panel spans the bar).
+    expect(screen.getByRole("banner").firstElementChild).toBe(bar);
+    expect(bar?.firstElementChild).toContainElement(screen.getByRole("link", { name: "Alnyron" }));
+    expect(bar?.lastElementChild).toContainElement(screen.getByRole("navigation", { name: "Hovednavigation" }));
+    expect(bar).not.toContainElement(screen.getByRole("navigation", { name: "Monitor" }));
+    expect(bar).not.toContainElement(screen.getByRole("link", { name: "Overvågninger" }));
+    expect(bar).not.toContainElement(screen.getByRole("button", { name: "Log ud" }));
+  });
+
+  it("MPN-AC2: the slim app bar under the divider holds the panel nav (left) and the account (right), not the brand or the main-site nav", () => {
+    renderShell();
+    const appBar = topBar()?.nextElementSibling ?? null;
+    // Row 2 of the header, right under the top bar.
+    expect(appBar?.parentElement).toBe(screen.getByRole("banner"));
+    // The divider between the top bar and the app bar.
+    expect(appBar).toHaveClass("border-t");
+    const row = appBar?.firstElementChild ?? null;
+    const panelNav = screen.getByRole("navigation", { name: "Monitor" });
+    expect(row?.firstElementChild).toBe(panelNav);
+    expect(panelNav).toContainElement(screen.getByRole("link", { name: "Overvågninger" }));
+    expect(panelNav).toContainElement(screen.getByRole("link", { name: "Indstillinger" }));
+    const account = screen.getByRole("region", { name: "Konto" });
+    expect(row?.lastElementChild).toBe(account);
+    expect(account).toContainElement(screen.getByText("test@test.local"));
+    expect(account).toContainElement(screen.getByRole("button", { name: "Log ud" }));
+    expect(appBar).not.toContainElement(screen.getByRole("link", { name: "Alnyron" }));
+    expect(appBar).not.toContainElement(screen.getByRole("navigation", { name: "Hovednavigation" }));
+    expect(appBar).not.toContainElement(screen.getByRole("button", { name: "Menu" }));
   });
 });
 
