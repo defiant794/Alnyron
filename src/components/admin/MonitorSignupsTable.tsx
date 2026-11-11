@@ -4,6 +4,7 @@ import { unstable_rethrow } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition, type RefObject } from "react";
 import { deleteMonitorSignup } from "@/app/admin/(panel)/monitor-users/actions";
 import DeleteMonitorSignupDialog, { type DeleteMonitorSignupDialogLabels } from "@/components/admin/DeleteMonitorSignupDialog";
+import MonitorSiteLinks, { type MonitorSiteLinksLabels } from "@/components/admin/MonitorSiteLinks";
 import Badge, { type BadgeTone } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { cx } from "@/lib/cx";
@@ -23,11 +24,12 @@ export type MonitorSignupsTableProps = {
   summary: string;
   /** Status badge text of each status. */
   statuses: Record<MonitorSignupStatus, string>;
-  labels: {
+  labels: MonitorSiteLinksLabels & {
     /** Column headings. */
     email: string;
     signedUp: string;
     status: string;
+    sites: string;
     monitors: string;
     actions: string;
     /** Shown instead of the table when there are no signups. */
@@ -67,13 +69,13 @@ function focusAfterRemoval(
  * status: the address (row header), when the account was created (Danish
  * time), its status (Tilmeldt: confirmed; Afventer bekræftelse: unconfirmed
  * within the confirm window; Udløbet: unconfirmed after it, row muted), the
- * number of monitors and "Slet", which opens `DeleteMonitorSignupDialog`. On
- * success the dialog closes, the refreshed list drops the row and the focus
- * moves to the delete button now in its place (the empty text after the last
- * row); a failure (a dropped request included) shows an alert in the dialog,
- * opened again if the browser closed it meanwhile, and leaves the row. Narrow
- * screens scroll the table sideways; without signups only the empty text is
- * shown.
+ * sites it watches (`MonitorSiteLinks`), the number of monitors and "Slet",
+ * which opens `DeleteMonitorSignupDialog`. On success the dialog closes, the
+ * refreshed list drops the row and the focus moves to the delete button now in
+ * its place (the empty text after the last row); a failure (a dropped request
+ * included) shows an alert in the dialog, opened again if the browser closed
+ * it meanwhile, and leaves the row. Narrow screens scroll the table sideways;
+ * without signups only the empty text is shown.
  */
 export default function MonitorSignupsTable({ rows, labelledBy, summary, statuses, labels }: MonitorSignupsTableProps) {
   const [pending, startTransition] = useTransition();
@@ -129,7 +131,7 @@ export default function MonitorSignupsTable({ rows, labelledBy, summary, statuse
       ) : (
         <>
           <p id={summaryId} className="text-small text-muted">{summary}</p>
-          {/* `relative`: the sr-only (absolute) Slet suffixes are placed and clipped here, not on the page. */}
+          {/* `relative`: the sr-only (absolute) link and Slet suffixes are placed and clipped here, not on the page. */}
           <div className="relative overflow-x-auto">
             <table
               aria-labelledby={labelledBy}
@@ -142,6 +144,7 @@ export default function MonitorSignupsTable({ rows, labelledBy, summary, statuse
                   <th scope="col" className="py-3 pr-4 font-semibold">{labels.email}</th>
                   <th scope="col" className="py-3 pr-4 font-semibold">{labels.signedUp}</th>
                   <th scope="col" className="py-3 pr-4 font-semibold">{labels.status}</th>
+                  <th scope="col" className="py-3 pr-4 font-semibold">{labels.sites}</th>
                   <th scope="col" className="py-3 pr-4 text-right font-semibold">{labels.monitors}</th>
                   <th scope="col" className="py-3 text-right font-semibold">{labels.actions}</th>
                 </tr>
@@ -163,6 +166,7 @@ export default function MonitorSignupsTable({ rows, labelledBy, summary, statuse
                     <td className="py-4 pr-4">
                       <Badge tone={STATUS_TONES[row.status]}>{statuses[row.status]}</Badge>
                     </td>
+                    <td className="py-4 pr-4"><MonitorSiteLinks sites={row.monitors} labels={labels} /></td>
                     <td className="py-4 pr-4 text-right tabular-nums">{row.monitorCount}</td>
                     <td className="py-4 text-right">
                       <Button

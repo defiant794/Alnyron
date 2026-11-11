@@ -1,13 +1,15 @@
 /**
- * Integration tests — admin_list_monitor_signups RPC (admin-monitor-users)
+ * Integration tests — admin_list_monitor_signups RPC (admin-monitor-users, admin-monitor-users-sites)
  * Journey: admin-monitor-users  AC-AMU-10, AC-AMU-12, AC-AMU-14, AC-AMU-15,
  *          AC-AMU-22, AC-AMU-23, AC-AMU-24, AC-AMU-25
+ * Journey: admin-monitor-users-sites  the monitors jsonb array (via AC-AMU-14/15 exact shape)
  *
  * Run against the isolated e2e project:
  *   npm run test:integration:e2e-project -- tests/integration/rls/rls-admin-monitor-signups.test.ts
  *
  * Covers:
- *   - Owner (AC-AMU-14) and admin (AC-AMU-15) can call admin_list_monitor_signups() — exact row shape
+ *   - Owner (AC-AMU-14) and admin (AC-AMU-15) can call admin_list_monitor_signups() — exact row shape,
+ *     including the monitors array ({url, label, status} ordered by created_at, id; [] without monitors)
  *   - Newer signup before older signup (order: created_at desc, user_id)
  *   - Non-monitor_user profiles excluded (owner/admin/mylife_user/null role)
  *   - Every NON_ADMIN_FIXTURE + monitor_user caller → 42501
@@ -70,6 +72,11 @@ const NEWER_ROW = {
   created_at: new Date(TS_NEWER),
   confirmed: true,
   monitor_count: 2,
+  // monitors ordered by created_at, id; seedFixtures inserts AMU A at 09:01 and AMU B at 09:02
+  monitors: [
+    { url: "https://amu-newer-a.example.com", label: "AMU A", status: "active" },
+    { url: "https://amu-newer-b.example.com", label: null,    status: "paused" },
+  ],
 };
 const OLDER_ROW = {
   user_id: MONITOR_OLDER_UUID,
@@ -77,6 +84,7 @@ const OLDER_ROW = {
   created_at: new Date(TS_OLDER),
   confirmed: false,
   monitor_count: 0,
+  monitors: [],
 };
 
 /** monitor_user caller that must never pass private.is_admin(). */
@@ -124,10 +132,12 @@ async function seedFixtures(c: PoolClient): Promise<void> {
      ON CONFLICT (user_id) DO UPDATE SET monitor_limit = NULL`,
     [MONITOR_NEWER_UUID, MONITOR_NEWER_EMAIL],
   );
+  // Two monitors with explicit created_at so ORDER BY created_at, id is deterministic.
+  // AMU B has label=null and status=paused to cover those mapping paths.
   await c.query(
-    `INSERT INTO public.monitors (user_id, url, label, status, consecutive_errors, interval_minutes)
-     VALUES ($1, 'https://amu-newer-a.example.com', 'AMU A', 'active', 0, 1440),
-            ($1, 'https://amu-newer-b.example.com', 'AMU B', 'active', 0, 1440)`,
+    `INSERT INTO public.monitors (user_id, url, label, status, consecutive_errors, interval_minutes, created_at)
+     VALUES ($1, 'https://amu-newer-a.example.com', 'AMU A', 'active', 0, 1440, '2026-10-15T09:01:00.000Z'::timestamptz),
+            ($1, 'https://amu-newer-b.example.com', NULL,    'paused', 0, 1440, '2026-10-15T09:02:00.000Z'::timestamptz)`,
     [MONITOR_NEWER_UUID],
   );
 
@@ -154,6 +164,7 @@ interface SignupRow {
   created_at: Date;
   confirmed: boolean;
   monitor_count: number;
+  monitors: Array<{ url: string; label: string | null; status: string }>;
 }
 
 async function callRpc(c: PoolClient): Promise<SignupRow[]> {

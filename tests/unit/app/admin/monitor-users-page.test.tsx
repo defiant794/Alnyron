@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /**
- * Unit test — `/admin/monitor-users` page (admin-monitor-users-cleanup)
+ * Unit test — `/admin/monitor-users` page (admin-monitor-users-cleanup + admin-monitor-users-sites)
  * Journey: admin-monitor-users       AC-AMU-01, AC-AMU-02, AC-AMU-02c, AC-AMU-04, AC-AMU-11, AC-AMU-13, AC-AMU-20, AC-AMU-21
  * Journey: admin-monitor-users-cleanup  AMC-16, AMC-21, AMC-27, AMC-28
+ * Journey: admin-monitor-users-sites    AMSS-13, Overvåger da.json copy pins (Overvåger header: AMC-16)
  *
  * Pattern follows tests/unit/app/monitor/dashboard-page.test.tsx:
  *  - next-intl/server mocked with the real createTranslator, so the ICU
@@ -113,6 +114,7 @@ const ROWS: MonitorSignup[] = [
     signedUpAt: "2026-10-15T09:00:00.000Z",
     confirmed: true,
     monitorCount: 2,
+    monitors: [],
   },
   {
     userId: "u-older",
@@ -120,6 +122,7 @@ const ROWS: MonitorSignup[] = [
     signedUpAt: "2026-09-01T14:30:00.000Z",
     confirmed: false,
     monitorCount: 0,
+    monitors: [],
   },
 ];
 
@@ -140,6 +143,7 @@ const ROWS_STATUS: MonitorSignup[] = [
     signedUpAt: "2026-11-10T11:30:00.000Z",
     confirmed: true,
     monitorCount: 1,
+    monitors: [],
   },
   {
     userId: "u-pending",
@@ -148,6 +152,7 @@ const ROWS_STATUS: MonitorSignup[] = [
     signedUpAt: "2026-11-10T11:55:00.000Z",
     confirmed: false,
     monitorCount: 0,
+    monitors: [],
   },
   {
     userId: "u-expired",
@@ -156,6 +161,7 @@ const ROWS_STATUS: MonitorSignup[] = [
     signedUpAt: "2026-11-10T11:49:00.000Z",
     confirmed: false,
     monitorCount: 0,
+    monitors: [],
   },
 ];
 
@@ -165,11 +171,11 @@ const ROWS_STATUS: MonitorSignup[] = [
  * 2 registered, 0 pending and 3 expired.
  */
 const ROWS_PLURAL: MonitorSignup[] = [
-  { userId: "u-p1", email: "p1@example.com", signedUpAt: "2026-11-10T11:30:00.000Z", confirmed: true, monitorCount: 1 },
-  { userId: "u-p2", email: "p2@example.com", signedUpAt: "2026-11-09T12:00:00.000Z", confirmed: true, monitorCount: 0 },
-  { userId: "u-p3", email: "p3@example.com", signedUpAt: "2026-11-10T11:49:00.000Z", confirmed: false, monitorCount: 0 },
-  { userId: "u-p4", email: "p4@example.com", signedUpAt: "2026-11-10T11:00:00.000Z", confirmed: false, monitorCount: 0 },
-  { userId: "u-p5", email: "p5@example.com", signedUpAt: "2026-11-09T12:00:00.000Z", confirmed: false, monitorCount: 0 },
+  { userId: "u-p1", email: "p1@example.com", signedUpAt: "2026-11-10T11:30:00.000Z", confirmed: true,  monitorCount: 1, monitors: [] },
+  { userId: "u-p2", email: "p2@example.com", signedUpAt: "2026-11-09T12:00:00.000Z", confirmed: true,  monitorCount: 0, monitors: [] },
+  { userId: "u-p3", email: "p3@example.com", signedUpAt: "2026-11-10T11:49:00.000Z", confirmed: false, monitorCount: 0, monitors: [] },
+  { userId: "u-p4", email: "p4@example.com", signedUpAt: "2026-11-10T11:00:00.000Z", confirmed: false, monitorCount: 0, monitors: [] },
+  { userId: "u-p5", email: "p5@example.com", signedUpAt: "2026-11-09T12:00:00.000Z", confirmed: false, monitorCount: 0, monitors: [] },
 ];
 
 const OWNER_USER = { userId: "u-1", email: "ejer@example.com", role: "owner" as const };
@@ -253,10 +259,10 @@ describe("AC-AMU-13: AdminMonitorUsersPage — table labelled by the h2 'Tilmeld
   });
 });
 
-// ── AMC-16: five column headers in order ─────────────────────────────────────
+// ── AMC-16: six column headers in order ───────────────────────────────────────
 
-describe("AMC-16: AdminMonitorUsersPage — five column headers from da.json in order", () => {
-  it("AMC-16: renders column headers E-mail, Oprettet, Status, Overvågninger, Handlinger in order", async () => {
+describe("AMC-16: AdminMonitorUsersPage — six column headers from da.json in order", () => {
+  it("AMC-16: renders column headers E-mail, Oprettet, Status, Overvåger, Overvågninger, Handlinger in order", async () => {
     mockListMonitorSignups.mockResolvedValue(ROWS);
 
     render(await AdminMonitorUsersPage());
@@ -265,8 +271,10 @@ describe("AMC-16: AdminMonitorUsersPage — five column headers from da.json in 
     expect(headers[0]).toHaveTextContent(DA_EMAIL);
     expect(headers[1]).toHaveTextContent(DA_OPRETTET);
     expect(headers[2]).toHaveTextContent(DA_STATUS);
-    expect(headers[3]).toHaveTextContent(DA_MONITORS);
-    expect(headers[4]).toHaveTextContent(DA_ACTIONS);
+    // headers[3] = Overvåger (new)
+    expect(headers[3]).toHaveTextContent("Overvåger");
+    expect(headers[4]).toHaveTextContent(DA_MONITORS);
+    expect(headers[5]).toHaveTextContent(DA_ACTIONS);
   });
 });
 
@@ -548,5 +556,60 @@ describe("da.json Admin.monitorUsers — all contract keys pinned", () => {
   it("AC-AMU-01-da: Admin.nav.monitorUsers === 'Monitor-brugere'", () => {
     const nav = da.Admin.nav as Record<string, unknown>;
     expect(nav["monitorUsers"]).toBe(DA_NAV_LABEL);
+  });
+});
+
+// ── AMSS da.json key pins — new copy for Overvåger column ────────────────────
+// Journey: admin-monitor-users-sites   AC: da.json has sites/none/paused/newTab keys
+
+describe("da.json Admin.monitorUsers — Overvåger column copy (AMSS)", () => {
+  function monitorUsers(): Record<string, unknown> {
+    const admin = da.Admin as Record<string, unknown>;
+    return (admin["monitorUsers"] ?? {}) as Record<string, unknown>;
+  }
+
+  function table(): Record<string, unknown> {
+    return (monitorUsers()["table"] ?? {}) as Record<string, unknown>;
+  }
+
+  function sites(): Record<string, unknown> {
+    return (monitorUsers()["sites"] ?? {}) as Record<string, unknown>;
+  }
+
+  it("AMSS-da-table-sites: Admin.monitorUsers.table.sites === 'Overvåger'", () => {
+    expect(table()["sites"]).toBe("Overvåger");
+  });
+
+  it("AMSS-da-sites-none: Admin.monitorUsers.sites.none === 'Ingen'", () => {
+    expect(sites()["none"]).toBe("Ingen");
+  });
+
+  it("AMSS-da-sites-paused: Admin.monitorUsers.sites.paused === 'sat på pause'", () => {
+    expect(sites()["paused"]).toBe("sat på pause");
+  });
+
+  it("AMSS-da-sites-newTab: Admin.monitorUsers.sites.newTab === 'åbner i ny fane'", () => {
+    expect(sites()["newTab"]).toBe("åbner i ny fane");
+  });
+});
+
+// ── AMSS-13: page passes monitors through to the table rows ──────────────────
+// Journey: admin-monitor-users-sites   AC: page passes monitors array to table
+
+describe("AMSS-13: AdminMonitorUsersPage — monitors array flows through to MonitorSignupsTable rows", () => {
+  it("AMSS-13: a row with 1 monitor renders a link in the Overvåger column", async () => {
+    const rowWithSite: MonitorSignup = {
+      userId: "u-with-site",
+      email: "site@example.com",
+      signedUpAt: "2026-10-20T10:00:00.000Z",
+      confirmed: true,
+      monitorCount: 1,
+      monitors: [{ url: "https://my-site.example.com", label: "My Site", status: "active" }],
+    };
+    mockListMonitorSignups.mockResolvedValue([rowWithSite]);
+
+    render(await AdminMonitorUsersPage());
+
+    expect(screen.getByRole("link", { name: /My Site/i })).toBeInTheDocument();
   });
 });

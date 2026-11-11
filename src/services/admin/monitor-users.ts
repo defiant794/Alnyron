@@ -1,5 +1,15 @@
 import { createServerClient } from "@/lib/supabase/server";
 
+/** One site a Monitor signup watches (a monitor of the account). */
+export interface MonitorSite {
+  /** The watched page (always http(s): the `monitors_url_valid` check). */
+  url: string;
+  /** The name the user gave it, or null without one. */
+  label: string | null;
+  /** Whether it is checked (`active`) or the user paused it. */
+  status: "active" | "paused";
+}
+
 /** One public Monitor signup in the admin list. */
 export interface MonitorSignup {
   /** The account's user id (what `deleteMonitorUser` takes). */
@@ -12,6 +22,8 @@ export interface MonitorSignup {
   confirmed: boolean;
   /** How many monitors the account has. */
   monitorCount: number;
+  /** The account's monitors, oldest first. */
+  monitors: MonitorSite[];
 }
 
 /**
@@ -44,6 +56,9 @@ export async function listMonitorSignups(): Promise<MonitorSignup[]> {
     signedUpAt: row.created_at,
     confirmed: row.confirmed,
     monitorCount: row.monitor_count,
+    // The RPC builds this jsonb array of {url, label, status} itself ([] without monitors), so its
+    // shape is not checked again; a row of the RPC before 20261111000300 has none.
+    monitors: Array.isArray(row.monitors) ? (row.monitors as unknown as MonitorSite[]) : [],
   }));
 }
 

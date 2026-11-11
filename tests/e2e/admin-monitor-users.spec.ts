@@ -1,13 +1,14 @@
 /**
- * E2E tests — /admin/monitor-users (admin-monitor-users-cleanup)
+ * E2E tests — /admin/monitor-users (admin-monitor-users-cleanup + admin-monitor-users-sites)
  * Journey: admin-monitor-users       AC-AMU-01, AC-AMU-02, AC-AMU-04, AC-AMU-05, AC-AMU-09, AC-AMU-16,
  *                                    AC-AMU-20, AC-AMU-21
  * Journey: admin-monitor-users-cleanup  AMC-16, AMC-18, AMC-19, AMC-20, AMC-21,
  *                                        AMC-22, AMC-23, AMC-26, E2E-AMC-1..4
+ * Journey: admin-monitor-users-sites    AMSS-E-1, AMSS-E-2, AMSS-E-3 (Overvåger header: AMC-16)
  *
  * Approach: cloud-only (no local Docker).
- *   - Seeds dedicated admin + three monitor_user fixtures (confirmed, fresh-pending,
- *     expired) + a non-admin, all via pg, then logs in.
+ *   - Seeds dedicated admin + four monitor_user fixtures (confirmed, fresh-pending,
+ *     expired, sites with two monitors) + a non-admin, all via pg, then logs in.
  *   - The e2e project is shared: asserts only on fixture rows, never on total row count.
  *   - beforeAll removes leftovers of an aborted run before seeding; afterAll removes
  *     the fixtures, then release → endPool.
@@ -32,16 +33,23 @@ import {
   E2E_AMU_NONADMIN_EMAIL,
   E2E_AMU_FRESH_EMAIL,
   E2E_AMU_EXPIRED_EMAIL,
+  E2E_AMU_SITES_EMAIL,
+  E2E_AMU_SITES_LABEL_ACTIVE,
+  E2E_AMU_SITES_URL_ACTIVE,
+  E2E_AMU_SITES_URL_PAUSED,
+  E2E_AMU_SITES_DISPLAY_PAUSED,
   seedE2eAmuAdmin,
   seedE2eAmuMonitorUser,
   seedE2eAmuNonAdminUser,
   seedE2eAmuFreshUser,
   seedE2eAmuExpiredUser,
+  seedE2eAmuSitesUser,
   cleanupE2eAmuAdmin,
   cleanupE2eAmuMonitorUser,
   cleanupE2eAmuNonAdminUser,
   cleanupE2eAmuFreshUser,
   cleanupE2eAmuExpiredUser,
+  cleanupE2eAmuSitesUser,
 } from "./fixtures/admin-monitor-seed";
 import type { PoolClient } from "../integration/rls/helpers/db";
 import { loginAs } from "./fixtures/admin-login";
@@ -76,6 +84,7 @@ let adminPassword: string;
 let nonAdminPassword: string;
 
 async function cleanupFixtures(c: PoolClient): Promise<void> {
+  await cleanupE2eAmuSitesUser(c);
   await cleanupE2eAmuNonAdminUser(c);
   await cleanupE2eAmuExpiredUser(c);
   await cleanupE2eAmuFreshUser(c);
@@ -100,6 +109,7 @@ test.describe.serial("admin-monitor-users E2E", () => {
     await seedE2eAmuNonAdminUser(c, nonAdminPassword);
     await seedE2eAmuFreshUser(c, randomE2ePassword());
     await seedE2eAmuExpiredUser(c, randomE2ePassword());
+    await seedE2eAmuSitesUser(c, randomE2ePassword());
   });
 
   test.afterAll(async () => {
@@ -154,9 +164,9 @@ test.describe.serial("admin-monitor-users E2E", () => {
     ).toBeVisible();
   });
 
-  // ── AMC-16: five column headers in order ──────────────────────────────────
+  // ── AMC-16: six column headers in order ───────────────────────────────────
 
-  test("AMC-16: table has five column headers in order: E-mail, Oprettet, Status, Overvågninger, Handlinger", async ({ page }) => {
+  test("AMC-16: table has six column headers in order: E-mail, Oprettet, Status, Overvåger, Overvågninger, Handlinger", async ({ page }) => {
     test.skip(!E2E_REF_AVAILABLE, "Requires SUPABASE_E2E_REF");
 
     await loginAs(page, E2E_AMU_ADMIN_EMAIL, adminPassword, ADMIN_MONITOR_USERS_PATH);
@@ -168,8 +178,9 @@ test.describe.serial("admin-monitor-users E2E", () => {
     await expect(headers.nth(0)).toHaveText("E-mail");
     await expect(headers.nth(1)).toHaveText("Oprettet");
     await expect(headers.nth(2)).toHaveText("Status");
-    await expect(headers.nth(3)).toHaveText("Overvågninger");
-    await expect(headers.nth(4)).toHaveText("Handlinger");
+    await expect(headers.nth(3)).toHaveText("Overvåger");
+    await expect(headers.nth(4)).toHaveText("Overvågninger");
+    await expect(headers.nth(5)).toHaveText("Handlinger");
   });
 
   // ── AC-AMU-16: 768px width ────────────────────────────────────────────────
@@ -221,7 +232,7 @@ test.describe.serial("admin-monitor-users E2E", () => {
       has: page.getByRole("rowheader", { name: E2E_AMU_MONITOR_EMAIL }),
     });
 
-    // cells: [Oprettet=0, Status=1, Overvågninger=2, Handlinger=3]
+    // cells: [Oprettet=0, Status=1, Overvåger=2, Overvågninger=3, Handlinger=4]
     await expect(fixtureRow.getByRole("cell").nth(0)).toHaveText(FORMATTED_CREATED_AT);
   });
 
@@ -237,8 +248,8 @@ test.describe.serial("admin-monitor-users E2E", () => {
       has: page.getByRole("rowheader", { name: E2E_AMU_MONITOR_EMAIL }),
     });
 
-    // cells[2] = Overvågninger
-    await expect(fixtureRow.getByRole("cell").nth(2)).toHaveText("2");
+    // cells[3] = Overvågninger (shifted right: Overvåger now at cells[2])
+    await expect(fixtureRow.getByRole("cell").nth(3)).toHaveText("2");
   });
 
   // ── E2E-AMC-1: three status badges visible ────────────────────────────────
@@ -284,7 +295,7 @@ test.describe.serial("admin-monitor-users E2E", () => {
 
     await expect(expiredRow).toBeVisible();
 
-    // Slet button in the Handlinger cell (cells[3]) — whitespace-tolerant regex
+    // Slet button in the Handlinger cell (cells[4]) — whitespace-tolerant regex
     const sletBtn = expiredRow.getByRole("button", {
       name: rowControlName(E2E_AMU_EXPIRED_EMAIL, "Slet"),
     });
@@ -382,5 +393,75 @@ test.describe.serial("admin-monitor-users E2E", () => {
     await page.waitForURL(/\/admin\/login/, { timeout: 10_000 });
 
     await expect(page).toHaveURL(/\/admin\/login/);
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Journey: admin-monitor-users-sites — Overvåger column E2E (AMSS-E-1 … AMSS-E-3)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── AMSS-E-1: monitor links in created_at order; labelled active link ──────
+
+  test("AMSS-E-1: sites fixture monitors are links ordered by created_at; the active one has label text, correct href + rel/target", async ({ page }) => {
+    test.skip(!E2E_REF_AVAILABLE, "Requires SUPABASE_E2E_REF");
+
+    await loginAs(page, E2E_AMU_ADMIN_EMAIL, adminPassword, ADMIN_MONITOR_USERS_PATH);
+
+    const table = page.getByRole("table");
+    const sitesRow = table.getByRole("row").filter({
+      has: page.getByRole("rowheader", { name: E2E_AMU_SITES_EMAIL }),
+    });
+
+    // Both monitors are links in the Overvåger cell, oldest first: seedE2eAmuSitesUser
+    // creates the active one at 10:01 and the paused one at 10:02.
+    const sitesLinks = sitesRow.getByRole("cell").nth(2).getByRole("link");
+    await expect(sitesLinks).toHaveCount(2);
+    await expect(sitesLinks.nth(0)).toHaveAttribute("href", E2E_AMU_SITES_URL_ACTIVE);
+    await expect(sitesLinks.nth(1)).toHaveAttribute("href", E2E_AMU_SITES_URL_PAUSED);
+
+    // Active monitor: link text = label
+    const activeLink = sitesRow.getByRole("link", { name: new RegExp(E2E_AMU_SITES_LABEL_ACTIVE) });
+    await expect(activeLink).toBeVisible();
+    await expect(activeLink).toHaveAttribute("href", E2E_AMU_SITES_URL_ACTIVE);
+    await expect(activeLink).toHaveAttribute("target", "_blank");
+    await expect(activeLink).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  // ── AMSS-E-2: null-label paused monitor uses displayUrl + paused indicator ─
+
+  test("AMSS-E-2: sites fixture paused monitor uses displayUrl as link text and shows paused indicator", async ({ page }) => {
+    test.skip(!E2E_REF_AVAILABLE, "Requires SUPABASE_E2E_REF");
+
+    await loginAs(page, E2E_AMU_ADMIN_EMAIL, adminPassword, ADMIN_MONITOR_USERS_PATH);
+
+    const table = page.getByRole("table");
+    const sitesRow = table.getByRole("row").filter({
+      has: page.getByRole("rowheader", { name: E2E_AMU_SITES_EMAIL }),
+    });
+
+    // Paused monitor: link text = displayUrl (hostname, no scheme)
+    const pausedLink = sitesRow.getByRole("link", { name: new RegExp(E2E_AMU_SITES_DISPLAY_PAUSED) });
+    await expect(pausedLink).toBeVisible();
+    await expect(pausedLink).toHaveAttribute("href", E2E_AMU_SITES_URL_PAUSED);
+
+    // Paused indicator must appear somewhere in the Overvåger cell
+    await expect(sitesRow.getByRole("cell").nth(2)).toContainText(/pause/i);
+  });
+
+  // ── AMSS-E-3: user with no monitors shows 'Ingen' in Overvåger column ─────
+
+  test("AMSS-E-3: fresh user (no monitors) shows 'Ingen' in Overvåger column, no links", async ({ page }) => {
+    test.skip(!E2E_REF_AVAILABLE, "Requires SUPABASE_E2E_REF");
+
+    await loginAs(page, E2E_AMU_ADMIN_EMAIL, adminPassword, ADMIN_MONITOR_USERS_PATH);
+
+    const table = page.getByRole("table");
+    // Fresh user has 0 monitors (seeded without seedMonitors)
+    const freshRow = table.getByRole("row").filter({
+      has: page.getByRole("rowheader", { name: E2E_AMU_FRESH_EMAIL }),
+    });
+
+    const sitesCell = freshRow.getByRole("cell").nth(2);
+    await expect(sitesCell).toHaveText(/Ingen/i);
+    await expect(sitesCell.getByRole("link")).toHaveCount(0);
   });
 });

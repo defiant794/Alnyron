@@ -1,7 +1,8 @@
 /**
- * Unit tests — listMonitorSignups + deleteMonitorUser services (admin-monitor-users-cleanup)
+ * Unit tests — listMonitorSignups + deleteMonitorUser services (admin-monitor-users-cleanup + admin-monitor-users-sites)
  * Journey: admin-monitor-users       AC-AMU-30, AC-AMU-31, AC-AMU-32, AC-AMU-33
  * Journey: admin-monitor-users-cleanup  AMC-7, AMC-8, AMC-9, AMC-10, AMC-11
+ * Journey: admin-monitor-users-sites    AMSS-1, AMSS-2, AMSS-5
  */
 
 import { format } from "node:util";
@@ -45,8 +46,8 @@ const RAW_ROWS = [
 ];
 
 const MAPPED_ROWS = [
-  { userId: "u-newer-uuid", email: "newer@example.com", signedUpAt: "2026-10-15T09:00:00.000Z", confirmed: true,  monitorCount: 2 },
-  { userId: "u-older-uuid", email: "older@example.com", signedUpAt: "2026-09-01T14:30:00.000Z", confirmed: false, monitorCount: 0 },
+  { userId: "u-newer-uuid", email: "newer@example.com", signedUpAt: "2026-10-15T09:00:00.000Z", confirmed: true,  monitorCount: 2, monitors: [] },
+  { userId: "u-older-uuid", email: "older@example.com", signedUpAt: "2026-09-01T14:30:00.000Z", confirmed: false, monitorCount: 0, monitors: [] },
 ];
 
 const TARGET_UUID = "00000000-0000-0000-0a30-000000000001";
@@ -282,5 +283,93 @@ describe("AMC-11: deleteMonitorUser — other RPC error → {ok:false, error:'fa
 
     expect(result).toEqual({ ok: false, error: "failed" });
     consoleSpy.mockRestore();
+  });
+});
+
+// ── AMSS raw fixtures (monitors column, new RPC shape) ───────────────────────
+
+/** Raw RPC row with two monitors: one active (with label), one paused (null label). */
+const RAW_ROW_WITH_MONITORS = {
+  user_id: "u-sites",
+  email: "sites@example.com",
+  created_at: "2026-10-20T10:00:00.000Z",
+  confirmed: true,
+  monitor_count: 2,
+  monitors: [
+    { url: "https://alpha.example.com", label: "Alpha", status: "active" },
+    { url: "https://beta.example.com",  label: null,    status: "paused" },
+  ],
+};
+
+/** Raw RPC row with no monitors (empty jsonb array). */
+const RAW_ROW_NO_MONITORS = {
+  user_id: "u-no-sites",
+  email: "nosites@example.com",
+  created_at: "2026-10-21T10:00:00.000Z",
+  confirmed: false,
+  monitor_count: 0,
+  monitors: [],
+};
+
+/**
+ * Raw RPC row with three monitors in an order no sort reproduces (by url, label or
+ * status, either direction), so any re-sort in the service fails AMSS-5.
+ */
+const RAW_ROW_MANY_MONITORS = {
+  user_id: "u-many-sites",
+  email: "many@example.com",
+  created_at: "2026-10-22T10:00:00.000Z",
+  confirmed: true,
+  monitor_count: 3,
+  monitors: [
+    { url: "https://zulu.example.com",  label: "Zulu", status: "active" },
+    { url: "https://alpha.example.com", label: null,   status: "paused" },
+    { url: "https://mike.example.com",  label: "Mike", status: "active" },
+  ],
+};
+
+// ── AMSS-1: monitors array mapped from jsonb ──────────────────────────────────
+// Journey: admin-monitor-users-sites   AC: service maps monitors jsonb → MonitorSite[]
+
+describe("AMSS-1: listMonitorSignups — monitors mapped from jsonb monitors column", () => {
+  it("AMSS-1: row with two monitors returns monitors array with url/label/status", async () => {
+    mockRpc.mockResolvedValueOnce({ data: [RAW_ROW_WITH_MONITORS], error: null });
+
+    const result = await listMonitorSignups();
+
+    expect(result[0]?.monitors).toEqual([
+      { url: "https://alpha.example.com", label: "Alpha", status: "active" },
+      { url: "https://beta.example.com",  label: null,    status: "paused" },
+    ]);
+  });
+});
+
+// ── AMSS-2: monitors is [] when user has no monitors ─────────────────────────
+// Journey: admin-monitor-users-sites   AC: service maps empty monitors to []
+
+describe("AMSS-2: listMonitorSignups — monitors is [] when RPC returns empty monitors jsonb", () => {
+  it("AMSS-2: row with monitors=[] returns monitors: []", async () => {
+    mockRpc.mockResolvedValueOnce({ data: [RAW_ROW_NO_MONITORS], error: null });
+
+    const result = await listMonitorSignups();
+
+    expect(result[0]?.monitors).toEqual([]);
+  });
+});
+
+// ── AMSS-5: multiple monitors order preserved ─────────────────────────────────
+// Journey: admin-monitor-users-sites   AC: monitors preserve RPC-returned order
+
+describe("AMSS-5: listMonitorSignups — multiple monitors preserve RPC-returned order", () => {
+  it("AMSS-5: three monitors are returned in the RPC's order, not re-sorted", async () => {
+    mockRpc.mockResolvedValueOnce({ data: [RAW_ROW_MANY_MONITORS], error: null });
+
+    const result = await listMonitorSignups();
+
+    expect(result[0]?.monitors.map((s) => s.url)).toEqual([
+      "https://zulu.example.com",
+      "https://alpha.example.com",
+      "https://mike.example.com",
+    ]);
   });
 });

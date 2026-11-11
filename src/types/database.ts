@@ -575,6 +575,7 @@ export type Database = {
           created_at: string
           email: string
           monitor_count: number
+          monitors: Json
           user_id: string
         }[]
       }

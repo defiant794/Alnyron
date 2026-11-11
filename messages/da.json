@@ -196,8 +196,14 @@
         "email": "E-mail",
         "signedUp": "Oprettet",
         "status": "Status",
+        "sites": "Overvåger",
         "monitors": "Overvågninger",
         "actions": "Handlinger"
+      },
+      "sites": {
+        "none": "Ingen",
+        "paused": "sat på pause",
+        "newTab": "åbner i ny fane"
       },
       "status": {
         "registered": "Tilmeldt",

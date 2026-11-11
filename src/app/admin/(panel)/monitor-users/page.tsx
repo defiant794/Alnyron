@@ -22,10 +22,10 @@ const HEADING_ID = "monitor-users-heading";
  * `/admin/monitor-users` ("Monitor-brugere"): everyone who signed up for
  * Monitor, newest first, with when the account was created, its status
  * (Tilmeldt, Afventer bekræftelse or Udløbet, judged at this request), the
- * number of monitors and a count of each status, and "Slet" to delete a
- * signup with all its monitors. The delete dialog formats its body with the
- * chosen address itself, so the table gets that one message (not the whole
- * catalogue) through its own client provider.
+ * sites it watches as links, the number of monitors and a count of each
+ * status, and "Slet" to delete a signup with all its monitors. The delete
+ * dialog formats its body with the chosen address itself, so the table gets
+ * that one message (not the whole catalogue) through its own client provider.
  */
 export default async function AdminMonitorUsersPage() {
   await requireAdmin();
@@ -59,8 +59,12 @@ export default async function AdminMonitorUsersPage() {
               email: t("table.email"),
               signedUp: t("table.signedUp"),
               status: t("table.status"),
+              sites: t("table.sites"),
               monitors: t("table.monitors"),
               actions: t("table.actions"),
+              sitesNone: t("sites.none"),
+              sitesPaused: t("sites.paused"),
+              newTab: t("sites.newTab"),
               empty: t("empty"),
               delete: {
                 open: t("delete.open"),

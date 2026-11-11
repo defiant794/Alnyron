@@ -142,3 +142,42 @@ export async function seedE2eAmuNonAdminUser(client: pg.PoolClient, password: st
 export async function cleanupE2eAmuNonAdminUser(client: pg.PoolClient): Promise<void> {
   await deleteUser(client, E2E_AMU_NONADMIN_UUID, E2E_AMU_NONADMIN_EMAIL);
 }
+
+// ── monitor_user with 2 specific monitors for Overvåger column (admin-monitor-users-sites) ──
+
+export const E2E_AMU_SITES_EMAIL = `e2e-amu-sites@${E2E_EMAIL_DOMAIN}`;
+/** Distinct UUID in the 0a31 namespace — no cross-spec races. */
+export const E2E_AMU_SITES_UUID  = "00000000-0000-0000-0a31-000000000060";
+
+/**
+ * Fixed URLs used by the Overvåger column tests.
+ * The active monitor has a label; the paused one has label=NULL so the table
+ * must fall back to displayUrl().  Explicit created_at keeps ORDER BY deterministic.
+ */
+export const E2E_AMU_SITES_URL_ACTIVE = "https://amu-sites-active.alnyron-e2e.example.com";
+export const E2E_AMU_SITES_LABEL_ACTIVE = "Aktiv side";
+export const E2E_AMU_SITES_URL_PAUSED  = "https://amu-sites-paused.alnyron-e2e.example.com";
+/** displayUrl(E2E_AMU_SITES_URL_PAUSED) — no scheme, no trailing slash. */
+export const E2E_AMU_SITES_DISPLAY_PAUSED = "amu-sites-paused.alnyron-e2e.example.com";
+
+/**
+ * Confirmed monitor_user with:
+ *   - 1 active monitor (label = "Aktiv side"), seeded at :01
+ *   - 1 paused monitor (label = NULL),         seeded at :02
+ * Both explicit created_at values so ORDER BY created_at, id is stable.
+ */
+export async function seedE2eAmuSitesUser(client: pg.PoolClient, password: string): Promise<void> {
+  await insertUser(client, E2E_AMU_SITES_UUID, E2E_AMU_SITES_EMAIL, "monitor_user", password);
+  await client.query(
+    `INSERT INTO public.monitors
+       (user_id, url, label, status, consecutive_errors, interval_minutes, created_at)
+     VALUES
+       ($1, $2, $3, 'active', 0, 1440, '2026-11-11T10:01:00.000Z'::timestamptz),
+       ($1, $4, NULL, 'paused', 0, 1440, '2026-11-11T10:02:00.000Z'::timestamptz)`,
+    [E2E_AMU_SITES_UUID, E2E_AMU_SITES_URL_ACTIVE, E2E_AMU_SITES_LABEL_ACTIVE, E2E_AMU_SITES_URL_PAUSED],
+  );
+}
+
+export async function cleanupE2eAmuSitesUser(client: pg.PoolClient): Promise<void> {
+  await deleteUser(client, E2E_AMU_SITES_UUID, E2E_AMU_SITES_EMAIL);
+}

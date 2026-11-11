@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 /**
- * Unit tests — MonitorSignupsTable component (admin-monitor-users-cleanup)
+ * Unit tests — MonitorSignupsTable component (admin-monitor-users-cleanup + admin-monitor-users-sites)
+ *
  * Journey: admin-monitor-users-cleanup  AMC-16, AMC-17, AMC-18, AMC-19, AMC-20,
  *          AMC-21, AMC-22, AMC-23, AMC-24, AMC-25, AMC-26, AMC-27
+ * Journey: admin-monitor-users-sites    AMSS-7, AMSS-8, AMSS-9, AMSS-11 (headers and count: AMC-16, AC-AMU-08/09)
  *
  * Cell index note: within(row).getAllByRole("cell") returns only <td> nodes,
  * not the email <th scope="row"> (role=rowheader). Indexes are therefore:
- *   cells[0] = Oprettet, cells[1] = Status, cells[2] = Overvågninger, cells[3] = Handlinger.
+ *   cells[0] = Oprettet, cells[1] = Status, cells[2] = Overvåger, cells[3] = Overvågninger, cells[4] = Handlinger.
  *
  * Also covers: AC-AMU-04 (email row header), AC-AMU-05 (date),
  *   AC-AMU-08/09 (monitor count), AC-AMU-11 (empty state), AC-AMU-13 (labelled-by),
@@ -76,6 +78,10 @@ const LABELS: TableLabels = {
   email: "E-mail",
   signedUp: "Oprettet",
   status: "Status",
+  sites: "Overvåger",
+  sitesNone: "Ingen",
+  sitesPaused: "sat på pause",
+  newTab: "åbner i ny fane",
   monitors: "Overvågninger",
   actions: "Handlinger",
   empty: "Ingen tilmeldinger endnu.",
@@ -123,6 +129,7 @@ const ROWS: RowWithStatus[] = [
     signedUpAt: ISO_NEWER,
     confirmed: true,
     monitorCount: 2,
+    monitors: [],
     status: "registered",
   },
   {
@@ -131,6 +138,7 @@ const ROWS: RowWithStatus[] = [
     signedUpAt: ISO_OLDER,
     confirmed: false,
     monitorCount: 0,
+    monitors: [],
     status: "pending",
   },
   {
@@ -139,6 +147,7 @@ const ROWS: RowWithStatus[] = [
     signedUpAt: ISO_OLDER,
     confirmed: false,
     monitorCount: 0,
+    monitors: [],
     status: "expired",
   },
 ];
@@ -200,18 +209,19 @@ function rowFor(email: string): HTMLElement {
   return tr as HTMLElement;
 }
 
-// ── AMC-16: five column headers in order ──────────────────────────────────────
+// ── AMC-16: six column headers in order ──────────────────────────────────────
 
-describe("AMC-16: MonitorSignupsTable — five column headers in order", () => {
-  it("AMC-16: headers are E-mail, Oprettet, Status, Overvågninger, Handlinger", () => {
+describe("AMC-16: MonitorSignupsTable — six column headers in order", () => {
+  it("AMC-16: headers are E-mail, Oprettet, Status, Overvåger, Overvågninger, Handlinger", () => {
     renderTable();
     const headers = screen.getAllByRole("columnheader");
-    expect(headers).toHaveLength(5);
+    expect(headers).toHaveLength(6);
     expect(headers[0]).toHaveTextContent("E-mail");
     expect(headers[1]).toHaveTextContent("Oprettet");
     expect(headers[2]).toHaveTextContent("Status");
-    expect(headers[3]).toHaveTextContent("Overvågninger");
-    expect(headers[4]).toHaveTextContent("Handlinger");
+    expect(headers[3]).toHaveTextContent("Overvåger");
+    expect(headers[4]).toHaveTextContent("Overvågninger");
+    expect(headers[5]).toHaveTextContent("Handlinger");
   });
 });
 
@@ -319,8 +329,8 @@ describe("AC-AMU-08: MonitorSignupsTable — zero monitor count renders '0'", ()
     renderTable();
     const row = rowFor("older@example.com");
     const cells = within(row).getAllByRole("cell");
-    // cells[2] = Overvågninger
-    expect(cells[2]).toHaveTextContent("0");
+    // cells[3] = Overvågninger (shifted right by the new Overvåger column at cells[2])
+    expect(cells[3]).toHaveTextContent("0");
   });
 });
 
@@ -329,8 +339,8 @@ describe("AC-AMU-09: MonitorSignupsTable — non-zero monitor count renders corr
     renderTable();
     const row = rowFor("newer@example.com");
     const cells = within(row).getAllByRole("cell");
-    // cells[2] = Overvågninger
-    expect(cells[2]).toHaveTextContent("2");
+    // cells[3] = Overvågninger (shifted right by the new Overvåger column at cells[2])
+    expect(cells[3]).toHaveTextContent("2");
   });
 });
 
@@ -838,5 +848,122 @@ describe("AMC-26: MonitorSignupsTable — success closes the dialog", () => {
     rerender(tableUi(ROWS.slice(1), "0 tilmeldte · 1 afventer · 1 udløbet"));
 
     expect(sletButton("pending@example.com")).toHaveFocus();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Journey: admin-monitor-users-sites — Overvåger column (AMSS-7, AMSS-8, AMSS-9, AMSS-11)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Extra fixtures: rows with real monitor data for the new column tests.
+const ROW_WITH_MONITORS: RowWithStatus = {
+  email: "withmon@example.com",
+  userId: "u-withmon",
+  signedUpAt: ISO_NEWER,
+  confirmed: true,
+  monitorCount: 2,
+  monitors: [
+    { url: "https://alpha.example.com", label: "Alpha",  status: "active" },
+    { url: "https://beta.example.com",  label: null,     status: "paused" },
+  ],
+  status: "registered",
+};
+
+const ROW_NO_MONITORS: RowWithStatus = {
+  email: "nomon@example.com",
+  userId: "u-nomon",
+  signedUpAt: ISO_OLDER,
+  confirmed: true,
+  monitorCount: 0,
+  monitors: [],
+  status: "registered",
+};
+
+// ── AMSS-7: Overvåger column links ────────────────────────────────────────────
+// Journey: admin-monitor-users-sites   AC: each monitor rendered as external link
+
+describe("AMSS-7: MonitorSignupsTable — Overvåger column renders each monitor as external link", () => {
+  it("AMSS-7a: active monitor with label is rendered as a link with label text", () => {
+    renderTable([ROW_WITH_MONITORS]);
+    const link = screen.getByRole("link", { name: /Alpha/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "https://alpha.example.com");
+  });
+
+  it("AMSS-7b: active link has target=_blank and rel=noopener noreferrer", () => {
+    renderTable([ROW_WITH_MONITORS]);
+    const link = screen.getByRole("link", { name: /Alpha/i });
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("AMSS-7c: monitor with label=null uses displayUrl(url) as link text", () => {
+    renderTable([ROW_WITH_MONITORS]);
+    // displayUrl("https://beta.example.com") = "beta.example.com"
+    expect(screen.getByRole("link", { name: /beta\.example\.com/ })).toBeInTheDocument();
+  });
+
+  it("AMSS-7d: null-label link href equals the full URL", () => {
+    renderTable([ROW_WITH_MONITORS]);
+    const link = screen.getByRole("link", { name: /beta\.example\.com/ });
+    expect(link).toHaveAttribute("href", "https://beta.example.com");
+  });
+
+  it("AMSS-7e: each link's accessible name includes the sr-only newTab string 'åbner i ny fane'", () => {
+    renderTable([ROW_WITH_MONITORS]);
+    // next-intl labels.newTab = "åbner i ny fane" is rendered sr-only inside the <a>;
+    // Testing Library includes hidden text in accessible-name computation.
+    expect(screen.getByRole("link", { name: /Alpha.*åbner i ny fane/i })).toBeInTheDocument();
+  });
+});
+
+// ── AMSS-8: empty monitors shows "Ingen" ─────────────────────────────────────
+// Journey: admin-monitor-users-sites   AC: Ingen shown when monitors is []
+
+describe("AMSS-8: MonitorSignupsTable — Overvåger column shows 'Ingen' for a row with no monitors", () => {
+  it("AMSS-8: row with monitors=[] shows 'Ingen' and no links in Overvåger cell", () => {
+    renderTable([ROW_NO_MONITORS]);
+    const row = rowFor("nomon@example.com");
+    const cells = within(row).getAllByRole("cell");
+    // cells[2] = Overvåger
+    expect(cells[2]).toHaveTextContent("Ingen");
+    expect(within(cells[2]!).queryAllByRole("link")).toHaveLength(0);
+  });
+});
+
+// ── AMSS-9: paused monitor marked at item level ───────────────────────────────
+// Journey: admin-monitor-users-sites   AC: paused monitor has visible paused indicator;
+//   the active monitor does NOT carry the marker.
+
+describe("AMSS-9: MonitorSignupsTable — paused monitor has visible paused indicator on its own list item", () => {
+  it("AMSS-9a: paused monitor's list item contains 'sat på pause'", () => {
+    renderTable([ROW_WITH_MONITORS]);
+    // beta.example.com is the paused monitor; its closest <li> must carry the marker
+    const pausedLink = screen.getByRole("link", { name: /beta\.example\.com/ });
+    expect(pausedLink.closest("li")).toHaveTextContent("sat på pause");
+  });
+
+  it("AMSS-9b: active monitor's list item does NOT contain 'sat på pause'", () => {
+    renderTable([ROW_WITH_MONITORS]);
+    // Alpha is the active monitor; its <li> must NOT show the paused marker
+    const activeLink = screen.getByRole("link", { name: /Alpha/i });
+    expect(activeLink.closest("li")).not.toHaveTextContent("sat på pause");
+  });
+});
+
+// ── AMSS-11: Overvåger cell is cells[2] ──────────────────────────────────────
+// Journey: admin-monitor-users-sites   AC: column position between Status and Overvågninger
+
+describe("AMSS-11: MonitorSignupsTable — Overvåger column is at cell index 2 (between Status and Overvågninger)", () => {
+  it("AMSS-11: cells[1]=Status badge, cells[2]=Overvåger links, cells[3]=Overvågninger count", () => {
+    renderTable([ROW_WITH_MONITORS]);
+    const row = rowFor("withmon@example.com");
+    const cells = within(row).getAllByRole("cell");
+    // Status badge at index 1
+    expect(cells[1]).toHaveTextContent("Tilmeldt");
+    // Overvåger links at index 2
+    expect(within(cells[2]!).getAllByRole("link")).toHaveLength(2);
+    // Count at index 3
+    expect(cells[3]).toHaveTextContent("2");
   });
 });
