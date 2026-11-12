@@ -92,6 +92,7 @@ import {
   OWNER_EMAIL,
   OWNER_UUID,
   asRole,
+  asServiceRole,
   expectPgError,
   seedAuthUser,
   seedDraftPage,
@@ -293,15 +294,6 @@ async function seedMonitorRows(c: PoolClient, userId: string): Promise<{ monitor
   const monitorId = await seedMonitor(c, userId);
   const { rows } = await c.query<{ id: string }>(`${INSERT_EVENT} RETURNING id`, [monitorId, userId]);
   return { monitorId, eventId: rows[0]!.id };
-}
-
-/**
- * The cron's session: service_role (bypasses RLS) with a JWT that has no `sub`, so auth.uid() is
- * NULL as with the Worker's service key. Like asRole: inside withTx, after seeding.
- */
-async function asServiceRole(c: PoolClient): Promise<void> {
-  await c.query("SET LOCAL role = service_role");
-  await c.query(`SET LOCAL "request.jwt.claims" = '{"role":"service_role"}'`);
 }
 
 interface StoredMonitor {

@@ -3,6 +3,7 @@
  * Journey: admin-monitor-users       AC-AMU-30, AC-AMU-31, AC-AMU-32, AC-AMU-33
  * Journey: admin-monitor-users-cleanup  AMC-7, AMC-8, AMC-9, AMC-10, AMC-11
  * Journey: admin-monitor-users-sites    AMSS-1, AMSS-2, AMSS-5
+ * Journey: payments-slice1-foundation  PAY1-AC6c
  */
 
 import { format } from "node:util";
@@ -371,5 +372,56 @@ describe("AMSS-5: listMonitorSignups — multiple monitors preserve RPC-returned
       "https://alpha.example.com",
       "https://mike.example.com",
     ]);
+  });
+});
+
+// ── PAY1-AC6c: has_active_subscription → has-active-subscription ──────────────
+// Journey: payments-slice1-foundation  PAY1-AC6c
+
+describe("PAY1-AC6c: deleteMonitorUser — P0001 has_active_subscription → {ok:false, error:'has-active-subscription'}", () => {
+  it("PAY1-AC6c: RPC returns P0001 with message 'has_active_subscription' → {ok:false, error:'has-active-subscription'}", async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "has_active_subscription" },
+    });
+
+    const result = await deleteMonitorUser(TARGET_UUID);
+
+    expect(result).toEqual({ ok: false, error: "has-active-subscription" });
+  });
+
+  it("PAY1-AC6c-no-throw: has_active_subscription does not throw (returned, not thrown)", async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "has_active_subscription" },
+    });
+
+    await expect(deleteMonitorUser(TARGET_UUID)).resolves.toMatchObject({ ok: false });
+  });
+
+  it("PAY1-AC6c-distinct: P0001 'has_active_subscription' maps to 'has-active-subscription', not 'not-monitor-user' or 'failed'", async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "has_active_subscription" },
+    });
+
+    const result = await deleteMonitorUser(TARGET_UUID);
+
+    expect(result).toEqual({ ok: false, error: "has-active-subscription" });
+    expect(result).not.toMatchObject({ error: "not-monitor-user" });
+    expect(result).not.toMatchObject({ error: "failed" });
+  });
+
+  it("PAY1-AC6c-other-p0001: P0001 with any other message → { ok: false, error: 'failed' } (catch-all)", async () => {
+    // Guard: a future P0001 guard must not accidentally map to has-active-subscription.
+    // deleteMonitorUser's catch-all returns "failed" for anything unrecognised.
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "some_other_guard" },
+    });
+
+    const result = await deleteMonitorUser(TARGET_UUID);
+
+    expect(result).toEqual({ ok: false, error: "failed" });
   });
 });

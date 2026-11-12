@@ -222,7 +222,8 @@
         "errors": {
           "failed": "Tilmeldingen kunne ikke slettes. Prøv igen.",
           "notFound": "Tilmeldingen findes ikke længere.",
-          "notMonitorUser": "Kun Monitor-brugere kan slettes her."
+          "notMonitorUser": "Kun Monitor-brugere kan slettes her.",
+          "hasActiveSubscription": "Kontoen har et abonnement, der ikke er ophørt, og kan først slettes, når det er ophørt."
         }
       }
     },
@@ -647,7 +648,8 @@
       "changedEntry": "Indhold ændret",
       "createdEntry": "Overvågning oprettet",
       "noChanges": "Ingen ændringer endnu",
-      "noChangesBody": "Når siden ændrer sig, kan du se det her, og du får en mail."
+      "noChangesBody": "Når siden ændrer sig, kan du se det her, og du får en mail.",
+      "limitReached": "Du har nået grænsen for aktive overvågninger. Sæt en anden overvågning på pause, eller slet en, for at genoptage denne."
     },
     "settings": {
       "metaTitle": "Indstillinger",

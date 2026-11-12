@@ -400,6 +400,16 @@ export async function systemPageId(
   return rows[0]!.id;
 }
 
+/**
+ * SET LOCAL role = service_role and JWT claims {"role":"service_role"} with no sub.
+ * Call inside withTx, after all postgres-level seeding. The SET LOCAL applies until
+ * RESET ROLE or the end of the transaction. Use for service_role-only functions.
+ */
+export async function asServiceRole(client: pg.PoolClient): Promise<void> {
+  await client.query("SET LOCAL role = service_role");
+  await client.query(`SET LOCAL "request.jwt.claims" = '{"role":"service_role"}'`);
+}
+
 // ---------------------------------------------------------------------------
 // Error assertion helper with SAVEPOINT isolation
 // ---------------------------------------------------------------------------

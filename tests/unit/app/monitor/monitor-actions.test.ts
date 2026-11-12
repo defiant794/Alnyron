@@ -2,6 +2,7 @@
  * Unit tests: src/app/monitor/(panel)/actions.ts — panel server actions.
  * Journey: monitor-web-area  MON-AC27, MON-AC32, MON-AC35, MON-AC36,
  *   MON-AC37, MON-AC38, MON-AC39
+ * Journey: payments-slice1-foundation  PAY1-AC2h
  *
  * Each action must call requireMonitor() first; user_id comes from the
  * session, never from FormData.
@@ -54,6 +55,7 @@ import {
   resumeMonitorAction,
 } from "@/app/monitor/(panel)/actions";
 import { loadMessages } from "@/i18n/messages";
+import { monitorDetailPath } from "@/config/monitor";
 
 function form(fields: Record<string, string>): FormData {
   const fd = new FormData();
@@ -282,5 +284,22 @@ describe("pauseMonitorAction / resumeMonitorAction — MON-AC37", () => {
       /NEXT_REDIRECT/,
     );
     expect(mockSetMonitorStatus).toHaveBeenCalledWith(VALID_MONITOR_ID, "active");
+  });
+});
+
+// ── resumeMonitorAction — PAY1-AC2h: limit_reached redirect ──────────────────
+// Journey: payments-slice1-foundation  PAY1-AC2h
+
+describe("resumeMonitorAction — PAY1-AC2h: setMonitorStatus limit_reached → redirect to detail with ?limit=reached", () => {
+  it("PAY1-AC2h: redirects to monitorDetailPath(id)?limit=reached and does not call notFound", async () => {
+    mockSetMonitorStatus.mockResolvedValue({ error: "limit_reached" });
+    // resumeMonitorAction calls redirect(), which the mock throws as NEXT_REDIRECT:<url>
+    await expect(resumeMonitorAction({ monitorId: VALID_MONITOR_ID }, new FormData())).rejects.toThrow(
+      /NEXT_REDIRECT/,
+    );
+    expect(mockRedirect).toHaveBeenCalledExactlyOnceWith(
+      `${monitorDetailPath(VALID_MONITOR_ID)}?limit=reached`,
+    );
+    expect(mockNotFound).not.toHaveBeenCalled();
   });
 });

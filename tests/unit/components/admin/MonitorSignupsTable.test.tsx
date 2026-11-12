@@ -4,6 +4,7 @@
  *
  * Journey: admin-monitor-users-cleanup  AMC-16, AMC-17, AMC-18, AMC-19, AMC-20,
  *          AMC-21, AMC-22, AMC-23, AMC-24, AMC-25, AMC-26, AMC-27
+ * Journey: payments-slice1-foundation   PAY1-AC6d
  * Journey: admin-monitor-users-sites    AMSS-7, AMSS-8, AMSS-9, AMSS-11 (headers and count: AMC-16, AC-AMU-08/09)
  *
  * Cell index note: within(row).getAllByRole("cell") returns only <td> nodes,
@@ -95,6 +96,7 @@ const LABELS: TableLabels = {
       failed: "Tilmeldingen kunne ikke slettes. Prøv igen.",
       notFound: "Tilmeldingen findes ikke længere.",
       notMonitorUser: "Kun Monitor-brugere kan slettes her.",
+      hasActiveSubscription: "Kontoen har et abonnement, der ikke er ophørt, og kan først slettes, når det er ophørt.",
     },
   },
 };
@@ -965,5 +967,34 @@ describe("AMSS-11: MonitorSignupsTable — Overvåger column is at cell index 2 
     expect(within(cells[2]!).getAllByRole("link")).toHaveLength(2);
     // Count at index 3
     expect(cells[3]).toHaveTextContent("2");
+  });
+});
+
+// ── PAY1-AC6d: has-active-subscription dialog copy ───────────────────────────
+// Journey: payments-slice1-foundation  PAY1-AC6d
+//
+// Pin the exact Danish copy. Admin.monitorUsers.delete.errors.hasActiveSubscription
+// maps the 'has-active-subscription' error from the delete dialog.
+
+const DA_HAS_ACTIVE_SUBSCRIPTION =
+  "Kontoen har et abonnement, der ikke er ophørt, og kan først slettes, når det er ophørt.";
+
+describe("PAY1-AC6d: MonitorSignupsTable — has-active-subscription error shows DA copy in delete dialog", () => {
+  it("PAY1-AC6d: {ok:false, error:'has-active-subscription'} → DA copy in role=alert, focus moves to Annuller", async () => {
+    const result: DeleteMonitorUserResult = { ok: false, error: "has-active-subscription" };
+    mockDeleteMonitorSignup.mockResolvedValueOnce(result);
+
+    const user = userEvent.setup();
+    renderTable();
+
+    const dialog = await confirmDeleteOf(user, "newer@example.com");
+
+    await waitFor(() => {
+      expect(within(dialog).getByRole("alert")).toHaveTextContent(DA_HAS_ACTIVE_SUBSCRIPTION);
+    });
+    // A retry cannot succeed; focus moves to Annuller (mirrors not-monitor-user pattern).
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: "Annuller" })).toHaveFocus();
+    });
   });
 });

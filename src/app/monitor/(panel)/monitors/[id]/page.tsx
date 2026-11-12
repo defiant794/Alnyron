@@ -7,8 +7,15 @@ import DeleteMonitorDialog from "@/components/monitor/DeleteMonitorDialog";
 import MonitorShell from "@/components/monitor/MonitorShell";
 import Link from "@/components/ui/Link";
 import LinkButton from "@/components/ui/LinkButton";
+import Notice from "@/components/ui/Notice";
 import SubmitButton from "@/components/ui/SubmitButton";
-import { MONITOR_DASHBOARD_PATH, MONITOR_ROBOTS, monitorDetailPath, monitorEditPath } from "@/config/monitor";
+import {
+  MONITOR_DASHBOARD_PATH,
+  MONITOR_LIMIT_REACHED,
+  MONITOR_ROBOTS,
+  monitorDetailPath,
+  monitorEditPath,
+} from "@/config/monitor";
 import { getMonitorLocale } from "@/i18n/monitor-locale";
 import { cx } from "@/lib/cx";
 import { describeInterval, displayUrl, formatDateTime, formatRelative, monitorHealth } from "@/lib/monitor/format";
@@ -17,7 +24,11 @@ import { requireMonitor } from "@/services/auth/require-role";
 import { getMonitor, listMonitorEvents } from "@/services/monitor/monitors";
 import { monitorNotFoundMetadata } from "@/services/monitor/not-found-metadata";
 
-type MonitorDetailPageProps = { params: Promise<{ id: string }> };
+type MonitorDetailPageProps = {
+  params: Promise<{ id: string }>;
+  /** `limit=reached`: the status action's resume was refused by the cap. */
+  searchParams?: Promise<{ limit?: string | string[] }>;
+};
 
 /**
  * The monitor's name, or the 404's title for an unknown or foreign id (a page
@@ -53,17 +64,18 @@ function TimelineEntry({ at, now, locale, children }: TimelineEntryProps) {
  * name and URL, its status (active, paused or failing), interval and last
  * check; Pause/Genoptag, Rediger and Slet (with a confirm step); and its
  * change history, newest first, ending with "Overvågning oprettet" (below
- * which a monitor without changes says "Ingen ændringer endnu"). Owner and
+ * which a monitor without changes says "Ingen ændringer endnu"). After a
+ * resume the cap refused (`?limit=reached`) an alert says so. Owner and
  * `monitor_user` only; another account's monitor (hidden by RLS) or an
  * unknown id is a 404. In the visitor's Monitor language.
  */
-export default async function MonitorDetailPage({ params }: MonitorDetailPageProps) {
+export default async function MonitorDetailPage({ params, searchParams }: MonitorDetailPageProps) {
   const user = await requireMonitor();
   const { id } = await params;
   const monitor = monitorIdSchema.safeParse(id).success ? await getMonitor(id) : null;
   if (!monitor) notFound();
 
-  const [events, locale] = await Promise.all([listMonitorEvents(monitor.id), getMonitorLocale()]);
+  const [events, locale, query] = await Promise.all([listMonitorEvents(monitor.id), getMonitorLocale(), searchParams]);
   const t = await getTranslations({ locale, namespace: "Monitor" });
   const now = Date.now();
   const health = monitorHealth(monitor);
@@ -78,6 +90,7 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
       ? t("detail.lastChecked", { when: formatRelative(monitor.last_checked_at, locale, now) })
       : t("detail.notCheckedYet"),
   ];
+  const limitReached = query?.limit === MONITOR_LIMIT_REACHED;
 
   return (
     <MonitorShell email={user.email} section="dashboard" locale={locale} currentPath={monitorDetailPath(monitor.id)}>
@@ -124,6 +137,11 @@ export default async function MonitorDetailPage({ params }: MonitorDetailPagePro
               </span>
             ))}
           </p>
+          {limitReached && (
+            <Notice tone="error" role="alert">
+              {t("detail.limitReached")}
+            </Notice>
+          )}
         </header>
 
         <section className="flex flex-col gap-3">

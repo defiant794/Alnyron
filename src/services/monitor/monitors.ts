@@ -27,10 +27,10 @@ export type MonitorListItem = Monitor & { last_change_at: string | null };
 /** One detected change in a monitor's history. */
 export type MonitorEvent = Pick<MonitorEventRow, "id" | "detected_at" | "summary">;
 
-/** Monitors held and the most allowed (`null`: no cap, the owner or a NULL `monitor_limit`). */
+/** Monitors held and the most allowed (`null`: no cap, e.g. the owner or a NULL `monitor_limit`). */
 export type MonitorUsage = { count: number; limit: number | null };
 
-/** A create refused by the per-user cap (`monitors_limit_per_user`). */
+/** A create or resume refused by the per-user cap (the `monitors_limit_per_user` trigger function). */
 export type MonitorLimitReached = { error: "limit_reached" };
 
 /** The cap trigger's refusal: `raise exception 'monitor_limit_reached'` (SQLSTATE P0001). */
@@ -96,22 +96,21 @@ export async function listMonitorEvents(monitorId: string): Promise<MonitorEvent
 }
 
 /**
- * How many monitors the user holds and their cap (`profiles.monitor_limit`;
- * the owner role is uncapped whatever the column holds, like the trigger).
+ * How many monitors the user holds and their cap: the effective limit from
+ * `my_monitor_limit` (their own `profiles.monitor_limit`, raised by an
+ * entitling subscription's plan; `null` for the owner or a NULL limit).
  */
 export async function getMonitorUsage(): Promise<MonitorUsage> {
-  const user = await requireMonitor();
   const supabase = await createServerClient();
-  // The owner may read every profile, so the row is picked by id.
-  const profileQuery = supabase.from("profiles").select("monitor_limit").eq("user_id", user.userId).single();
-  const countQuery = supabase.from("monitors").select("id", { count: "exact", head: true });
-  const [profile, monitors] = await Promise.all([profileQuery, countQuery]);
-  if (profile.error) fail("limit", profile.error);
+  const [limit, monitors] = await Promise.all([
+    supabase.rpc("my_monitor_limit"),
+    supabase.from("monitors").select("id", { count: "exact", head: true }),
+  ]);
+  if (limit.error) fail("limit", limit.error);
   if (monitors.error) fail("count", monitors.error);
-  return {
-    count: monitors.count ?? 0,
-    limit: user.role === "owner" ? null : profile.data.monitor_limit,
-  };
+  // The generated RPC type says `number`, but SQL NULL (unlimited) arrives as null.
+  const cap: number | null = limit.data;
+  return { count: monitors.count ?? 0, limit: cap };
 }
 
 /**
@@ -149,8 +148,12 @@ export async function updateMonitor(id: string, input: MonitorWrite): Promise<Mo
   return data;
 }
 
-/** Pause or resume a monitor; null when it is not the user's (or gone). */
-export async function setMonitorStatus(id: string, status: MonitorStatus): Promise<Monitor | null> {
+/**
+ * Pause or resume a monitor; null when it is not the user's (or gone). A
+ * resume while the user's other active monitors reach their cap gets
+ * `{ error: "limit_reached" }` and changes nothing.
+ */
+export async function setMonitorStatus(id: string, status: MonitorStatus): Promise<Monitor | MonitorLimitReached | null> {
   assertMonitorId(id);
   const supabase = await createServerClient();
   const { data, error } = await supabase
@@ -160,6 +163,9 @@ export async function setMonitorStatus(id: string, status: MonitorStatus): Promi
     .select(MONITOR_COLUMNS)
     .single();
   if (error?.code === NO_ROWS) return null;
+  if (error?.code === LIMIT_REACHED_CODE && error.message === LIMIT_REACHED_MESSAGE) {
+    return { error: "limit_reached" };
+  }
   if (error) fail("status", error);
   return data;
 }

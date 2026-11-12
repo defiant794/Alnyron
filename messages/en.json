@@ -277,7 +277,8 @@
       "changedEntry": "Content changed",
       "createdEntry": "Monitor created",
       "noChanges": "No changes yet",
-      "noChangesBody": "When the page changes, you can see it here, and you will get an email."
+      "noChangesBody": "When the page changes, you can see it here, and you will get an email.",
+      "limitReached": "You have reached the limit for active monitors. Pause or delete another monitor to resume this one."
     },
     "settings": {
       "metaTitle": "Settings",

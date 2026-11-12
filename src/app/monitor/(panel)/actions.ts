@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
-import { MONITOR_DASHBOARD_PATH, MONITOR_HOME_PATH, monitorDetailPath } from "@/config/monitor";
+import { MONITOR_DASHBOARD_PATH, MONITOR_HOME_PATH, MONITOR_LIMIT_REACHED, monitorDetailPath } from "@/config/monitor";
 import { getMonitorLocale } from "@/i18n/monitor-locale";
 import { intervalToMinutes, monitorIdSchema, monitorSchema, type MonitorInput } from "@/lib/validation/monitor";
 import { requireMonitor } from "@/services/auth/require-role";
@@ -120,10 +120,18 @@ export async function updateMonitorAction(
  */
 type MonitorButtonAction = (target: MonitorTarget, formData: FormData) => Promise<void>;
 
+/**
+ * Pause or resume, then the monitor's page. A resume the cap refuses changes
+ * nothing; the page then says why (`limit=reached`).
+ */
 async function changeStatus({ monitorId }: MonitorTarget, status: MonitorStatus): Promise<never> {
   await requireMonitor();
   if (!monitorIdSchema.safeParse(monitorId).success) notFound();
-  if (!(await setMonitorStatus(monitorId, status))) notFound();
+  const changed = await setMonitorStatus(monitorId, status);
+  if (!changed) notFound();
+  if ("error" in changed) {
+    redirect(`${monitorDetailPath(monitorId)}?${new URLSearchParams({ limit: MONITOR_LIMIT_REACHED })}`);
+  }
 
   refreshMonitorPages();
   redirect(monitorDetailPath(monitorId));
@@ -132,7 +140,7 @@ async function changeStatus({ monitorId }: MonitorTarget, status: MonitorStatus)
 /** Pause a monitor (detail page): it is not checked until resumed. */
 export const pauseMonitorAction: MonitorButtonAction = async (target) => changeStatus(target, "paused");
 
-/** Resume a paused monitor (detail page). */
+/** Resume a paused monitor (detail page), unless the user's other active monitors reach their cap. */
 export const resumeMonitorAction: MonitorButtonAction = async (target) => changeStatus(target, "active");
 
 /**

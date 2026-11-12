@@ -31,9 +31,12 @@ export interface MonitorSignup {
  * - `not-found`: P0002, no account has that id (already deleted).
  * - `not-monitor-user`: P0001 `not_monitor_user`, the account is not a
  *   Monitor signup (owner, admin, MyLife user or no role); nothing was deleted.
+ * - `has-active-subscription`: P0001 `has_active_subscription`, the account
+ *   has a subscription that has not ended (any status but canceled or
+ *   incomplete_expired); nothing was deleted.
  * - `failed`: anything else (logged by code).
  */
-export type DeleteMonitorUserError = "not-found" | "not-monitor-user" | "failed";
+export type DeleteMonitorUserError = "not-found" | "not-monitor-user" | "has-active-subscription" | "failed";
 
 /** Result of `deleteMonitorUser`. */
 export type DeleteMonitorUserResult = { ok: true } | { ok: false; error: DeleteMonitorUserError };
@@ -65,9 +68,10 @@ export async function listMonitorSignups(): Promise<MonitorSignup[]> {
 /**
  * Deletes a Monitor signup for good (`admin_delete_monitor_user`): the
  * account, its profile and its monitors with their history. Only
- * `monitor_user` accounts can be deleted, and only by an admin (the RPC
- * raises 42501 for anyone else, reported as `failed`). An unexpected error is
- * logged by its code only, never with the id or address.
+ * `monitor_user` accounts whose subscriptions have all ended can be deleted,
+ * and only by an admin (the RPC raises 42501 for anyone else, reported as
+ * `failed`). An unexpected error is logged by its code only, never with the
+ * id or address.
  */
 export async function deleteMonitorUser(userId: string): Promise<DeleteMonitorUserResult> {
   const supabase = await createServerClient();
@@ -76,6 +80,9 @@ export async function deleteMonitorUser(userId: string): Promise<DeleteMonitorUs
 
   if (error.code === "P0002") return { ok: false, error: "not-found" };
   if (error.code === "P0001" && error.message === "not_monitor_user") return { ok: false, error: "not-monitor-user" };
+  if (error.code === "P0001" && error.message === "has_active_subscription") {
+    return { ok: false, error: "has-active-subscription" };
+  }
   console.error(`admin_delete_monitor_user failed: ${error.code || "unknown"}`);
   return { ok: false, error: "failed" };
 }

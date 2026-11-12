@@ -76,6 +76,7 @@ export default async function AdminMonitorUsersPage() {
                   failed: t("delete.errors.failed"),
                   notFound: t("delete.errors.notFound"),
                   notMonitorUser: t("delete.errors.notMonitorUser"),
+                  hasActiveSubscription: t("delete.errors.hasActiveSubscription"),
                 },
               },
             }}

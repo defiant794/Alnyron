@@ -5,11 +5,14 @@
  * grants (migration 20261103000100_catalog_admin.sql), the F2.1 catalog hardening
  * (migration 20261103000300_catalog_hardening.sql), the P3 MyLife role gate
  * (migration 20261106000200_monitor_schema.sql), the admin Monitor signups list
- * (migration 20261111000100_admin_monitor_signups.sql) and the admin Monitor signup
- * delete (migration 20261111000200_admin_delete_monitor_user.sql):
+ * (migration 20261111000100_admin_monitor_signups.sql), the admin Monitor signup
+ * delete (migration 20261111000200_admin_delete_monitor_user.sql), and the payments
+ * foundation (migration 20261112000100_payments_foundation.sql):
  *   - a function newly created by postgres in `private` is not executable by PUBLIC,
- *     anon or authenticated (anon/authenticated hold USAGE on `private`, so a PUBLIC
- *     EXECUTE default would expose every future security-definer helper)
+ *     anon, authenticated, or service_role (anon/authenticated hold USAGE on `private`,
+ *     so a PUBLIC EXECUTE default would expose every future security-definer helper;
+ *     service_role is similarly not granted EXECUTE by default — only the four explicitly
+ *     granted private helpers carry that privilege)
  *   - existing private functions: no PUBLIC EXECUTE; anon may run only the RLS visibility
  *     helpers, authenticated additionally is_owner(), is_mylife() (the mylife_* policies),
  *     is_monitor() (the monitors / monitor_events policies; expected only where the monitor
@@ -20,8 +23,15 @@
  *   - admin RPCs (pages + catalog + admin_list_monitor_signups() +
  *     admin_delete_monitor_user(), each conditional on its migration) are executable
  *     by authenticated, never by anon / PUBLIC
+ *   - payments ACLs: payments_sync_subscription and payments_record_subscription_invoice
+ *     (public) are EXECUTE-only for service_role; my_monitor_limit() grants EXECUTE to
+ *     authenticated (service_role retains schema default); and of the private helpers,
+ *     exactly the four called by the public payments functions (effective_monitor_limit,
+ *     payments_valid_timestamptz, payments_apply_subscription, payments_pause_over_cap)
+ *     have service_role EXECUTE
  *
  * Connection: postgres. The probe function is created inside a rolled-back transaction.
+ * Journey: payments-slice1-foundation  PAY1-AC5h, PAY1-AC5j, PAY1-AC5k
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -61,7 +71,7 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
     client.release();
   });
 
-  it("a new function in schema private is not executable by PUBLIC, anon or authenticated", async () => {
+  it("a new function in schema private is not executable by PUBLIC, anon, authenticated, or service_role", async () => {
     await withTx(client, async (c) => {
       await c.query(
         "CREATE FUNCTION private.zz_default_acl_probe() RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = '' AS 'select true'",
@@ -69,6 +79,16 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
       expect(await execPrivileges(c, "n.nspname = 'private' AND p.proname = 'zz_default_acl_probe'")).toEqual([
         { fn: "zz_default_acl_probe()", public_exec: false, anon_exec: false, authenticated_exec: false },
       ]);
+      // service_role must also have no EXECUTE on a freshly created private function:
+      // the schema default grants no EXECUTE to service_role, so only the four explicitly
+      // granted helpers carry the privilege.
+      const { rows: svcRows } = await c.query<{ exec: boolean }>(
+        `SELECT has_function_privilege('service_role', p.oid, 'EXECUTE') AS exec
+           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'private' AND p.proname = 'zz_default_acl_probe'`,
+      );
+      expect(svcRows).toHaveLength(1);
+      expect(svcRows[0]!.exec).toBe(false);
     });
   }, 12_000);
 
@@ -180,4 +200,114 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
       ]);
     });
   }, 12_000);
+
+  // ── PAY1-AC5j/5k: payments function EXECUTE ACLs (e2e project only) ─────────
+  // Gated to the e2e project because the payments functions exist only where
+  // 20261112000100_payments_foundation.sql has been applied.
+  describe.skipIf(!process.env.SUPABASE_E2E_REF)("PAY1 payments function EXECUTE ACLs", () => {
+    it("PAY1-AC5j: payments_sync_subscription(jsonb,jsonb) — not executable by PUBLIC, anon or authenticated (service_role only)", async () => {
+      await withTx(client, async (c) => {
+        expect(
+          await execPrivileges(
+            c,
+            "n.nspname = 'public' AND p.proname = 'payments_sync_subscription'",
+          ),
+        ).toEqual([
+          {
+            fn: "payments_sync_subscription(p_event jsonb, p_subscription jsonb)",
+            public_exec: false,
+            anon_exec: false,
+            authenticated_exec: false,
+          },
+        ]);
+      });
+    }, 12_000);
+
+    it("PAY1-AC5j: payments_record_subscription_invoice(jsonb,jsonb,jsonb) — not executable by PUBLIC, anon or authenticated", async () => {
+      await withTx(client, async (c) => {
+        expect(
+          await execPrivileges(
+            c,
+            "n.nspname = 'public' AND p.proname = 'payments_record_subscription_invoice'",
+          ),
+        ).toEqual([
+          {
+            fn: "payments_record_subscription_invoice(p_event jsonb, p_subscription jsonb, p_invoice jsonb)",
+            public_exec: false,
+            anon_exec: false,
+            authenticated_exec: false,
+          },
+        ]);
+      });
+    }, 12_000);
+
+    it("PAY1-AC5h: my_monitor_limit() — not PUBLIC or anon; authenticated granted", async () => {
+      await withTx(client, async (c) => {
+        expect(
+          await execPrivileges(c, "n.nspname = 'public' AND p.proname = 'my_monitor_limit'"),
+        ).toEqual([
+          {
+            fn: "my_monitor_limit()",
+            public_exec: false,
+            anon_exec: false,
+            authenticated_exec: true,
+          },
+        ]);
+      });
+    }, 12_000);
+
+    it("PAY1-AC5k: private.effective_monitor_limit(uuid) — not executable by PUBLIC, anon or authenticated", async () => {
+      await withTx(client, async (c) => {
+        expect(
+          await execPrivileges(
+            c,
+            "n.nspname = 'private' AND p.proname = 'effective_monitor_limit'",
+          ),
+        ).toEqual([
+          {
+            fn: "effective_monitor_limit(p_user_id uuid)",
+            public_exec: false,
+            anon_exec: false,
+            authenticated_exec: false,
+          },
+        ]);
+      });
+    }, 12_000);
+
+    it("PAY1-AC5j-service_role: payments_sync_subscription and payments_record_subscription_invoice — service_role EXECUTE = true", async () => {
+      await withTx(client, async (c) => {
+        for (const fnName of [
+          "payments_sync_subscription",
+          "payments_record_subscription_invoice",
+        ] as const) {
+          const { rows } = await c.query<{ exec: boolean }>(
+            `SELECT has_function_privilege('service_role', p.oid, 'EXECUTE') AS exec
+               FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public' AND p.proname = $1`,
+            [fnName],
+          );
+          expect(rows).toHaveLength(1);
+          expect(rows[0]!.exec).toBe(true);
+        }
+      });
+    }, 12_000);
+
+    it("PAY1-AC5k-service_role: private functions with service_role EXECUTE are exactly the four granted", async () => {
+      await withTx(client, async (c) => {
+        const { rows } = await c.query<{ fn: string }>(
+          `SELECT p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS fn
+             FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = 'private'
+              AND has_function_privilege('service_role', p.oid, 'EXECUTE')
+            ORDER BY 1`,
+        );
+        expect(rows.map((r) => r.fn)).toEqual([
+          "effective_monitor_limit(p_user_id uuid)",
+          "payments_apply_subscription(p_event jsonb, p_subscription jsonb, OUT outcome text, OUT account_id uuid)",
+          "payments_pause_over_cap(p_user_id uuid)",
+          "payments_valid_timestamptz(p_value text)",
+        ]);
+      });
+    }, 12_000);
+  });
 });

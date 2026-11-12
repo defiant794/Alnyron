@@ -87,6 +87,9 @@ export function monitorDetailPath(id: string): string {
   return `/monitor/monitors/${encodeURIComponent(id)}`;
 }
 
+/** Value of the detail page's `limit` query param after a resume the cap refused (set by the status action). */
+export const MONITOR_LIMIT_REACHED = "reached";
+
 /** Edit form of one monitor. */
 export function monitorEditPath(id: string): string {
   return `${monitorDetailPath(id)}/edit`;

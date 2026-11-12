@@ -3,6 +3,7 @@
  * Unit tests: /monitor/(panel)/monitors/[id]/page.tsx — monitor detail + history,
  * multi-line change summaries kept on their lines.
  * Journey: monitor-web-area  MON-AC39, MON-AC40, MON-AC41; monitor-engine  ENG-AC1
+ * Journey: payments-slice1-foundation  PAY1-AC2i, PAY1-AC2j
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
@@ -10,6 +11,7 @@ import "@testing-library/jest-dom/vitest";
 import { notFound } from "next/navigation";
 import type * as NextNavigation from "next/navigation";
 import type * as MonitorLocaleModule from "@/i18n/monitor-locale";
+import { getMonitorLocale } from "@/i18n/monitor-locale";
 
 const { mockRequireMonitor, mockGetMonitor, mockListMonitorEvents } = vi.hoisted(() => ({
   mockRequireMonitor: vi.fn(),
@@ -233,7 +235,7 @@ describe("A11Y-07: detail generateMetadata — valid UUID, getMonitor returns nu
   });
 });
 
-describe("A11Y-08: detail generateMetadata — found monitor keeps its label as title (unchanged behaviour)", () => {
+describe("A11Y-08: detail generateMetadata — found monitor keeps its label as title", () => {
   it("A11Y-08a: title equals monitor.label ('My Site')", async () => {
     const metadata = await generateDetailMetadata({ params: Promise.resolve({ id: TEST_MONITOR_ID }) });
     expect(metadata.title).toBe("My Site");
@@ -248,5 +250,67 @@ describe("A11Y-08: detail generateMetadata — found monitor keeps its label as 
     const metadata = await generateDetailMetadata({ params: Promise.resolve({ id: TEST_MONITOR_ID }) });
     expect(typeof metadata.title).toBe("string");
     expect((metadata.title as string).length).toBeGreaterThan(0);
+  });
+});
+
+// ── PAY1-AC2i/j: ?limit=reached → limit-reached alert ───────────────────────
+// Journey: payments-slice1-foundation  PAY1-AC2i, PAY1-AC2j
+//
+// Copy: factual — pause or delete frees a slot (pausing is cheaper than deleting).
+// Pin the exact strings.
+
+const DA_LIMIT_REACHED_ALERT =
+  "Du har nået grænsen for aktive overvågninger. Sæt en anden overvågning på pause, eller slet en, for at genoptage denne.";
+const EN_LIMIT_REACHED_ALERT =
+  "You have reached the limit for active monitors. Pause or delete another monitor to resume this one.";
+
+/** Render the detail page WITH the ?limit=reached search param. */
+async function renderDetailWithLimitFlag(locale: "da" | "en" = "da"): Promise<void> {
+  vi.mocked(getMonitorLocale).mockResolvedValueOnce(locale);
+  render(await MonitorDetailPage({
+    params: Promise.resolve({ id: TEST_MONITOR_ID }),
+    searchParams: Promise.resolve({ limit: "reached" }),
+  }));
+}
+
+/** Render the detail page WITHOUT any search params (normal visit). */
+async function renderDetailNoFlag(): Promise<void> {
+  render(await MonitorDetailPage({ params: Promise.resolve({ id: TEST_MONITOR_ID }) }));
+}
+
+describe("PAY1-AC2i: detail page with ?limit=reached shows limit alert with role=alert (DA)", () => {
+  it("PAY1-AC2i: role=alert element is rendered", async () => {
+    await renderDetailWithLimitFlag("da");
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("PAY1-AC2i-copy: alert contains the pinned Danish copy", async () => {
+    await renderDetailWithLimitFlag("da");
+    expect(screen.getByRole("alert").textContent).toContain(DA_LIMIT_REACHED_ALERT);
+  });
+
+  it("PAY1-AC2i-absent: no alert without the query flag", async () => {
+    await renderDetailNoFlag();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("PAY1-AC2i-absent-other: no alert when flag is a different value", async () => {
+    render(await MonitorDetailPage({
+      params: Promise.resolve({ id: TEST_MONITOR_ID }),
+      searchParams: Promise.resolve({ limit: "other" }),
+    }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("PAY1-AC2j: detail page with ?limit=reached shows limit alert in EN", () => {
+  it("PAY1-AC2j: role=alert element is rendered for EN visitor", async () => {
+    await renderDetailWithLimitFlag("en");
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("PAY1-AC2j-copy: alert contains the pinned English copy", async () => {
+    await renderDetailWithLimitFlag("en");
+    expect(screen.getByRole("alert").textContent).toContain(EN_LIMIT_REACHED_ALERT);
   });
 });

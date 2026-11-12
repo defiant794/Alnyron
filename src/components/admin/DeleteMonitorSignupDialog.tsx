@@ -13,7 +13,7 @@ export type DeleteMonitorSignupDialogLabels = {
   /** Confirm button text while the delete runs. */
   pending: string;
   cancel: string;
-  errors: { failed: string; notFound: string; notMonitorUser: string };
+  errors: { failed: string; notFound: string; notMonitorUser: string; hasActiveSubscription: string };
 };
 
 export type DeleteMonitorSignupDialogProps = {
@@ -40,6 +40,7 @@ const ERROR_LABELS = {
   failed: "failed",
   "not-found": "notFound",
   "not-monitor-user": "notMonitorUser",
+  "has-active-subscription": "hasActiveSubscription",
 } as const satisfies Record<DeleteMonitorUserError, keyof DeleteMonitorSignupDialogLabels["errors"]>;
 
 /** The address in the body, in bold. */

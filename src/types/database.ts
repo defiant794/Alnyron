@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      billing_customers: {
+        Row: {
+          created_at: string
+          stripe_customer_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          stripe_customer_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          stripe_customer_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string
@@ -294,6 +312,71 @@ export type Database = {
           },
         ]
       }
+      monitor_plan_translations: {
+        Row: {
+          description: string | null
+          locale: Database["public"]["Enums"]["locale_code"]
+          name: string
+          plan_id: string
+        }
+        Insert: {
+          description?: string | null
+          locale: Database["public"]["Enums"]["locale_code"]
+          name: string
+          plan_id: string
+        }
+        Update: {
+          description?: string | null
+          locale?: Database["public"]["Enums"]["locale_code"]
+          name?: string
+          plan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monitor_plan_translations_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "monitor_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      monitor_plans: {
+        Row: {
+          active: boolean
+          amount_ore: number
+          billing_interval: string
+          created_at: string
+          id: string
+          monitor_limit: number
+          sort_order: number
+          stripe_price_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          amount_ore: number
+          billing_interval: string
+          created_at?: string
+          id?: string
+          monitor_limit: number
+          sort_order?: number
+          stripe_price_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          amount_ore?: number
+          billing_interval?: string
+          created_at?: string
+          id?: string
+          monitor_limit?: number
+          sort_order?: number
+          stripe_price_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       monitors: {
         Row: {
           consecutive_errors: number
@@ -521,6 +604,127 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_events: {
+        Row: {
+          id: string
+          livemode: boolean
+          processed_at: string | null
+          received_at: string
+          type: string
+        }
+        Insert: {
+          id: string
+          livemode: boolean
+          processed_at?: string | null
+          received_at?: string
+          type: string
+        }
+        Update: {
+          id?: string
+          livemode?: boolean
+          processed_at?: string | null
+          received_at?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      subscription_invoices: {
+        Row: {
+          amount_refunded_ore: number
+          amount_tax_ore: number
+          amount_total_ore: number
+          created_at: string
+          email: string
+          paid_at: string
+          period_end: string | null
+          period_start: string | null
+          stripe_invoice_id: string
+          stripe_subscription_id: string
+          user_id: string | null
+        }
+        Insert: {
+          amount_refunded_ore?: number
+          amount_tax_ore: number
+          amount_total_ore: number
+          created_at?: string
+          email: string
+          paid_at: string
+          period_end?: string | null
+          period_start?: string | null
+          stripe_invoice_id: string
+          stripe_subscription_id: string
+          user_id?: string | null
+        }
+        Update: {
+          amount_refunded_ore?: number
+          amount_tax_ore?: number
+          amount_total_ore?: number
+          created_at?: string
+          email?: string
+          paid_at?: string
+          period_end?: string | null
+          period_start?: string | null
+          stripe_invoice_id?: string
+          stripe_subscription_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_invoices_stripe_subscription_id_fkey"
+            columns: ["stripe_subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["stripe_subscription_id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string | null
+          last_event_created: string
+          plan_id: string
+          status: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          last_event_created: string
+          plan_id: string
+          status: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          last_event_created?: string
+          plan_id?: string
+          status?: string
+          stripe_customer_id?: string
+          stripe_subscription_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "monitor_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_allowlist: {
         Row: {
           created_at: string
@@ -694,6 +898,15 @@ export type Database = {
       monitor_engine_snapshot: {
         Args: { p_monitor_id: string }
         Returns: string
+      }
+      my_monitor_limit: { Args: never; Returns: number }
+      payments_record_subscription_invoice: {
+        Args: { p_event: Json; p_invoice: Json; p_subscription: Json }
+        Returns: Json
+      }
+      payments_sync_subscription: {
+        Args: { p_event: Json; p_subscription: Json }
+        Returns: Json
       }
     }
     Enums: {

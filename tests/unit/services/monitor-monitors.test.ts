@@ -2,12 +2,14 @@
  * Unit tests: src/services/monitor/monitors.ts — monitors service (mocked Supabase).
  * Journey: monitor-web-area  MON-AC23, MON-AC26, MON-AC27, MON-AC32, MON-AC35,
  *   MON-AC36, MON-AC37, MON-AC38, MON-AC39
+ * Journey: payments-slice1-foundation  PAY1-AC2e, PAY1-AC2f, PAY1-AC2g, PAY1-AC7a, PAY1-AC7b, PAY1-AC7c
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Supabase mock setup ───────────────────────────────────────────────────────
 
 const mockFrom = vi.fn();
+const mockRpc  = vi.fn();
 
 const TEST_USER_ID = "00000000-0000-0000-0000-000000000099";
 const TEST_MONITOR_ID = "00000000-0000-0000-0000-000000000011";
@@ -22,7 +24,7 @@ const { mockRequireMonitor } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
-  createServerClient: vi.fn(async () => ({ from: mockFrom })),
+  createServerClient: vi.fn(async () => ({ from: mockFrom, rpc: mockRpc })),
 }));
 vi.mock("@/services/auth/require-role", () => ({ requireMonitor: mockRequireMonitor }));
 
@@ -124,31 +126,22 @@ describe("getMonitor — MON-AC39: not-found / not-own → notFound()", () => {
 // ── getMonitorUsage — MON-AC23/MON-AC25 ──────────────────────────────────────
 
 describe("getMonitorUsage — MON-AC23/MON-AC25: count + limit", () => {
-  it("MON-AC23c: returns { count, limit } where limit is the profile monitor_limit", async () => {
-    const eqMock = vi.fn().mockReturnThis();
-    const profileStub = {
-      select: vi.fn().mockReturnThis(),
-      eq: eqMock,
-      single: vi.fn().mockResolvedValue({ data: { monitor_limit: 5 }, error: null }),
-    };
+  it("MON-AC23c: returns { count, limit } where limit comes from rpc('my_monitor_limit')", async () => {
+    mockRpc.mockResolvedValueOnce({ data: 5, error: null });
     const countStub = {
       select: vi.fn().mockResolvedValue({ count: 2, data: [], error: null }),
     };
-    mockFrom.mockImplementationOnce(() => profileStub).mockImplementationOnce(() => countStub);
+    mockFrom.mockReturnValueOnce(countStub);
     const result = await getMonitorUsage();
-    expect(result).toMatchObject({ count: expect.any(Number), limit: 5 });
+    expect(result).toMatchObject({ count: 2, limit: 5 });
   });
 
-  it("MON-AC25a: NULL monitor_limit (owner/unlimited) is returned as null", async () => {
-    const profileStub = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { monitor_limit: null }, error: null }),
-    };
+  it("MON-AC25a: rpc returns NULL (unlimited) → { limit: null }", async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: null });
     const countStub = {
       select: vi.fn().mockResolvedValue({ count: 3, data: [], error: null }),
     };
-    mockFrom.mockImplementationOnce(() => profileStub).mockImplementationOnce(() => countStub);
+    mockFrom.mockReturnValueOnce(countStub);
     const result = await getMonitorUsage();
     expect(result).toMatchObject({ limit: null });
   });
@@ -303,5 +296,117 @@ describe("listMonitorEvents — MON-AC40: newest first", () => {
     const [col, opts] = orderMock.mock.calls[0] ?? [];
     expect(col).toBe("detected_at");
     expect(opts).toMatchObject({ ascending: false });
+  });
+});
+
+// ── getMonitorUsage — PAY1-AC7: uses rpc('my_monitor_limit') ─────────────────
+
+describe("getMonitorUsage — PAY1-AC7a/b/c: rpc-based limit, no owner special-case", () => {
+  it("PAY1-AC7a: getMonitorUsage calls rpc('my_monitor_limit') for the limit — not from('profiles')", async () => {
+    mockRpc.mockResolvedValue({ data: 20, error: null });
+    const countStub = {
+      select: vi.fn().mockResolvedValue({ count: 3, data: [], error: null }),
+    };
+    mockFrom.mockReturnValue(countStub);
+    await getMonitorUsage();
+    expect(mockRpc).toHaveBeenCalledWith("my_monitor_limit");
+    // The profiles table must NOT be queried for the limit
+    expect(mockFrom).not.toHaveBeenCalledWith("profiles");
+  });
+
+  it("PAY1-AC7b: rpc returns NULL → getMonitorUsage returns { limit: null } (unlimited)", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: null });
+    const countStub = {
+      select: vi.fn().mockResolvedValue({ count: 1, data: [], error: null }),
+    };
+    mockFrom.mockReturnValue(countStub);
+    const result = await getMonitorUsage();
+    expect(result).toMatchObject({ limit: null });
+  });
+
+  it("PAY1-AC7c: no role special-case in TS — limit is the rpc value; requireMonitor not called", async () => {
+    // getMonitorUsage calls rpc("my_monitor_limit") directly — it does not call
+    // requireMonitor. The rpc result passes through regardless of session role.
+    mockRpc.mockResolvedValue({ data: 42, error: null });
+    const countStub = {
+      select: vi.fn().mockResolvedValue({ count: 5, data: [], error: null }),
+    };
+    mockFrom.mockReturnValue(countStub);
+    const result = await getMonitorUsage();
+    expect(result).toMatchObject({ limit: 42 });
+    expect(mockRequireMonitor).not.toHaveBeenCalled();
+  });
+});
+
+describe("getMonitorUsage — PAY1-AC7a-err: rpc error rejects (not silently unlimited)", () => {
+  it("PAY1-AC7a-err: rpc('my_monitor_limit') error → getMonitorUsage rejects", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { code: "42501", message: "forbidden" } });
+    const countStub = {
+      select: vi.fn().mockResolvedValue({ count: 1, data: [], error: null }),
+    };
+    mockFrom.mockReturnValue(countStub);
+    await expect(getMonitorUsage()).rejects.toThrow();
+  });
+});
+
+// ── setMonitorStatus — PAY1-AC2: P0001 monitor_limit_reached mapping ─────────
+
+describe("setMonitorStatus — PAY1-AC2e/f/g: limit_reached mapping, PGRST116 null, and other-error throw", () => {
+  it("PAY1-AC2e: P0001 monitor_limit_reached → { error: 'limit_reached' } (not thrown)", async () => {
+    const tableStub = {
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: null,
+        error: { code: "P0001", message: "monitor_limit_reached" },
+      }),
+    };
+    mockFrom.mockReturnValue(tableStub);
+    const result = await setMonitorStatus(TEST_MONITOR_ID, "active");
+    expect(result).toEqual({ error: "limit_reached" });
+  });
+
+  it("PAY1-AC2f: PGRST116 (no rows) → null", async () => {
+    const tableStub = {
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: null,
+        error: { code: "PGRST116", message: "no rows" },
+      }),
+    };
+    mockFrom.mockReturnValue(tableStub);
+    const result = await setMonitorStatus(TEST_MONITOR_ID, "active");
+    expect(result).toBeNull();
+  });
+
+  it("PAY1-AC2g: other Postgres error throws", async () => {
+    const tableStub = {
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: null,
+        error: { code: "42501", message: "permission denied" },
+      }),
+    };
+    mockFrom.mockReturnValue(tableStub);
+    await expect(setMonitorStatus(TEST_MONITOR_ID, "active")).rejects.toThrow();
+  });
+
+  it("PAY1-AC2g-p0001-other: P0001 with a different message is NOT limit_reached (falls through to throw)", async () => {
+    const tableStub = {
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: null,
+        error: { code: "P0001", message: "some_other_guard" },
+      }),
+    };
+    mockFrom.mockReturnValue(tableStub);
+    await expect(setMonitorStatus(TEST_MONITOR_ID, "active")).rejects.toThrow();
   });
 });

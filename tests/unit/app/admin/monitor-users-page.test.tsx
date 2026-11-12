@@ -4,6 +4,7 @@
  * Journey: admin-monitor-users       AC-AMU-01, AC-AMU-02, AC-AMU-02c, AC-AMU-04, AC-AMU-11, AC-AMU-13, AC-AMU-20, AC-AMU-21
  * Journey: admin-monitor-users-cleanup  AMC-16, AMC-21, AMC-27, AMC-28
  * Journey: admin-monitor-users-sites    AMSS-13, Overvåger da.json copy pins (Overvåger header: AMC-16)
+ * Journey: payments-slice1-foundation   PAY1-AC6d
  *
  * Pattern follows tests/unit/app/monitor/dashboard-page.test.tsx:
  *  - next-intl/server mocked with the real createTranslator, so the ICU
@@ -613,3 +614,25 @@ describe("AMSS-13: AdminMonitorUsersPage — monitors array flows through to Mon
     expect(screen.getByRole("link", { name: /My Site/i })).toBeInTheDocument();
   });
 });
+
+// ── PAY1-AC6d: admin delete dialog shows has-active-subscription copy ─────────
+// Journey: payments-slice1-foundation  PAY1-AC6d
+//
+// Pin the exact Danish copy for the has-active-subscription guard.
+
+const DA_HAS_ACTIVE_SUBSCRIPTION =
+  "Kontoen har et abonnement, der ikke er ophørt, og kan først slettes, når det er ophørt.";
+
+describe("PAY1-AC6d: da.json Admin.monitorUsers.delete.errors.hasActiveSubscription — key exists and is pinned", () => {
+  function deleteErrors(): Record<string, unknown> {
+    const admin = da.Admin as Record<string, unknown>;
+    const mu = (admin["monitorUsers"] ?? {}) as Record<string, unknown>;
+    const del = (mu["delete"] ?? {}) as Record<string, unknown>;
+    return (del["errors"] ?? {}) as Record<string, unknown>;
+  }
+
+  it("PAY1-AC6d-da: Admin.monitorUsers.delete.errors.hasActiveSubscription exists and matches pinned text", () => {
+    expect(deleteErrors()["hasActiveSubscription"]).toBe(DA_HAS_ACTIVE_SUBSCRIPTION);
+  });
+});
+
