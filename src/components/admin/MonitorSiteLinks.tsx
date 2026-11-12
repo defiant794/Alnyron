@@ -21,11 +21,11 @@ export type MonitorSiteLinksProps = {
 
 /**
  * The sites a Monitor signup watches (Admin › Monitor-brugere, Overvåger):
- * each one a link to the site in a new tab, named by its label or else its
- * address without the scheme (`displayUrl`), a paused one marked next to it;
- * muted "Ingen" without monitors. A long name is cut off with an ellipsis, the
- * link still leads to the whole URL. The URLs are http(s) only (the monitors'
- * `monitors_url_valid` check).
+ * each one a link to the site in a new tab, named by its address without the
+ * scheme (`displayUrl`), its label (if it has one) as a muted note after it
+ * and a paused one marked next to it; muted "Ingen" without monitors. A long
+ * address or label is cut off with an ellipsis, the link still leads to the
+ * whole URL. The URLs are http(s) only (the monitors' `monitors_url_valid` check).
  */
 export default function MonitorSiteLinks({ sites, labels }: MonitorSiteLinksProps) {
   if (sites.length === 0) return <span className="text-muted">{labels.sitesNone}</span>;
@@ -36,9 +36,10 @@ export default function MonitorSiteLinks({ sites, labels }: MonitorSiteLinksProp
         // Sites have no id of their own; the list keeps the RPC's order and is never reordered here.
         <li key={index} className="flex flex-wrap items-center gap-x-2">
           <Link href={site.url} target="_blank" className="inline-flex min-h-11 max-w-full items-center text-small">
-            <span className="truncate">{site.label || displayUrl(site.url)}</span>
+            <span className="truncate">{displayUrl(site.url)}</span>
             <span className="sr-only"> ({labels.newTab})</span>
           </Link>
+          {site.label && <span className="max-w-full truncate text-small text-muted">{site.label}</span>}
           {site.status === "paused" && <Badge>{labels.sitesPaused}</Badge>}
         </li>
       ))}

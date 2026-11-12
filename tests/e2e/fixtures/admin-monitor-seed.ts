@@ -151,12 +151,15 @@ export const E2E_AMU_SITES_UUID  = "00000000-0000-0000-0a31-000000000060";
 
 /**
  * Fixed URLs used by the Overvåger column tests.
- * The active monitor has a label; the paused one has label=NULL so the table
- * must fall back to displayUrl().  Explicit created_at keeps ORDER BY deterministic.
+ * The active monitor has a label (shown as a muted note after its link); the
+ * paused one has label=NULL (link only).  Both links show displayUrl(url).
+ * Explicit created_at keeps ORDER BY deterministic.
  */
 export const E2E_AMU_SITES_URL_ACTIVE = "https://amu-sites-active.alnyron-e2e.example.com";
 export const E2E_AMU_SITES_LABEL_ACTIVE = "Aktiv side";
 export const E2E_AMU_SITES_URL_PAUSED  = "https://amu-sites-paused.alnyron-e2e.example.com";
+/** displayUrl(E2E_AMU_SITES_URL_ACTIVE) — no scheme, no trailing slash. */
+export const E2E_AMU_SITES_DISPLAY_ACTIVE = "amu-sites-active.alnyron-e2e.example.com";
 /** displayUrl(E2E_AMU_SITES_URL_PAUSED) — no scheme, no trailing slash. */
 export const E2E_AMU_SITES_DISPLAY_PAUSED = "amu-sites-paused.alnyron-e2e.example.com";
 

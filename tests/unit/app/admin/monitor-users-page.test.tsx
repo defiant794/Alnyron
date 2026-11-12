@@ -611,7 +611,10 @@ describe("AMSS-13: AdminMonitorUsersPage — monitors array flows through to Mon
 
     render(await AdminMonitorUsersPage());
 
-    expect(screen.getByRole("link", { name: /My Site/i })).toBeInTheDocument();
+    // The link is named by displayUrl(url); the label is a muted note beside it
+    const link = screen.getByRole("link", { name: /^my-site\.example\.com/ });
+    expect(link).toHaveAttribute("href", "https://my-site.example.com");
+    expect(screen.getByText("My Site")).toHaveClass("text-muted");
   });
 });
 

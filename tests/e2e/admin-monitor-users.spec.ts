@@ -37,6 +37,7 @@ import {
   E2E_AMU_SITES_LABEL_ACTIVE,
   E2E_AMU_SITES_URL_ACTIVE,
   E2E_AMU_SITES_URL_PAUSED,
+  E2E_AMU_SITES_DISPLAY_ACTIVE,
   E2E_AMU_SITES_DISPLAY_PAUSED,
   seedE2eAmuAdmin,
   seedE2eAmuMonitorUser,
@@ -75,6 +76,15 @@ function rowControlName(email: string, action: string): RegExp {
   // Escape the email for use in a regex
   const escapedEmail = email.replace(/[.+@]/g, (c) => `\\${c}`);
   return new RegExp(`^\\s*${action}[\\s\\S]*${escapedEmail}`);
+}
+
+/**
+ * monitorLinkName(display): accessible-name regex for an Overvåger link whose
+ * name starts with the literal displayUrl host (dots escaped, `^`-anchored),
+ * e.g. /^host\.example\.com/ — the same convention as the unit tests.
+ */
+function monitorLinkName(display: string): RegExp {
+  return new RegExp(`^${display.replace(/\./g, "\\.")}`);
 }
 
 // ── Seed state ────────────────────────────────────────────────────────────────
@@ -399,9 +409,9 @@ test.describe.serial("admin-monitor-users E2E", () => {
   // Journey: admin-monitor-users-sites — Overvåger column E2E (AMSS-E-1 … AMSS-E-3)
   // ══════════════════════════════════════════════════════════════════════════
 
-  // ── AMSS-E-1: monitor links in created_at order; labelled active link ──────
+  // ── AMSS-E-1: monitor links in created_at order; active link named by its URL, label muted ──
 
-  test("AMSS-E-1: sites fixture monitors are links ordered by created_at; the active one has label text, correct href + rel/target", async ({ page }) => {
+  test("AMSS-E-1: sites fixture monitors are links ordered by created_at; the active one has displayUrl text, its label as a muted note, correct href + rel/target", async ({ page }) => {
     test.skip(!E2E_REF_AVAILABLE, "Requires SUPABASE_E2E_REF");
 
     await loginAs(page, E2E_AMU_ADMIN_EMAIL, adminPassword, ADMIN_MONITOR_USERS_PATH);
@@ -418,12 +428,21 @@ test.describe.serial("admin-monitor-users E2E", () => {
     await expect(sitesLinks.nth(0)).toHaveAttribute("href", E2E_AMU_SITES_URL_ACTIVE);
     await expect(sitesLinks.nth(1)).toHaveAttribute("href", E2E_AMU_SITES_URL_PAUSED);
 
-    // Active monitor: link text = label
-    const activeLink = sitesRow.getByRole("link", { name: new RegExp(E2E_AMU_SITES_LABEL_ACTIVE) });
+    // Active monitor: link text = displayUrl (hostname, no scheme), not the label
+    const activeLink = sitesRow.getByRole("link", { name: monitorLinkName(E2E_AMU_SITES_DISPLAY_ACTIVE) });
     await expect(activeLink).toBeVisible();
+    await expect(activeLink).toContainText(E2E_AMU_SITES_DISPLAY_ACTIVE);
+    await expect(activeLink).not.toContainText(E2E_AMU_SITES_LABEL_ACTIVE);
     await expect(activeLink).toHaveAttribute("href", E2E_AMU_SITES_URL_ACTIVE);
     await expect(activeLink).toHaveAttribute("target", "_blank");
     await expect(activeLink).toHaveAttribute("rel", "noopener noreferrer");
+
+    // Its label is a muted note in the same list item, next to the link.
+    // The active monitor is seeded first (created_at order), so it is the first list item.
+    const activeItem = sitesRow.getByRole("listitem").nth(0);
+    const activeLabel = activeItem.getByText(E2E_AMU_SITES_LABEL_ACTIVE, { exact: true });
+    await expect(activeLabel).toBeVisible();
+    await expect(activeLabel).toHaveClass(/\btext-muted\b/);
   });
 
   // ── AMSS-E-2: null-label paused monitor uses displayUrl + paused indicator ─
@@ -439,7 +458,7 @@ test.describe.serial("admin-monitor-users E2E", () => {
     });
 
     // Paused monitor: link text = displayUrl (hostname, no scheme)
-    const pausedLink = sitesRow.getByRole("link", { name: new RegExp(E2E_AMU_SITES_DISPLAY_PAUSED) });
+    const pausedLink = sitesRow.getByRole("link", { name: monitorLinkName(E2E_AMU_SITES_DISPLAY_PAUSED) });
     await expect(pausedLink).toBeVisible();
     await expect(pausedLink).toHaveAttribute("href", E2E_AMU_SITES_URL_PAUSED);
 

@@ -882,19 +882,22 @@ const ROW_NO_MONITORS: RowWithStatus = {
 };
 
 // ── AMSS-7: Overvåger column links ────────────────────────────────────────────
-// Journey: admin-monitor-users-sites   AC: each monitor rendered as external link
+// Journey: admin-monitor-users-sites   AC: each monitor rendered as external link,
+//   named by its URL (displayUrl); a label is a muted note next to the link.
 
 describe("AMSS-7: MonitorSignupsTable — Overvåger column renders each monitor as external link", () => {
-  it("AMSS-7a: active monitor with label is rendered as a link with label text", () => {
+  it("AMSS-7a: labelled monitor's link text is displayUrl(url), not its label", () => {
     renderTable([ROW_WITH_MONITORS]);
-    const link = screen.getByRole("link", { name: /Alpha/i });
-    expect(link).toBeInTheDocument();
+    // displayUrl("https://alpha.example.com") = "alpha.example.com"
+    const link = screen.getByRole("link", { name: /^alpha\.example\.com/ });
     expect(link).toHaveAttribute("href", "https://alpha.example.com");
+    // Case-sensitive: the label "Alpha" is not part of the link
+    expect(link).not.toHaveTextContent("Alpha");
   });
 
   it("AMSS-7b: active link has target=_blank and rel=noopener noreferrer", () => {
     renderTable([ROW_WITH_MONITORS]);
-    const link = screen.getByRole("link", { name: /Alpha/i });
+    const link = screen.getByRole("link", { name: /^alpha\.example\.com/ });
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
@@ -915,7 +918,23 @@ describe("AMSS-7: MonitorSignupsTable — Overvåger column renders each monitor
     renderTable([ROW_WITH_MONITORS]);
     // next-intl labels.newTab = "åbner i ny fane" is rendered sr-only inside the <a>;
     // Testing Library includes hidden text in accessible-name computation.
-    expect(screen.getByRole("link", { name: /Alpha.*åbner i ny fane/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /alpha\.example\.com.*åbner i ny fane/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /beta\.example\.com.*åbner i ny fane/i })).toBeInTheDocument();
+  });
+
+  it("AMSS-7f: a monitor's label is shown as a muted note next to its link, outside the link", () => {
+    renderTable([ROW_WITH_MONITORS]);
+    const link = screen.getByRole("link", { name: /^alpha\.example\.com/ });
+    const label = screen.getByText("Alpha");
+    expect(label).toHaveClass("text-muted");
+    expect(link).not.toContainElement(label);
+    expect(label.closest("li")).toBe(link.closest("li"));
+  });
+
+  it("AMSS-7g: a monitor without a label shows only its link and status, no note", () => {
+    renderTable([ROW_WITH_MONITORS]);
+    const link = screen.getByRole("link", { name: /beta\.example\.com/ });
+    expect(link.closest("li")).toHaveTextContent(/^beta\.example\.com \(åbner i ny fane\)\s*sat på pause$/);
   });
 });
 
@@ -947,8 +966,8 @@ describe("AMSS-9: MonitorSignupsTable — paused monitor has visible paused indi
 
   it("AMSS-9b: active monitor's list item does NOT contain 'sat på pause'", () => {
     renderTable([ROW_WITH_MONITORS]);
-    // Alpha is the active monitor; its <li> must NOT show the paused marker
-    const activeLink = screen.getByRole("link", { name: /Alpha/i });
+    // alpha.example.com is the active monitor; its <li> must NOT show the paused marker
+    const activeLink = screen.getByRole("link", { name: /^alpha\.example\.com/ });
     expect(activeLink.closest("li")).not.toHaveTextContent("sat på pause");
   });
 });
