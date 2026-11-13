@@ -1,9 +1,9 @@
 /**
  * Minimal Stripe REST client (https://docs.stripe.com/api): form-encoded
- * `fetch` POSTs, no SDK, pinned to one API version. It reads no environment
- * and logs nothing; the API key is passed in and never appears in a return
- * value, and neither does a request or response body. Every helper resolves
- * to a {@link StripeResult} and never throws.
+ * `fetch` requests, no SDK, pinned to one API version. It reads no
+ * environment and logs nothing; the API key is passed in and never appears in
+ * a return value, and neither does a request or response body. Every helper
+ * resolves to a {@link StripeResult} and never throws.
  */
 
 import { STRIPE_REQUEST_TIMEOUT_MS } from "@/config/payments";
@@ -11,8 +11,8 @@ import { STRIPE_REQUEST_TIMEOUT_MS } from "@/config/payments";
 /**
  * The Stripe API version every request is made with (`Stripe-Version`), so an
  * account default changed in the Dashboard cannot change a request or
- * response shape. scripts/stripe-setup.mjs uses the same; Slice 1c's webhook
- * endpoint must too.
+ * response shape. scripts/stripe-setup.mjs and the webhook Worker
+ * (workers/payments/, and the Dashboard endpoint it serves) use the same.
  */
 export const STRIPE_API_VERSION = "2026-10-28.endive";
 
@@ -86,28 +86,49 @@ function parseJson(text: string): unknown {
   }
 }
 
+/** The HTTP methods the Stripe API is called with. */
+export type StripeMethod = "GET" | "POST" | "DELETE";
+
 /**
- * POSTs `params` to the Stripe API at `path` (e.g. `/checkout/sessions`). The
- * success body is returned as `T` unchecked: callers validate the fields they
- * use. Never throws.
+ * Calls the Stripe API at `path` (e.g. `/subscriptions/sub_…`) with `method`.
+ * `params` go into the query string of a GET and into the form body of a POST
+ * or DELETE; `idempotencyKey` is sent as `Idempotency-Key`, so Stripe answers
+ * a repeated POST with the first one's result instead of acting twice
+ * (Stripe ignores it on GET/DELETE, per its idempotent-requests docs).
+ * Callers must validate whatever they put into `path`. The success body is
+ * returned as `T` unchecked: callers validate the fields they use. Never
+ * throws.
  */
-export async function stripePost<T>(
+export async function stripeRequest<T>(
   apiKey: string,
+  method: StripeMethod,
   path: string,
-  params: StripeParams,
+  params?: StripeParams,
+  idempotencyKey?: string,
   fetchImpl: typeof fetch = (input, init) => fetch(input, init),
 ): Promise<StripeResult<T>> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${apiKey}`,
+    "Stripe-Version": STRIPE_API_VERSION,
+  };
+  if (idempotencyKey !== undefined) headers["Idempotency-Key"] = idempotencyKey;
+  let url = `${STRIPE_API_BASE}${path}`;
+  let body: string | undefined;
+  if (method === "GET") {
+    const query = params === undefined ? "" : encodeStripeForm(params).toString();
+    if (query !== "") url += `?${query}`;
+  } else if (params !== undefined) {
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    body = encodeStripeForm(params).toString();
+  }
+
   let status: number;
   let text: string;
   try {
-    const response = await fetchImpl(`${STRIPE_API_BASE}${path}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Stripe-Version": STRIPE_API_VERSION,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: encodeStripeForm(params).toString(),
+    const response = await fetchImpl(url, {
+      method,
+      headers,
+      body,
       signal: AbortSignal.timeout(STRIPE_REQUEST_TIMEOUT_MS),
     });
     status = response.status;
@@ -116,13 +137,26 @@ export async function stripePost<T>(
     return { ok: false, kind: "network" };
   }
 
-  const body = parseJson(text);
+  const parsed = parseJson(text);
   if (status >= 200 && status < 300) {
-    if (typeof body !== "object" || body === null || Array.isArray(body)) return { ok: false, kind: "invalid_response" };
-    return { ok: true, data: body as T };
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return { ok: false, kind: "invalid_response" };
+    return { ok: true, data: parsed as T };
   }
-  const error: unknown = typeof body === "object" && body !== null ? (body as Record<string, unknown>).error : null;
+  const error: unknown = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>).error : null;
   return { ok: false, kind: "http", status, code: stringField(error, "code") ?? stringField(error, "type") };
+}
+
+/**
+ * POSTs `params` to the Stripe API at `path` (e.g. `/checkout/sessions`):
+ * {@link stripeRequest} without an idempotency key. Never throws.
+ */
+export async function stripePost<T>(
+  apiKey: string,
+  path: string,
+  params: StripeParams,
+  fetchImpl?: typeof fetch,
+): Promise<StripeResult<T>> {
+  return stripeRequest<T>(apiKey, "POST", path, params, undefined, fetchImpl);
 }
 
 /**

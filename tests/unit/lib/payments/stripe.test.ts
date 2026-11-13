@@ -7,12 +7,13 @@ import {
   STRIPE_API_VERSION,
   encodeStripeForm,
   stripePost,
+  stripeRequest,
   createCheckoutSession,
   createBillingPortalSession,
 } from "@/lib/payments/stripe";
 import { STRIPE_REQUEST_TIMEOUT_MS } from "@/config/payments";
 
-const API_KEY = "sk_test_unit_key";
+const STRIPE_KEY_FX = "sk_test_unit_key";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ describe("PAY1B-AC36: stripePost — headers, method, AbortSignal, never throws"
       capturedUrl = url as string;
       return new Response(JSON.stringify({ id: "obj_1" }), { status: 200 });
     };
-    await stripePost(API_KEY, "/checkout/sessions", { mode: "subscription" }, captureFetch);
+    await stripePost(STRIPE_KEY_FX, "/checkout/sessions", { mode: "subscription" }, captureFetch);
     expect(capturedUrl).toBe("https://api.stripe.com/v1/checkout/sessions");
   });
 
@@ -124,8 +125,8 @@ describe("PAY1B-AC36: stripePost — headers, method, AbortSignal, never throws"
       authHeader = headers.get("Authorization") ?? "";
       return new Response(JSON.stringify({}), { status: 200 });
     };
-    await stripePost(API_KEY, "/test", {}, captureFetch);
-    expect(authHeader).toBe(`Bearer ${API_KEY}`);
+    await stripePost(STRIPE_KEY_FX, "/test", {}, captureFetch);
+    expect(authHeader).toBe(`Bearer ${STRIPE_KEY_FX}`);
   });
 
   it("PAY1B-AC36c: sends Stripe-Version pinned to '2026-10-28.endive'", async () => {
@@ -135,7 +136,7 @@ describe("PAY1B-AC36: stripePost — headers, method, AbortSignal, never throws"
       stripeVersionHeader = headers.get("Stripe-Version") ?? "";
       return new Response(JSON.stringify({}), { status: 200 });
     };
-    await stripePost(API_KEY, "/test", {}, captureFetch);
+    await stripePost(STRIPE_KEY_FX, "/test", {}, captureFetch);
     expect(stripeVersionHeader).toBe("2026-10-28.endive");
     expect(stripeVersionHeader).toBe(STRIPE_API_VERSION);
   });
@@ -147,7 +148,7 @@ describe("PAY1B-AC36: stripePost — headers, method, AbortSignal, never throws"
       contentType = headers.get("Content-Type") ?? "";
       return new Response(JSON.stringify({}), { status: 200 });
     };
-    await stripePost(API_KEY, "/test", {}, captureFetch);
+    await stripePost(STRIPE_KEY_FX, "/test", {}, captureFetch);
     expect(contentType).toBe("application/x-www-form-urlencoded");
   });
 
@@ -157,7 +158,7 @@ describe("PAY1B-AC36: stripePost — headers, method, AbortSignal, never throws"
       method = opts!.method as string;
       return new Response(JSON.stringify({}), { status: 200 });
     };
-    await stripePost(API_KEY, "/test", {}, captureFetch);
+    await stripePost(STRIPE_KEY_FX, "/test", {}, captureFetch);
     expect(method).toBe("POST");
   });
 
@@ -167,7 +168,7 @@ describe("PAY1B-AC36: stripePost — headers, method, AbortSignal, never throws"
       signal = opts!.signal as AbortSignal | undefined;
       return new Response(JSON.stringify({}), { status: 200 });
     };
-    await stripePost(API_KEY, "/test", {}, captureFetch);
+    await stripePost(STRIPE_KEY_FX, "/test", {}, captureFetch);
     expect(signal).toBeInstanceOf(AbortSignal);
   });
 
@@ -179,7 +180,7 @@ describe("PAY1B-AC36: stripePost — headers, method, AbortSignal, never throws"
         capturedSignal = (opts!.signal as AbortSignal | null | undefined) ?? null;
         return new Response(JSON.stringify({}), { status: 200 });
       };
-      await stripePost(API_KEY, "/test", {}, captureFetch);
+      await stripePost(STRIPE_KEY_FX, "/test", {}, captureFetch);
       expect(spy).toHaveBeenCalledExactlyOnceWith(STRIPE_REQUEST_TIMEOUT_MS);
       // The signal passed to fetch must be the one AbortSignal.timeout returned
       expect(capturedSignal).toBe(spy.mock.results[0]?.value);
@@ -194,14 +195,14 @@ describe("PAY1B-AC36: stripePost — headers, method, AbortSignal, never throws"
 describe("PAY1B-AC37: stripePost — result union, never throws", () => {
   it("PAY1B-AC37a: 2xx → {ok:true, data}", async () => {
     const result = await stripePost<{ id: string }>(
-      API_KEY, "/test", {}, okFetch({ id: "obj_1" }),
+      STRIPE_KEY_FX, "/test", {}, okFetch({ id: "obj_1" }),
     );
     expect(result).toEqual({ ok: true, data: { id: "obj_1" } });
   });
 
   it("PAY1B-AC37b: 4xx with Stripe error JSON → {ok:false, kind:'http', status, code from error.code}", async () => {
     const result = await stripePost(
-      API_KEY, "/test", {},
+      STRIPE_KEY_FX, "/test", {},
       errorFetch({ error: { code: "card_declined", type: "card_error", message: "Card declined" } }, 402),
     );
     expect(result).toEqual({ ok: false, kind: "http", status: 402, code: "card_declined" });
@@ -209,7 +210,7 @@ describe("PAY1B-AC37: stripePost — result union, never throws", () => {
 
   it("PAY1B-AC37c: 4xx with Stripe error JSON → code falls back to error.type when error.code absent", async () => {
     const result = await stripePost(
-      API_KEY, "/test", {},
+      STRIPE_KEY_FX, "/test", {},
       errorFetch({ error: { type: "invalid_request_error", message: "Bad param" } }, 400),
     );
     expect(result).toEqual({ ok: false, kind: "http", status: 400, code: "invalid_request_error" });
@@ -217,14 +218,14 @@ describe("PAY1B-AC37: stripePost — result union, never throws", () => {
 
   it("PAY1B-AC37d: 5xx with non-JSON body → {ok:false, kind:'http', status, code:null}", async () => {
     const result = await stripePost(
-      API_KEY, "/test", {},
+      STRIPE_KEY_FX, "/test", {},
       rawFetch("Internal Server Error", 500),
     );
     expect(result).toEqual({ ok: false, kind: "http", status: 500, code: null });
   });
 
   it("PAY1B-AC37e: fetch throws (network error) → {ok:false, kind:'network'}", async () => {
-    const result = await stripePost(API_KEY, "/test", {}, rejectFetch("ECONNREFUSED"));
+    const result = await stripePost(STRIPE_KEY_FX, "/test", {}, rejectFetch("ECONNREFUSED"));
     expect(result).toEqual({ ok: false, kind: "network" });
   });
 
@@ -234,7 +235,7 @@ describe("PAY1B-AC37: stripePost — result union, never throws", () => {
       vi.spyOn(response, "text").mockRejectedValue(new TypeError("body stream errored"));
       return response;
     };
-    const result = await stripePost(API_KEY, "/test", {}, unreadable);
+    const result = await stripePost(STRIPE_KEY_FX, "/test", {}, unreadable);
     expect(result).toEqual({ ok: false, kind: "network" });
   });
 
@@ -245,7 +246,7 @@ describe("PAY1B-AC37: stripePost — result union, never throws", () => {
     ["JSON null", "null"],
     ["a JSON string", '"cs_test_x"'],
   ])("PAY1B-AC37g: 2xx with %s → {ok:false, kind:'invalid_response'}", async (_label, text) => {
-    const result = await stripePost(API_KEY, "/test", {}, rawFetch(text, 200));
+    const result = await stripePost(STRIPE_KEY_FX, "/test", {}, rawFetch(text, 200));
     expect(result).toEqual({ ok: false, kind: "invalid_response" });
   });
 });
@@ -255,7 +256,7 @@ describe("PAY1B-AC37: stripePost — result union, never throws", () => {
 describe("PAY1B-AC38: createCheckoutSession — invalid_response for wrong url/id", () => {
   it("PAY1B-AC38a: url not starting with https://checkout.stripe.com/ → invalid_response", async () => {
     const result = await createCheckoutSession(
-      API_KEY,
+      STRIPE_KEY_FX,
       { mode: "subscription" },
       okFetch({ id: "cs_test_x", url: "https://evil.com/hijack" }),
     );
@@ -264,7 +265,7 @@ describe("PAY1B-AC38: createCheckoutSession — invalid_response for wrong url/i
 
   it("PAY1B-AC38b: id not starting with cs_ → invalid_response", async () => {
     const result = await createCheckoutSession(
-      API_KEY,
+      STRIPE_KEY_FX,
       { mode: "subscription" },
       okFetch({ id: "pi_bad_id", url: "https://checkout.stripe.com/c/pay/cs_test_x" }),
     );
@@ -278,7 +279,7 @@ describe("PAY1B-AC38: createCheckoutSession — invalid_response for wrong url/i
     async (segment) => {
       const url = `https://checkout.stripe.com/${segment}/pay/cs_test_valid_session`;
       const result = await createCheckoutSession(
-        API_KEY,
+        STRIPE_KEY_FX,
         { mode: "subscription" },
         okFetch({ id: "cs_test_valid_session", url }),
       );
@@ -288,7 +289,7 @@ describe("PAY1B-AC38: createCheckoutSession — invalid_response for wrong url/i
 
   it("PAY1B-AC38d: missing url field → invalid_response", async () => {
     const result = await createCheckoutSession(
-      API_KEY, { mode: "subscription" }, okFetch({ id: "cs_test_x" }),
+      STRIPE_KEY_FX, { mode: "subscription" }, okFetch({ id: "cs_test_x" }),
     );
     expect(result).toEqual({ ok: false, kind: "invalid_response" });
   });
@@ -299,7 +300,7 @@ describe("PAY1B-AC38: createCheckoutSession — invalid_response for wrong url/i
 describe("PAY1B-AC39: createBillingPortalSession — invalid_response for wrong url", () => {
   it("PAY1B-AC39a: url not starting with https://billing.stripe.com/ → invalid_response", async () => {
     const result = await createBillingPortalSession(
-      API_KEY,
+      STRIPE_KEY_FX,
       { customer: "cus_1" },
       okFetch({ url: "https://evil.com/portal" }),
     );
@@ -308,7 +309,7 @@ describe("PAY1B-AC39: createBillingPortalSession — invalid_response for wrong 
 
   it("PAY1B-AC39b: valid billing.stripe.com url → ok:true", async () => {
     const result = await createBillingPortalSession(
-      API_KEY,
+      STRIPE_KEY_FX,
       { customer: "cus_1" },
       okFetch({ url: "https://billing.stripe.com/p/session/test_123" }),
     );
@@ -320,14 +321,14 @@ describe("PAY1B-AC39: createBillingPortalSession — invalid_response for wrong 
 
   it("PAY1B-AC39c: missing url field → invalid_response", async () => {
     const result = await createBillingPortalSession(
-      API_KEY, { customer: "cus_1" }, okFetch({}),
+      STRIPE_KEY_FX, { customer: "cus_1" }, okFetch({}),
     );
     expect(result).toEqual({ ok: false, kind: "invalid_response" });
   });
 
   it("PAY1B-AC39d: B7 — the API 2026-10-28.endive portal URL (/p/session?secret=test_…) → ok:true", async () => {
     const result = await createBillingPortalSession(
-      API_KEY,
+      STRIPE_KEY_FX,
       { customer: "cus_1" },
       okFetch({ url: "https://billing.stripe.com/p/session?secret=test_unitportal" }),
     );
@@ -335,5 +336,143 @@ describe("PAY1B-AC39: createBillingPortalSession — invalid_response for wrong 
       ok: true,
       data: { url: "https://billing.stripe.com/p/session?secret=test_unitportal" },
     });
+  });
+});
+
+// ── WH-AC26: stripeRequest — GET / DELETE / Idempotency-Key ───────────────────
+
+describe("WH-AC26a: stripeRequest supports GET method", () => {
+  it("WH-AC26a1: GET sends no body and correct URL", async () => {
+    let method = "";
+    let url = "";
+    let body: BodyInit | null | undefined;
+    const captureFetch: typeof fetch = async (u, opts) => {
+      url = u as string;
+      method = opts?.method ?? "";
+      body = opts?.body;
+      return new Response(JSON.stringify({ id: "sub_1" }), { status: 200 });
+    };
+    await stripeRequest(STRIPE_KEY_FX, "GET", "/subscriptions/sub_1", undefined, undefined, captureFetch);
+    expect(method).toBe("GET");
+    expect(url).toBe("https://api.stripe.com/v1/subscriptions/sub_1");
+    expect(body).toBeFalsy();
+  });
+
+  it("WH-AC26a2: GET sends Authorization and Stripe-Version headers", async () => {
+    let auth = "";
+    let version = "";
+    const captureFetch: typeof fetch = async (_u, opts) => {
+      const h = new Headers(opts?.headers as HeadersInit);
+      auth = h.get("Authorization") ?? "";
+      version = h.get("Stripe-Version") ?? "";
+      return new Response(JSON.stringify({}), { status: 200 });
+    };
+    await stripeRequest(STRIPE_KEY_FX, "GET", "/subscriptions/sub_1", undefined, undefined, captureFetch);
+    expect(auth).toBe(`Bearer ${STRIPE_KEY_FX}`);
+    expect(version).toBe(STRIPE_API_VERSION);
+  });
+});
+
+describe("WH-AC26a: stripeRequest supports DELETE method", () => {
+  it("WH-AC26a3: DELETE sends correct method", async () => {
+    let method = "";
+    const captureFetch: typeof fetch = async (_u, opts) => {
+      method = opts?.method ?? "";
+      return new Response(JSON.stringify({ id: "sub_1", status: "canceled" }), { status: 200 });
+    };
+    await stripeRequest(STRIPE_KEY_FX, "DELETE", "/subscriptions/sub_1", undefined, undefined, captureFetch);
+    expect(method).toBe("DELETE");
+  });
+
+  it("WH-AC26a4: DELETE with form params encodes body", async () => {
+    let body: string | null = null;
+    const captureFetch: typeof fetch = async (_u, opts) => {
+      body = opts?.body as string ?? null;
+      return new Response(JSON.stringify({}), { status: 200 });
+    };
+    await stripeRequest(
+      STRIPE_KEY_FX, "DELETE", "/subscriptions/sub_1",
+      { "cancellation_details[comment]": "duplicate_subscription" },
+      undefined,
+      captureFetch,
+    );
+    expect(body).toContain("cancellation_details%5Bcomment%5D=duplicate_subscription");
+  });
+});
+
+describe("WH-AC26b: stripeRequest sends Idempotency-Key header when provided", () => {
+  it("WH-AC26b1: idempotencyKey present → header sent", async () => {
+    let idempKey = "";
+    const captureFetch: typeof fetch = async (_u, opts) => {
+      const h = new Headers(opts?.headers as HeadersInit);
+      idempKey = h.get("Idempotency-Key") ?? "";
+      return new Response(JSON.stringify({}), { status: 200 });
+    };
+    await stripeRequest(STRIPE_KEY_FX, "POST", "/refunds", {}, "dup-refund-pi_test001", captureFetch);
+    expect(idempKey).toBe("dup-refund-pi_test001");
+  });
+
+  it("WH-AC26b2: no idempotencyKey → Idempotency-Key header absent", async () => {
+    let hasKey = false;
+    const captureFetch: typeof fetch = async (_u, opts) => {
+      const h = new Headers(opts?.headers as HeadersInit);
+      hasKey = h.has("Idempotency-Key");
+      return new Response(JSON.stringify({}), { status: 200 });
+    };
+    await stripeRequest(STRIPE_KEY_FX, "POST", "/refunds", {}, undefined, captureFetch);
+    expect(hasKey).toBe(false);
+  });
+});
+
+describe("WH-AC26c: stripePost retains its existing signature (1b callers unchanged)", () => {
+  it("WH-AC26c: stripePost(apiKey, path, params, fetchImpl?) still works as before", async () => {
+    const result = await stripePost(
+      STRIPE_KEY_FX,
+      "/test",
+      { foo: "bar" },
+      async () => new Response(JSON.stringify({ id: "obj_x" }), { status: 200 }),
+    );
+    expect(result).toEqual({ ok: true, data: { id: "obj_x" } });
+  });
+});
+
+describe("WH-AC26a: stripeRequest uses AbortSignal.timeout(STRIPE_REQUEST_TIMEOUT_MS)", () => {
+  it("WH-AC26a5: AbortSignal.timeout called with STRIPE_REQUEST_TIMEOUT_MS on GET", async () => {
+    const spy = vi.spyOn(AbortSignal, "timeout");
+    try {
+      let capturedSignal: AbortSignal | null = null;
+      const captureFetch: typeof fetch = async (_u, opts) => {
+        capturedSignal = (opts?.signal as AbortSignal | null | undefined) ?? null;
+        return new Response(JSON.stringify({}), { status: 200 });
+      };
+      await stripeRequest(STRIPE_KEY_FX, "GET", "/subscriptions/sub_1", undefined, undefined, captureFetch);
+      expect(spy).toHaveBeenCalledWith(STRIPE_REQUEST_TIMEOUT_MS);
+      expect(capturedSignal).toBe(spy.mock.results[0]?.value);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe("WH-AC26a: stripeRequest result union — same as stripePost", () => {
+  it("WH-AC26a6: 2xx → { ok:true, data }", async () => {
+    const r = await stripeRequest(STRIPE_KEY_FX, "GET", "/subscriptions/sub_1", undefined, undefined,
+      async () => new Response(JSON.stringify({ id: "sub_1" }), { status: 200 }),
+    );
+    expect(r).toEqual({ ok: true, data: { id: "sub_1" } });
+  });
+
+  it("WH-AC26a7: 404 http error → { ok:false, kind:'http', status:404, code }", async () => {
+    const r = await stripeRequest(STRIPE_KEY_FX, "GET", "/subscriptions/sub_missing", undefined, undefined,
+      async () => new Response(JSON.stringify({ error: { code: "resource_missing", type: "invalid_request_error" } }), { status: 404 }),
+    );
+    expect(r).toEqual({ ok: false, kind: "http", status: 404, code: "resource_missing" });
+  });
+
+  it("WH-AC26a8: network error → { ok:false, kind:'network' }", async () => {
+    const r = await stripeRequest(STRIPE_KEY_FX, "GET", "/subscriptions/sub_1", undefined, undefined,
+      async () => { throw new TypeError("Network error"); },
+    );
+    expect(r).toEqual({ ok: false, kind: "network" });
   });
 });

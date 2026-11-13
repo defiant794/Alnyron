@@ -76,3 +76,15 @@ describe('package.json scripts (ENG-AC7)', () => {
     expect(pkg.dependencies?.['use-intl']).toBeDefined();
   });
 });
+
+describe('package.json scripts (WH-AC29)', () => {
+  it('WH-AC29a: build:payments is a wrangler dry-run build of the payments config', () => {
+    expect(scripts['build:payments']).toBe(
+      'wrangler deploy --dry-run --config workers/payments/wrangler.jsonc --outdir .wrangler/payments',
+    );
+  });
+
+  it('WH-AC29b: deploy:payments deploys the payments config', () => {
+    expect(scripts['deploy:payments']).toBe('wrangler deploy --config workers/payments/wrangler.jsonc');
+  });
+});

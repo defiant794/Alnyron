@@ -49,12 +49,20 @@ const SECRETS = new Map([
   ],
   [
     "SUPABASE_SECRET_KEY",
-    "test tooling + cron Worker secret: tests/.env.e2e or the shell environment for tests, `wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc` for the cron Worker, never the app",
+    "test tooling + cron and payments Worker secret: tests/.env.e2e or the shell environment for tests, `wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc` for the cron Worker, `wrangler secret put SUPABASE_SECRET_KEY --config workers/payments/wrangler.jsonc` for the payments Worker, never the app",
   ],
   ["SUPABASE_DB_PASSWORD", "test-only: tests/.env.e2e or the shell environment, never the app"],
   [
     "STRIPE_CHECKOUT_KEY",
     "`wrangler secret put STRIPE_CHECKOUT_KEY` for the deployed Worker, .dev.vars for `npm run preview`, the shell environment for `next dev`/`next start`",
+  ],
+  [
+    "STRIPE_WEBHOOK_SECRET",
+    "payments Worker secret: `wrangler secret put STRIPE_WEBHOOK_SECRET --config workers/payments/wrangler.jsonc`, workers/payments/.dev.vars locally, never the app",
+  ],
+  [
+    "STRIPE_PAYMENTS_KEY",
+    "payments Worker secret: `wrangler secret put STRIPE_PAYMENTS_KEY --config workers/payments/wrangler.jsonc`, workers/payments/.dev.vars locally, never the app",
   ],
 ]);
 
@@ -146,7 +154,9 @@ if (!existsSync(ROOT)) {
     }
     if (liveKeyFiles.length > 0) {
       lines.push(
-        `A live Stripe key belongs only in \`wrangler secret put STRIPE_CHECKOUT_KEY\` (a restricted rk_live_ key).`,
+        `A live Stripe key belongs only in \`wrangler secret put STRIPE_CHECKOUT_KEY\` (the web app) or in`,
+        `\`wrangler secret put STRIPE_PAYMENTS_KEY --config workers/payments/wrangler.jsonc\` (the payments Worker),`,
+        `as a restricted rk_live_ key.`,
         `Remove it from the source and from every root .env* file, roll it in the Stripe Dashboard if it`,
         `was ever committed or deployed, and rebuild.`,
       );

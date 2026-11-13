@@ -3,7 +3,7 @@
  * Journey: monitor-web-area  MON-AC27, MON-AC33, MON-AC34
  */
 import { describe, expect, it } from "vitest";
-import { monitorSchema, intervalToMinutes, type MonitorInput } from "@/lib/validation/monitor";
+import { monitorSchema, intervalToMinutes } from "@/lib/validation/monitor";
 
 // ── Valid inputs ──────────────────────────────────────────────────────────────
 

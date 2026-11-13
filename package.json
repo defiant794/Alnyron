@@ -21,6 +21,8 @@
     "deploy": "npm run cf:build && opennextjs-cloudflare deploy && npm run deploy:monitor-cron",
     "build:monitor-cron": "wrangler deploy --dry-run --config workers/monitor-cron/wrangler.jsonc --outdir .wrangler/monitor-cron",
     "deploy:monitor-cron": "wrangler deploy --config workers/monitor-cron/wrangler.jsonc",
+    "build:payments": "wrangler deploy --dry-run --config workers/payments/wrangler.jsonc --outdir .wrangler/payments",
+    "deploy:payments": "wrangler deploy --config workers/payments/wrangler.jsonc",
     "upload": "npm run cf:build && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },

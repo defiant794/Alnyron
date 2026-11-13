@@ -1,0 +1,38 @@
+{
+  // Cloudflare Worker "alnyron-payments": Stripe's webhook endpoint (payments slice 1c). Stripe
+  // POSTs subscription, Checkout and invoice events to https://pay.alnyron.dk/webhook; index.ts's
+  // fetch() checks the signature, retrieves the subscription's current state from Stripe and
+  // writes it through the service-role-only payments_sync_subscription /
+  // payments_record_subscription_invoice functions (migration 20261112000100), and cancels and
+  // refunds a duplicate subscription from parallel Checkouts. See README.md.
+  // Separate from the OpenNext web Worker (root wrangler.jsonc) so the Supabase secret key and the
+  // Stripe key never sit in the public app's bundle. No workers.dev URL, no previews, no cron.
+  //
+  // Build / deploy (always pass --config; without it wrangler hands off to OpenNext):
+  //   npm run build:payments    (wrangler deploy --dry-run … --outdir .wrangler/payments)
+  //   npm run deploy:payments   (NOT chained into `npm run deploy`: shipped by hand at go-live)
+  // Secrets (never in vars, never in a root .env* file):
+  //   wrangler secret put SUPABASE_SECRET_KEY --config workers/payments/wrangler.jsonc
+  //   wrangler secret put STRIPE_WEBHOOK_SECRET --config workers/payments/wrangler.jsonc
+  //   wrangler secret put STRIPE_PAYMENTS_KEY --config workers/payments/wrangler.jsonc
+  // Local runs read workers/payments/.dev.vars (see .dev.vars.example and README.md), which must
+  // point at the e2e Supabase project and Stripe test mode (STRIPE_LIVEMODE=false).
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "alnyron-payments",
+  "main": "./index.ts",
+  "compatibility_date": "2026-10-23",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  // No "routes"/"route" key: the custom domain pay.alnyron.dk is attached in the dashboard. Per
+  // Cloudflare's docs (Wrangler configuration > Source of truth), a deploy replaces routes changed in
+  // the dashboard with the config's routes, and dashboard-only routes need no route/routes key plus
+  // workers_dev = false, so a routes key could make wrangler manage (and drop) the domain; the same
+  // convention as the web Worker's custom domains (root wrangler.jsonc; monitor-cron has no domain).
+  "vars": {
+    "SUPABASE_URL": "https://xmgpixhxecamtryohgmk.supabase.co",
+    // Production processes live-mode events only; test-mode deliveries are answered and ignored.
+    "STRIPE_LIVEMODE": "true"
+  }
+}

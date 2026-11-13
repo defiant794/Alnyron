@@ -6,11 +6,16 @@
  */
 
 import type { Locale } from "next-intl";
-import { BILLING_CHECKOUT_DONE, CHECKOUT_SESSION_TTL_SECONDS, MONITOR_BILLING_PATH } from "@/config/payments";
+import {
+  BILLING_CHECKOUT_DONE,
+  CHECKOUT_SESSION_TTL_SECONDS,
+  MONITOR_BILLING_PATH,
+  MONITOR_SUBSCRIPTION_KIND,
+} from "@/config/payments";
 
 /** Tags the session and the subscription it creates, for the webhook handler. */
 export type SubscriptionMetadata = {
-  kind: "monitor_subscription";
+  kind: typeof MONITOR_SUBSCRIPTION_KIND;
   user_id: string;
   plan_id: string;
   locale: Locale;
@@ -76,7 +81,7 @@ function billingUrl(monitorOrigin: string): string {
  */
 export function buildSubscriptionCheckoutParams(input: SubscriptionCheckoutInput): SubscriptionCheckoutParams {
   const { userId, email, locale, plan, stripeCustomerId, taxRateId, monitorOrigin, nowSeconds } = input;
-  const metadata: SubscriptionMetadata = { kind: "monitor_subscription", user_id: userId, plan_id: plan.id, locale };
+  const metadata: SubscriptionMetadata = { kind: MONITOR_SUBSCRIPTION_KIND, user_id: userId, plan_id: plan.id, locale };
   return {
     mode: "subscription",
     ui_mode: "hosted_page",

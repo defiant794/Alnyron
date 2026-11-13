@@ -60,7 +60,6 @@ async function insertAuthUserRaw(
 
 const MONITOR_SIGNUP_EMAIL = "new-public-signup@test.local";
 const MONITOR_SIGNUP_UUID = "00000000-0000-0000-bbbb-000000000001";
-const ALLOWLISTED_EMAIL = "admin-squatter@test.local";
 
 describe.skipIf(!DB_AVAILABLE)("RLS — monitor public-signup (0400 semantics)", () => {
   let client: PoolClient;

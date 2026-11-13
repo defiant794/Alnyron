@@ -42,7 +42,7 @@ import MonitorLoginPage, { generateMetadata } from "@/app/monitor/(auth)/login/p
 import { loadMessages } from "@/i18n/messages";
 import { MONITOR_FORGOT_PASSWORD_PATH } from "@/config/monitor";
 
-const { Auth, Monitor } = loadMessages("da");
+const { Auth } = loadMessages("da");
 
 type SearchParams = { next?: string | string[]; error?: string | string[] };
 
@@ -80,7 +80,6 @@ describe("MON-AC15: /monitor/login renders per design", () => {
     const link = screen.getByRole("link", { name: new RegExp(Auth.login.forgotPassword.replace("?", "\\?"), "i") });
     expect(link).toHaveAttribute("href", MONITOR_FORGOT_PASSWORD_PATH);
   });
-
 
   it("MON-AC3b: metadata has noindex robots directive", async () => {
     const meta = await generateMetadata({ searchParams: Promise.resolve({}) });

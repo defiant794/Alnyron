@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   SUBSCRIPTION_ENDED_STATUSES,
-  SUBSCRIPTION_ENTITLING_STATUSES,
+  ENTITLING_SUBSCRIPTION_STATUSES,
 } from "@/config/payments";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -361,7 +361,7 @@ describe("PAY1B-AC44: getCurrentSubscription — excludes ended statuses, most r
     ]);
   });
 
-  it.each([...SUBSCRIPTION_ENTITLING_STATUSES])(
+  it.each([...ENTITLING_SUBSCRIPTION_STATUSES])(
     "PAY1B-AC44c: returns the subscription with entitling status '%s'",
     async (status) => {
       stubQuery({ data: subRow({ status }), error: null });

@@ -192,11 +192,12 @@ describe("guard-no-bundled-secrets: ENG-AC6 SUPABASE_SECRET_KEY description upda
     run = runGuard(outputDir(files));
   });
 
-  it("ENG-AC6guard1: the SUPABASE_SECRET_KEY line names the tests and the cron Worker as its only homes", () => {
-    // contract §5: description → "test tooling + cron Worker secret"
+  it("ENG-AC6guard1: the SUPABASE_SECRET_KEY line names the tests, the cron Worker and the payments Worker as its only homes", () => {
+    // contract §5 + slice 1c review #14: the cron and the payments Worker both hold one.
     expect(run.output.split(/\r?\n/)).toContain(
-      "  SUPABASE_SECRET_KEY: test tooling + cron Worker secret: tests/.env.e2e or the shell environment for tests, " +
-        "`wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc` for the cron Worker, never the app",
+      "  SUPABASE_SECRET_KEY: test tooling + cron and payments Worker secret: tests/.env.e2e or the shell environment for tests, " +
+        "`wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc` for the cron Worker, " +
+        "`wrangler secret put SUPABASE_SECRET_KEY --config workers/payments/wrangler.jsonc` for the payments Worker, never the app",
     );
   });
 
@@ -342,7 +343,10 @@ describe("PAY1B-AC47 (B15, B16): guard-no-bundled-secrets fails on a live Stripe
     ]);
     expect(run.leaks).toEqual(["STRIPE_CHECKOUT_KEY cloudflare/next-env.mjs"]);
     expect(lines).toContain(
-      "A live Stripe key belongs only in `wrangler secret put STRIPE_CHECKOUT_KEY` (a restricted rk_live_ key).",
+      "A live Stripe key belongs only in `wrangler secret put STRIPE_CHECKOUT_KEY` (the web app) or in",
+    );
+    expect(lines).toContain(
+      "`wrangler secret put STRIPE_PAYMENTS_KEY --config workers/payments/wrangler.jsonc` (the payments Worker),",
     );
   });
 
@@ -383,4 +387,80 @@ describe("PAY1B-AC47 (B15, B16): guard-no-bundled-secrets fails on a live Stripe
       expect(clean.output).toContain("and no live Stripe key");
     },
   );
+});
+
+// ── WH-AC30: STRIPE_WEBHOOK_SECRET and STRIPE_PAYMENTS_KEY are guarded ────────
+
+describe("WH-AC30c: STRIPE_WEBHOOK_SECRET guard — exact description, .env.local leak, process.env passthrough", () => {
+  // Contract §1: description for STRIPE_WEBHOOK_SECRET
+  const WHSEC_DESCRIPTION =
+    "payments Worker secret: " +
+    "`wrangler secret put STRIPE_WEBHOOK_SECRET --config workers/payments/wrangler.jsonc`, " +
+    "workers/payments/.dev.vars locally, never the app";
+
+  it("WH-AC30c1: OpenNext env-file entry for STRIPE_WEBHOOK_SECRET → guard exits 1, exact description line, no value", () => {
+    const files: Record<string, string> = {
+      "payments/cloudflare/next-env.mjs":
+        `export const p = ${JSON.stringify({ STRIPE_WEBHOOK_SECRET: FIXTURE_VALUE })};\n`,
+    };
+    const run = runGuard(outputDir(files));
+    expect(run.status).toBe(1);
+    expect(run.output.split(/\r?\n/)).toContain(`  STRIPE_WEBHOOK_SECRET: ${WHSEC_DESCRIPTION}`);
+    expect(run.output).not.toContain(FIXTURE_VALUE);
+  });
+
+  it("WH-AC30c2: .env.local line for STRIPE_WEBHOOK_SECRET → guard exits 1, reports the file", () => {
+    const files: Record<string, string> = {
+      "payments/.env.local": `STRIPE_WEBHOOK_SECRET=${FIXTURE_VALUE}\n`,
+    };
+    const run = runGuard(outputDir(files));
+    expect(run.status).toBe(1);
+    expect(run.output).toContain("STRIPE_WEBHOOK_SECRET");
+    expect(run.output).not.toContain(FIXTURE_VALUE);
+  });
+
+  it("WH-AC30c3: process.env.STRIPE_WEBHOOK_SECRET read (route.js) → guard exits 0 (passthrough)", () => {
+    const files: Record<string, string> = {
+      "payments/route.js": `const s = process.env.STRIPE_WEBHOOK_SECRET; if (!s) return null;`,
+    };
+    const run = runGuard(outputDir(files));
+    expect(run.status).toBe(0);
+  });
+});
+
+describe("WH-AC30d: STRIPE_PAYMENTS_KEY guard — exact description, .env.local leak, process.env passthrough", () => {
+  // Contract §1: description for STRIPE_PAYMENTS_KEY
+  const SPKEY_DESCRIPTION =
+    "payments Worker secret: " +
+    "`wrangler secret put STRIPE_PAYMENTS_KEY --config workers/payments/wrangler.jsonc`, " +
+    "workers/payments/.dev.vars locally, never the app";
+
+  it("WH-AC30d1: OpenNext env-file entry for STRIPE_PAYMENTS_KEY → guard exits 1, exact description line, no value", () => {
+    const files: Record<string, string> = {
+      "payments/cloudflare/next-env.mjs":
+        `export const p = ${JSON.stringify({ STRIPE_PAYMENTS_KEY: FIXTURE_VALUE })};\n`,
+    };
+    const run = runGuard(outputDir(files));
+    expect(run.status).toBe(1);
+    expect(run.output.split(/\r?\n/)).toContain(`  STRIPE_PAYMENTS_KEY: ${SPKEY_DESCRIPTION}`);
+    expect(run.output).not.toContain(FIXTURE_VALUE);
+  });
+
+  it("WH-AC30d2: .env.local line for STRIPE_PAYMENTS_KEY → guard exits 1, reports the file", () => {
+    const files: Record<string, string> = {
+      "payments/.env.local": `STRIPE_PAYMENTS_KEY=${FIXTURE_VALUE}\n`,
+    };
+    const run = runGuard(outputDir(files));
+    expect(run.status).toBe(1);
+    expect(run.output).toContain("STRIPE_PAYMENTS_KEY");
+    expect(run.output).not.toContain(FIXTURE_VALUE);
+  });
+
+  it("WH-AC30d3: process.env.STRIPE_PAYMENTS_KEY read (route.js) → guard exits 0 (passthrough)", () => {
+    const files: Record<string, string> = {
+      "payments/route.js": `const k = process.env.STRIPE_PAYMENTS_KEY; if (!k) return null;`,
+    };
+    const run = runGuard(outputDir(files));
+    expect(run.status).toBe(0);
+  });
 });

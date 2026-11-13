@@ -60,7 +60,7 @@ vi.mock("@/i18n/monitor-locale", async (importOriginal) => ({
 import SettingsPage from "@/app/monitor/(panel)/settings/page";
 import { loadMessages } from "@/i18n/messages";
 
-const { Monitor, Auth } = loadMessages("da");
+const { Auth } = loadMessages("da");
 
 afterEach(cleanup);
 

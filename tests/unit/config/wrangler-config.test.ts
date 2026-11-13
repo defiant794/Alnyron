@@ -7,6 +7,8 @@
  *                       preserved KV/flags/vars).
  * monitor-engine:       ENG-AC7 (workers/monitor-cron/wrangler.jsonc: Free-plan
  *                       cron config, no routes/limits, vars, MAIL_FROM parity).
+ * payments-webhook:     WH-AC28 (workers/payments/wrangler.jsonc: name, main,
+ *                       compat, vars, no routes/triggers, observability).
  *
  * Package-script assertions (AC-CACHE-19, ENG-AC7) live in package-scripts.test.ts.
  */
@@ -28,6 +30,12 @@ type WranglerConfig = {
   main?: string;
   compatibility_date?: string;
   compatibility_flags?: string[];
+  workers_dev?: boolean;
+  preview_urls?: boolean;
+  observability?: { enabled?: boolean };
+  routes?: unknown;
+  route?: unknown;
+  triggers?: unknown;
   assets?: AssetsConfig;
   kv_namespaces?: KvNamespace[];
   r2_buckets?: unknown[];
@@ -285,5 +293,82 @@ describe('workers/monitor-cron/wrangler.jsonc — ENG-AC7: Free-plan config', ()
   it('ENG-AC7wc16: vars.MAIL_FROM matches root wrangler.jsonc vars.MAIL_FROM', () => {
     expect(cronConfig.vars?.['MAIL_FROM']).toBe(config.vars?.['MAIL_FROM']);
     expect(cronConfig.vars?.['MAIL_FROM']).toBeDefined();
+  });
+});
+
+// ── WH-AC28: workers/payments/wrangler.jsonc ─────────────────────────────────
+
+describe('workers/payments/wrangler.jsonc — WH-AC28: payments Worker config', () => {
+  let paymentsConfig!: WranglerConfig;
+  let paymentsParseErrors!: ParseError[];
+
+  beforeAll(() => {
+    const p = path.resolve(process.cwd(), 'workers/payments/wrangler.jsonc');
+    const raw = fs.readFileSync(p, 'utf-8');
+    paymentsParseErrors = [];
+    paymentsConfig = parse(raw, paymentsParseErrors, { allowTrailingComma: true }) as WranglerConfig;
+  });
+
+  it('WH-AC28-parse: wrangler.jsonc parses without JSONC syntax errors', () => {
+    expect(paymentsParseErrors).toEqual([]);
+  });
+
+  it('WH-AC28a: name is "alnyron-payments"', () => {
+    expect(paymentsConfig.name).toBe('alnyron-payments');
+  });
+
+  it('WH-AC28b: main is "./index.ts"', () => {
+    expect(paymentsConfig.main).toBe('./index.ts');
+  });
+
+  it('WH-AC28c: compatibility_date is "2026-10-23"', () => {
+    expect(paymentsConfig.compatibility_date).toBe('2026-10-23');
+  });
+
+  it('WH-AC28d: compatibility_flags includes nodejs_compat and global_fetch_strictly_public', () => {
+    expect(paymentsConfig.compatibility_flags).toContain('nodejs_compat');
+    expect(paymentsConfig.compatibility_flags).toContain('global_fetch_strictly_public');
+  });
+
+  it('WH-AC28e: workers_dev = false and preview_urls = false', () => {
+    expect(paymentsConfig.workers_dev).toBe(false);
+    expect(paymentsConfig.preview_urls).toBe(false);
+  });
+
+  it('WH-AC28f: vars.SUPABASE_URL is the prod project URL', () => {
+    expect(paymentsConfig.vars?.['SUPABASE_URL']).toBe('https://xmgpixhxecamtryohgmk.supabase.co');
+  });
+
+  it('WH-AC28g: vars.STRIPE_LIVEMODE = "true"', () => {
+    expect(paymentsConfig.vars?.['STRIPE_LIVEMODE']).toBe('true');
+  });
+
+  it('WH-AC28h: no routes, route, or triggers key', () => {
+    expect(paymentsConfig.routes).toBeUndefined();
+    expect(paymentsConfig.route).toBeUndefined();
+    expect(paymentsConfig.triggers).toBeUndefined();
+  });
+
+  it('WH-AC28i: observability.enabled = true', () => {
+    expect(paymentsConfig.observability?.enabled).toBe(true);
+  });
+});
+
+// ── WH-AC_A23c: .gitignore contains .dev.vars* and !.dev.vars.example (A23) ──
+
+describe('WH-AC_A23c: .gitignore ignores .dev.vars* and excepts .dev.vars.example (A23)', () => {
+  let gitignoreLines: string[] = [];
+
+  beforeAll(() => {
+    const gitignorePath = path.resolve(process.cwd(), '.gitignore');
+    gitignoreLines = fs.readFileSync(gitignorePath, 'utf-8').split('\n').map((l) => l.trim());
+  });
+
+  it('WH-AC_A23c-pattern: .gitignore contains a .dev.vars* pattern', () => {
+    expect(gitignoreLines).toContain('.dev.vars*');
+  });
+
+  it('WH-AC_A23c-exception: .gitignore contains !.dev.vars.example exception', () => {
+    expect(gitignoreLines).toContain('!.dev.vars.example');
   });
 });

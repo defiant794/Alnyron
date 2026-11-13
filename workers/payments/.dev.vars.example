@@ -1,0 +1,7 @@
+# Copy to workers/payments/.dev.vars (git-ignored) for `wrangler dev --config workers/payments/wrangler.jsonc`.
+# Local runs use the ISOLATED e2e Supabase project and Stripe TEST mode only, never production.
+SUPABASE_URL=https://<e2e-project-ref>.supabase.co
+SUPABASE_SECRET_KEY=<e2e sb_secret_…>
+STRIPE_PAYMENTS_KEY=<sk_test_… or rk_test_…>
+STRIPE_WEBHOOK_SECRET=<whsec_… from stripe listen>
+STRIPE_LIVEMODE=false
