@@ -37,5 +37,21 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "alnyron-web" }],
+  // Per-user throttle on the Monitor billing actions (src/lib/payments/rate-limit.ts):
+  // BILLING_RATE_LIMIT sessions per BILLING_RATE_PERIOD_SECONDS (src/config/payments.ts;
+  // a unit test pins these numbers to them). Workers Rate Limiting: nothing to create
+  // in the dashboard; namespace_id is an integer string of our choosing, unique in the
+  // Cloudflare account; period is 10 or 60. Simulated locally by `next dev`.
+  "ratelimits": [
+    {
+      "name": "BILLING_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ],
+  // Plain (not secret) Worker vars: every deploy sets the Worker's plain vars from this
+  // block alone. At go-live, once the live Stripe ids exist, add "STRIPE_LIVEMODE": "true"
+  // and the live STRIPE_TAX_RATE_ID and STRIPE_PORTAL_CONFIGURATION_ID here (.env.example);
+  // STRIPE_CHECKOUT_KEY is a secret (`wrangler secret put`).
   "vars": { "MAIL_FROM": "Alnyron <noreply@send.alnyron.dk>" }
 }

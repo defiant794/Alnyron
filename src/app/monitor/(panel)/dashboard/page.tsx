@@ -4,13 +4,16 @@ import { getTranslations } from "next-intl/server";
 import MonitorShell from "@/components/monitor/MonitorShell";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import Link from "@/components/ui/Link";
 import LinkButton from "@/components/ui/LinkButton";
 import { MONITOR_NEW_PATH, MONITOR_ROBOTS, MONITOR_URL_MAX_LENGTH, monitorDetailPath } from "@/config/monitor";
+import { MONITOR_BILLING_PATH } from "@/config/payments";
 import { getMonitorLocale } from "@/i18n/monitor-locale";
 import { cx } from "@/lib/cx";
 import { describeInterval, displayUrl, formatRelative, monitorHealth, type MonitorHealth } from "@/lib/monitor/format";
 import { requireMonitor } from "@/services/auth/require-role";
 import { getMonitorUsage, listMonitors } from "@/services/monitor/monitors";
+import { getCurrentSubscription } from "@/services/payments/billing";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations({ locale: await getMonitorLocale(), namespace: "Monitor.dashboard" });
@@ -30,14 +33,21 @@ const DOT: Record<MonitorHealth, string> = {
  * `/monitor/dashboard` (approved dashboard mock): the user's monitors as one
  * card of rows (status dot, name and URL, interval or pause, last change),
  * each row opening the monitor; "Tilføj overvågning"; the usage pill
- * ("1 / 2 overvågninger brugt", or just the count when uncapped). Without
+ * ("1 / 2 overvågninger brugt", or just the count when uncapped) and, for a
+ * capped account, a link to the subscription page ("Opgradér for flere", or
+ * "Administrér abonnement" with a subscription that has not ended). Without
  * monitors a first-run card takes a URL and opens the add form with it.
  * Owner and `monitor_user` only; RLS returns only the user's own monitors.
  * In the visitor's Monitor language.
  */
 export default async function MonitorDashboardPage() {
   const user = await requireMonitor();
-  const [monitors, usage, locale] = await Promise.all([listMonitors(), getMonitorUsage(), getMonitorLocale()]);
+  const [monitors, usage, locale, subscription] = await Promise.all([
+    listMonitors(),
+    getMonitorUsage(),
+    getMonitorLocale(),
+    getCurrentSubscription(),
+  ]);
   const t = await getTranslations({ locale, namespace: "Monitor" });
   const now = Date.now();
   const atLimit = usage.limit !== null && usage.count >= usage.limit;
@@ -146,7 +156,14 @@ export default async function MonitorDashboardPage() {
             ? t("dashboard.usageUnlimited", { count: usage.count })
             : t("dashboard.usage", { count: usage.count, limit: usage.limit })}
         </Badge>
-        {usage.limit !== null && <span>{atLimit ? t("dashboard.limitReached") : t("dashboard.upgradeNote")}</span>}
+        {usage.limit !== null && (
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {atLimit && <span>{t("dashboard.limitReached")}</span>}
+            <Link href={MONITOR_BILLING_PATH}>
+              {subscription === null ? t("dashboard.upgradeLink") : t("dashboard.manageLink")}
+            </Link>
+          </span>
+        )}
       </footer>
     </MonitorShell>
   );

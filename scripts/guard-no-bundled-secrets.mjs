@@ -20,8 +20,15 @@
  * Any other occurrence fails the build: an env-file entry such as
  * `"NAME":"…"`, `NAME:"…"` or `NAME=…`, an unquoted `NAME: value` line (a
  * dotted value such as a JWT included), or a bare mention. Every leaking
- * (name, file) pair is reported; output names variables and files only,
- * never a value.
+ * (name, file) pair is reported.
+ *
+ * Every file is also scanned for a live Stripe key's VALUE (`sk_live_` or
+ * `rk_live_`, then at least 20 letters or digits), under whatever name or
+ * none: hardcoded in source, or inlined some other way the name scan cannot
+ * see. The prefix may follow any character, a word character included (a
+ * JSON-escaped newline `\nsk_live_…`, a name glued on as in `key_rk_live_…`):
+ * a false positive fails the build, the safe direction. Each file holding one
+ * is reported. Output names variables and files only, never a value.
  *
  * Usage: node scripts/guard-no-bundled-secrets.mjs [dir]   (default: .open-next)
  * Exits 0 when the directory does not exist, 1 on any leak.
@@ -45,6 +52,10 @@ const SECRETS = new Map([
     "test tooling + cron Worker secret: tests/.env.e2e or the shell environment for tests, `wrangler secret put SUPABASE_SECRET_KEY --config workers/monitor-cron/wrangler.jsonc` for the cron Worker, never the app",
   ],
   ["SUPABASE_DB_PASSWORD", "test-only: tests/.env.e2e or the shell environment, never the app"],
+  [
+    "STRIPE_CHECKOUT_KEY",
+    "`wrangler secret put STRIPE_CHECKOUT_KEY` for the deployed Worker, .dev.vars for `npm run preview`, the shell environment for `next dev`/`next start`",
+  ],
 ]);
 
 const PROJECT = fileURLToPath(new URL("..", import.meta.url));
@@ -63,6 +74,14 @@ const RUNTIME_READ = Buffer.from("process.env.");
 const CALLEE = String.raw`[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*`;
 const CALL_VALUE = new RegExp(String.raw`^\s*:\s*(?:\(\s*0\s*,\s*${CALLEE}\s*\)|${CALLEE})\s*\(`);
 const CALL_WINDOW = 64;
+
+/**
+ * A live Stripe secret or restricted key's value, wherever it starts: no `\b` before the
+ * prefix, so a key right after a word character still matches. LIVE_MARK is a cheap
+ * pre-check on the raw bytes.
+ */
+const LIVE_STRIPE_KEY = /(?:sk|rk)_live_[A-Za-z0-9]{20,}/;
+const LIVE_MARK = Buffer.from("_live_");
 
 /** Yields every regular file below `dir`. */
 function* filesUnder(dir) {
@@ -86,6 +105,11 @@ function holdsValue(content, name) {
   return false;
 }
 
+/** True when `content` holds a live Stripe key's value. */
+function holdsLiveStripeKey(content) {
+  return content.includes(LIVE_MARK) && LIVE_STRIPE_KEY.test(content.toString("latin1"));
+}
+
 /** `path` relative to the working directory, with `/` separators. */
 function shown(path) {
   return relative(process.cwd(), path).split(sep).join("/") || ".";
@@ -95,29 +119,44 @@ if (!existsSync(ROOT)) {
   console.log(`guard-no-bundled-secrets: no ${shown(ROOT)} output, nothing to check`);
 } else {
   const leaks = [];
+  const liveKeyFiles = [];
   for (const file of filesUnder(ROOT)) {
     const content = readFileSync(file);
     for (const name of SECRETS.keys()) {
       if (holdsValue(content, name)) leaks.push({ name, file: shown(file) });
     }
+    if (holdsLiveStripeKey(content)) liveKeyFiles.push(shown(file));
   }
 
-  if (leaks.length > 0) {
+  if (leaks.length > 0 || liveKeyFiles.length > 0) {
     leaks.sort((a, b) => a.name.localeCompare(b.name) || a.file.localeCompare(b.file));
+    liveKeyFiles.sort((a, b) => a.localeCompare(b));
     const leaked = [...new Set(leaks.map(({ name }) => name))];
-    console.error(
-      [
-        `guard-no-bundled-secrets: server-only secrets are compiled into the Worker bundle:`,
-        ...leaks.map(({ name, file }) => `  ${name} in ${file}`),
+    const lines = [
+      `guard-no-bundled-secrets: server-only secrets are compiled into the Worker bundle:`,
+      ...leaks.map(({ name, file }) => `  ${name} in ${file}`),
+      ...liveKeyFiles.map((file) => `  a live Stripe key in ${file}`),
+    ];
+    if (leaks.length > 0) {
+      lines.push(
         `OpenNext compiles every root .env* file into the Worker. Remove these names from all of them,`,
         `keep each one where it belongs, and rebuild:`,
         ...leaked.map((name) => `  ${name}: ${SECRETS.get(name)}`),
-      ].join("\n"),
-    );
+      );
+    }
+    if (liveKeyFiles.length > 0) {
+      lines.push(
+        `A live Stripe key belongs only in \`wrangler secret put STRIPE_CHECKOUT_KEY\` (a restricted rk_live_ key).`,
+        `Remove it from the source and from every root .env* file, roll it in the Stripe Dashboard if it`,
+        `was ever committed or deployed, and rebuild.`,
+      );
+    }
+    console.error(lines.join("\n"));
     process.exitCode = 1;
   } else {
     console.log(
-      `guard-no-bundled-secrets: no server-only secret in ${shown(ROOT)} (${[...SECRETS.keys()].join(", ")})`,
+      `guard-no-bundled-secrets: no server-only secret in ${shown(ROOT)} (${[...SECRETS.keys()].join(", ")}) ` +
+        `and no live Stripe key`,
     );
   }
 }

@@ -5,6 +5,16 @@ import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 // is loaded by Node directly and cannot import the TypeScript source).
 const MEDIA_BUCKET = "media";
 
+// Mirrors MONITOR_BILLING_PATH in src/config/payments.ts (kept in sync, as
+// above; a unit test compares them).
+const MONITOR_BILLING_PATH = "/monitor/billing";
+
+// The Monitor host, as a header-rule `has` host value: production and the
+// local dev/e2e host, with or without the trailing FQDN dot, like
+// `isMonitorHost` (`config/monitor.ts`). Next matches `^value$` against the
+// lowercased Host header without its port.
+const MONITOR_HOST = "monitor\\.(?:alnyron\\.dk|localhost)\\.?";
+
 // Points next-intl's server APIs at the per-request config (locale + messages).
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
@@ -38,19 +48,34 @@ const mediaUploadConnectSrc = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? ` ${new URL(`/storage/v1/object/upload/sign/${MEDIA_BUCKET}/`, process.env.NEXT_PUBLIC_SUPABASE_URL).toString()}`
   : "";
 
-const csp = [
-  "default-src 'self'",
-  scriptSrc,
-  "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob:${mediaImageSrc}`,
-  "font-src 'self'",
-  `connect-src 'self'${mediaUploadConnectSrc}`,
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-  "upgrade-insecure-requests",
-].join("; ");
+// The Monitor billing page's Server Actions answer a form POST with a redirect
+// to Stripe's hosted Checkout or Billing Portal, which browsers check against
+// the page's form-action. Only that page's policy adds the two Stripe origins;
+// every other page keeps form-action 'self'.
+const STRIPE_FORM_ACTION = "https://checkout.stripe.com https://billing.stripe.com";
+
+/**
+ * The site's Content-Security-Policy with `formAction` as the form-action
+ * source list. Both policies come from here, so they differ in nothing else.
+ */
+function contentSecurityPolicy(formAction) {
+  return [
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob:${mediaImageSrc}`,
+    "font-src 'self'",
+    `connect-src 'self'${mediaUploadConnectSrc}`,
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    `form-action ${formAction}`,
+    "object-src 'none'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
+
+const csp = contentSecurityPolicy("'self'");
+const billingCsp = contentSecurityPolicy(`'self' ${STRIPE_FORM_ACTION}`);
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {
@@ -67,6 +92,21 @@ const nextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
         ],
+      },
+      // The Monitor billing page only: the same CSP with Stripe's Checkout and
+      // Billing Portal in form-action. These follow the catch-all rule above:
+      // when several matching rules set the same header, the last one wins.
+      // The page is /monitor/billing on any host, and /billing on the Monitor
+      // host (header rules match the requested path, before the middleware
+      // rewrites it into /monitor/billing).
+      {
+        source: MONITOR_BILLING_PATH,
+        headers: [{ key: "Content-Security-Policy", value: billingCsp }],
+      },
+      {
+        source: "/billing",
+        has: [{ type: "host", value: MONITOR_HOST }],
+        headers: [{ key: "Content-Security-Policy", value: billingCsp }],
       },
       {
         source: "/admin/:path*",
@@ -108,7 +148,7 @@ const nextConfig = {
       // `isMonitorHost` and the same value as MONITOR_ROBOTS (`config/monitor.ts`).
       {
         source: "/:path*",
-        has: [{ type: "host", value: "monitor\\.(?:alnyron\\.dk|localhost)\\.?" }],
+        has: [{ type: "host", value: MONITOR_HOST }],
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
       // Keep the *.workers.dev preview out of search indexes. Every X-Robots-Tag

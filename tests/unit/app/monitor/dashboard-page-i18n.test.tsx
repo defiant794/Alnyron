@@ -69,6 +69,9 @@ vi.mock("@/services/monitor/monitors", () => ({
   getMonitorUsage: mockGetMonitorUsage,
 }));
 
+// The footer's subscription link reads the user's subscription (payments slice 1b): none here.
+vi.mock("@/services/payments/billing", () => ({ getCurrentSubscription: vi.fn(async () => null) }));
+
 vi.mock("@/app/monitor/(auth)/actions", () => ({ signOut: vi.fn() }));
 
 vi.mock("@/config/env", async (importOriginal) => ({

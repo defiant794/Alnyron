@@ -35,7 +35,12 @@ export type SupabasePublicEnv = z.infer<typeof supabasePublicSchema>;
 export type SiteEnv = z.infer<typeof siteSchema>;
 export type ServerEnv = z.infer<typeof serverSchema>;
 
-function parseWith<T>(
+/**
+ * Parses `source` with `schema`; throws naming each missing or invalid
+ * variable, never a value. Also used by the server-only
+ * src/config/stripe-env.ts, so its errors read the same.
+ */
+export function parseWith<T>(
   schema: z.ZodType<T>,
   source: Record<string, string | undefined>,
   label: string,

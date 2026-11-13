@@ -2,6 +2,7 @@
 /**
  * Unit tests: /monitor/(panel)/dashboard/page.tsx
  * Journey: monitor-web-area  MON-AC23, MON-AC24, MON-AC25, MON-AC26
+ * Journey: payments-slice1b-billing  PAY1B-AC29, PAY1B-AC30, PAY1B-AC31, PAY1B-AC46
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
@@ -9,10 +10,11 @@ import "@testing-library/jest-dom/vitest";
 import type * as NextNavigation from "next/navigation";
 import type * as MonitorLocaleModule from "@/i18n/monitor-locale";
 
-const { mockRequireMonitor, mockListMonitors, mockGetMonitorUsage } = vi.hoisted(() => ({
+const { mockRequireMonitor, mockListMonitors, mockGetMonitorUsage, mockGetCurrentSubscription } = vi.hoisted(() => ({
   mockRequireMonitor: vi.fn(),
   mockListMonitors: vi.fn(),
   mockGetMonitorUsage: vi.fn(),
+  mockGetCurrentSubscription: vi.fn(),
 }));
 
 // Real next-intl formatting (the shared helper returns plural syntax as is), so
@@ -48,6 +50,9 @@ vi.mock("@/services/monitor/monitors", () => ({
   getMonitorUsage: mockGetMonitorUsage,
 }));
 vi.mock("@/app/monitor/(auth)/actions", () => ({ signOut: vi.fn() }));
+vi.mock("@/services/payments/billing", () => ({
+  getCurrentSubscription: mockGetCurrentSubscription,
+}));
 // MonitorShell links the footer's privacy page on the main site (NEXT_PUBLIC_SITE_URL).
 vi.mock("@/config/env", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/config/env")>()),
@@ -83,6 +88,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   mockRequireMonitor.mockResolvedValue({ userId: "u1", email: "mon@test.local", role: "monitor_user" });
+  mockGetCurrentSubscription.mockResolvedValue(null);
 });
 
 describe("MON-AC26: dashboard is gated by requireMonitor", () => {
@@ -177,5 +183,113 @@ describe("MON-AC25: owner unlimited usage pill", () => {
     mockGetMonitorUsage.mockResolvedValue({ count: 1, limit: null });
     render(await DashboardPage());
     expect(screen.getByText("1 overvågning")).toBeInTheDocument();
+  });
+});
+
+// ── PAY1B-AC29/30/31/46: dashboard billing links and upgradeNote removal ──────
+
+describe("PAY1B-AC29: dashboard — upgradeLink to /monitor/billing when no subscription", () => {
+  beforeEach(() => {
+    mockListMonitors.mockResolvedValue([]);
+    mockGetMonitorUsage.mockResolvedValue({ count: 1, limit: 5 });
+  });
+
+  it("PAY1B-AC29a: shows upgradeLink 'Opgradér for flere' linking to /monitor/billing", async () => {
+    render(await DashboardPage());
+    const link = screen.getByRole("link", { name: "Opgradér for flere" });
+    expect(link).toHaveAttribute("href", "/monitor/billing");
+  });
+
+  it("PAY1B-AC29b: upgradeNote text 'Opgradér for flere (snart)' is gone", async () => {
+    render(await DashboardPage());
+    expect(document.body.textContent).not.toContain("snart");
+  });
+});
+
+describe("PAY1B-AC30: dashboard — manageLink when subscribed", () => {
+  beforeEach(() => {
+    mockListMonitors.mockResolvedValue([]);
+    mockGetMonitorUsage.mockResolvedValue({ count: 1, limit: 20 });
+    mockGetCurrentSubscription.mockResolvedValue({
+      status: "active", interval: "year", amountOre: 9500,
+      planName: "Monitor Plus", currentPeriodEnd: "2027-01-01T00:00:00Z", cancelAtPeriodEnd: false,
+    });
+  });
+
+  it("PAY1B-AC30a: shows 'Administrér abonnement' link to /monitor/billing when subscribed", async () => {
+    render(await DashboardPage());
+    const link = screen.getByRole("link", { name: "Administrér abonnement" });
+    expect(link).toHaveAttribute("href", "/monitor/billing");
+  });
+
+  it("PAY1B-AC30b: no upgradeLink 'Opgradér for flere' when subscribed", async () => {
+    render(await DashboardPage());
+    expect(screen.queryByRole("link", { name: "Opgradér for flere" })).not.toBeInTheDocument();
+  });
+});
+
+describe("PAY1B-AC31: dashboard — at the usage cap, limitReached stays and the billing link follows it", () => {
+  it("PAY1B-AC31a: no subscription → limitReached, then the 'Opgradér for flere' link", async () => {
+    mockListMonitors.mockResolvedValue([]);
+    mockGetMonitorUsage.mockResolvedValue({ count: 5, limit: 5 });
+    render(await DashboardPage());
+    const limitReached = screen.getByText(Monitor.dashboard.limitReached);
+    const link = screen.getByRole("link", { name: "Opgradér for flere" });
+    // The link comes after the limitReached text in document order.
+    expect(limitReached.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("PAY1B-AC31b: with a subscription → limitReached, then 'Administrér abonnement'; no upgrade link", async () => {
+    mockListMonitors.mockResolvedValue([]);
+    mockGetMonitorUsage.mockResolvedValue({ count: 20, limit: 20 });
+    mockGetCurrentSubscription.mockResolvedValue({
+      status: "active", interval: "year", amountOre: 9500,
+      planName: "Monitor Plus", currentPeriodEnd: "2027-01-01T00:00:00Z", cancelAtPeriodEnd: false,
+    });
+    render(await DashboardPage());
+    const limitReached = screen.getByText(Monitor.dashboard.limitReached);
+    const link = screen.getByRole("link", { name: "Administrér abonnement" });
+    expect(link).toHaveAttribute("href", "/monitor/billing");
+    expect(limitReached.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.queryByRole("link", { name: "Opgradér for flere" })).not.toBeInTheDocument();
+  });
+});
+
+describe("PAY1B-AC29: dashboard — no billing link for an uncapped account", () => {
+  it.each([
+    ["without a subscription", null],
+    [
+      "with a subscription",
+      {
+        status: "active", interval: "year", amountOre: 9500,
+        planName: "Monitor Plus", currentPeriodEnd: "2027-01-01T00:00:00Z", cancelAtPeriodEnd: false,
+      },
+    ],
+  ])("PAY1B-AC29c: limit null %s → neither 'Opgradér for flere' nor 'Administrér abonnement'", async (_label, subscription) => {
+    mockRequireMonitor.mockResolvedValue({ userId: "u1", email: "owner@test.local", role: "owner" });
+    mockListMonitors.mockResolvedValue([]);
+    mockGetMonitorUsage.mockResolvedValue({ count: 3, limit: null });
+    mockGetCurrentSubscription.mockResolvedValue(subscription);
+    render(await DashboardPage());
+    expect(screen.getByText("3 overvågninger")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Opgradér for flere" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Administrér abonnement" })).not.toBeInTheDocument();
+    // The shell's "Abonnement" tab stays; nothing in the page itself links to the billing page.
+    const billingLinks = within(screen.getByRole("main"))
+      .queryAllByRole("link")
+      .filter((link) => link.getAttribute("href") === "/monitor/billing");
+    expect(billingLinks).toEqual([]);
+  });
+});
+
+describe("PAY1B-AC46: Monitor.dashboard.upgradeNote absent from both locale message files", () => {
+  it("PAY1B-AC46a: upgradeNote key absent from da messages", () => {
+    const daMsg = loadMessages("da") as unknown as { Monitor: { dashboard: Record<string, unknown> } };
+    expect(daMsg.Monitor.dashboard).not.toHaveProperty("upgradeNote");
+  });
+
+  it("PAY1B-AC46b: upgradeNote key absent from en messages", () => {
+    const enMsg = loadMessages("en") as unknown as { Monitor: { dashboard: Record<string, unknown> } };
+    expect(enMsg.Monitor.dashboard).not.toHaveProperty("upgradeNote");
   });
 });

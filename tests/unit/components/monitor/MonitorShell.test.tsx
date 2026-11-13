@@ -4,6 +4,7 @@
  * Journey: monitor-chrome  MCH-AC3; monitor-ship-routing  SHIP-AC8c
  * Journey: monitor-panel-nav  MPN-AC1a, MPN-AC1b, MPN-AC1c, MPN-AC2, MPN-AC2d, MPN-AC2e, MPN-AC3a, MPN-AC3b, MPN-AC4a, MPN-AC4b, MPN-AC4c
  * Journey: monitor-i18n  AC-I18N-MON-22 (supersedes MPN-AC3c "no language switcher")
+ * Journey: payments-slice1b-billing  PAY1B-AC33, PAY1B-AC34 (+ design review D-4: the three tabs fit on one row from 320px, wrapping instead of scrolling)
  *
  * Verifies: brand link accessible name is "Alnyron" (no "Monitor" suffix),
  * brand link href is the MAIN-SITE ORIGIN (not MONITOR_DASHBOARD_PATH — MPN-AC1a),
@@ -305,6 +306,140 @@ describe("AC-I18N-MON-22: MonitorShell — the DA | EN switcher follows the main
   it("AC-I18N-MON-22h: the page has exactly three nav landmarks (main-site nav, language, panel nav)", () => {
     renderShell();
     expect(screen.getAllByRole("navigation")).toHaveLength(3);
+  });
+});
+
+// ── PAY1B-AC33/34: 3 panel-nav tabs; Abonnement aria-current on billing ──────
+
+describe("PAY1B-AC33: MonitorShell panel nav has 3 tabs in order: Overvågninger, Indstillinger, Abonnement", () => {
+  it("PAY1B-AC33a: 'Abonnement' link is present in the panel nav", () => {
+    renderShell();
+    const panelNav = screen.getByRole("navigation", { name: "Monitor" });
+    expect(panelNav).toContainElement(screen.getByRole("link", { name: "Abonnement" }));
+  });
+
+  it("PAY1B-AC33b: panel nav has exactly 3 links: Overvågninger, Indstillinger, Abonnement", () => {
+    renderShell();
+    const panelNav = screen.getByRole("navigation", { name: "Monitor" });
+    const links = within(panelNav).getAllByRole("link");
+    const names = links.map((l) => l.textContent?.trim());
+    expect(names).toEqual(["Overvågninger", "Indstillinger", "Abonnement"]);
+  });
+});
+
+describe("PAY1B-AC33: MonitorShell Abonnement tab links to MONITOR_BILLING_PATH and has EN label", () => {
+  it("PAY1B-AC33d: Abonnement link href is '/monitor/billing' (MONITOR_BILLING_PATH)", () => {
+    renderShell();
+    const link = screen.getByRole("link", { name: "Abonnement" });
+    expect(link).toHaveAttribute("href", "/monitor/billing");
+  });
+
+  it("PAY1B-AC33e: EN locale renders 'Subscription' tab label", () => {
+    render(
+      <MonitorShell email="test@test.local" section="dashboard" locale="en">
+        <p>page</p>
+      </MonitorShell>,
+    );
+    const panelNav = screen.getByRole("navigation", { name: "Monitor" });
+    const links = within(panelNav).getAllByRole("link");
+    const names = links.map((l) => l.textContent?.trim());
+    expect(names[2]).toBe("Subscription");
+  });
+});
+
+describe("PAY1B-AC34: MonitorShell billing section — Abonnement tab has aria-current='page'", () => {
+  it("PAY1B-AC34a: aria-current='page' on Abonnement link when section='billing'", () => {
+    render(
+      <MonitorShell email="test@test.local" section="billing" locale="da">
+        <p>billing page</p>
+      </MonitorShell>,
+    );
+    const link = screen.getByRole("link", { name: "Abonnement" });
+    expect(link).toHaveAttribute("aria-current", "page");
+  });
+
+  it("PAY1B-AC34b: Abonnement link has no aria-current on dashboard section", () => {
+    renderShell(); // section="dashboard" (default renderShell)
+    const link = screen.getByRole("link", { name: "Abonnement" });
+    expect(link).not.toHaveAttribute("aria-current");
+  });
+
+  it("PAY1B-AC34c: only Abonnement has aria-current when section='billing'; others do not", () => {
+    render(
+      <MonitorShell email="test@test.local" section="billing" locale="da">
+        <p>billing page</p>
+      </MonitorShell>,
+    );
+    const panelNav = screen.getByRole("navigation", { name: "Monitor" });
+    const links = within(panelNav).getAllByRole("link");
+    const currentLinks = links.filter((l) => l.getAttribute("aria-current") === "page");
+    expect(currentLinks).toHaveLength(1);
+    expect(currentLinks[0]?.textContent?.trim()).toBe("Abonnement");
+  });
+});
+
+// ── PAY1B-AC51 (design review D-4): the three app-bar tabs fit on one row ────
+// Measured in Chromium (Inter): the Danish labels at 14px span 262.4px in the
+// widest case, Indstillinger current: Overvågninger 98.2, Indstillinger 79.6
+// (semibold), Abonnement 84.6. Between the bar's 24px gutters with 12px gaps
+// the row needs 334.4px (fits from 360px, even beside a 15px classic
+// scrollbar); below 360px 8px gaps and a 12px bar inset need 302.4px, one line
+// at 320px as measured in Chromium with a 15px scrollbar (305px of layout).
+// With a 17px scrollbar or other text rendering the row may wrap, a harmless
+// fallback (larger text wraps it too); nothing scrolls sideways, so no tab is
+// ever clipped. These pin the classes; E2E-PAY1B-14 checks the real layout.
+
+describe("PAY1B-AC51: the app-bar tabs fit on one row on small screens (design review D-4)", () => {
+  const panelNav = () => screen.getByRole("navigation", { name: "Monitor" });
+  const tabList = () => panelNav().querySelector("ul");
+  /** The app bar row holding the panel nav and the account. */
+  const appBarRow = () => panelNav().parentElement;
+  /** Utilities (variant prefix dropped) that would make the list a clipping scroll row. */
+  const SCROLL_ROW = /^(?:overflow|scroll-|flex-nowrap|-?m[xy]?-|p[xy]?-)/;
+
+  it("PAY1B-AC51a: below sm the tab list is a wrapping row of 14px labels, never a sideways-scrolling one", () => {
+    renderShell();
+    const list = tabList();
+    expect(list).toHaveClass("flex", "flex-wrap", "items-center", "gap-x-3", "text-small");
+    const scrollRow = [...(list?.classList ?? [])].filter((c) => SCROLL_ROW.test(c.split(":").at(-1) ?? c));
+    expect(scrollRow).toEqual([]);
+  });
+
+  it("PAY1B-AC51b: below 360px the gaps drop to 8px and the bar's inset to 12px; below sm the links have no side padding", () => {
+    renderShell();
+    expect(tabList()).toHaveClass("max-[360px]:gap-x-2");
+    expect(appBarRow()).toHaveClass("px-6", "max-[360px]:px-3");
+    for (const link of within(panelNav()).getAllByRole("link")) {
+      expect(link).toHaveClass("sm:px-1");
+      expect([...link.classList].filter((c) => /^p[xlr]?-/.test(c))).toEqual([]);
+    }
+  });
+
+  it("PAY1B-AC51c: from sm up the tab list is the unchanged wrapping row at body size, 16px gaps and 4px link padding", () => {
+    renderShell();
+    expect(tabList()).toHaveClass("flex-wrap", "sm:gap-x-4", "sm:text-body");
+    // The 12px inset ends below 360px: from sm up the bar keeps its 24px gutter.
+    expect([...(appBarRow()?.classList ?? [])].filter((c) => c.startsWith("sm:"))).toEqual([]);
+    for (const link of within(panelNav()).getAllByRole("link")) {
+      expect(link).toHaveClass("sm:px-1");
+    }
+  });
+
+  it("PAY1B-AC51d: every tab keeps its 44px target, the global focus ring, and the current tab its accent underline", () => {
+    render(
+      <MonitorShell email="test@test.local" section="billing" locale="da">
+        <p>billing page</p>
+      </MonitorShell>,
+    );
+    for (const link of within(panelNav()).getAllByRole("link")) {
+      expect(link).toHaveClass("inline-flex", "min-h-11", "items-center");
+      expect([...link.classList].filter((c) => c.includes("outline"))).toEqual([]);
+    }
+    expect(screen.getByRole("link", { name: "Abonnement" })).toHaveClass(
+      "aria-[current]:underline",
+      "aria-[current]:decoration-accent",
+      "aria-[current]:decoration-2",
+    );
   });
 });
 

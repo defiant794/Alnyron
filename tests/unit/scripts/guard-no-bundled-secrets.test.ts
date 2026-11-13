@@ -18,6 +18,7 @@ const SECRET_NAMES = [
   "RESEND_API_KEY",
   "SUPABASE_SECRET_KEY",
   "SUPABASE_DB_PASSWORD",
+  "STRIPE_CHECKOUT_KEY",
 ] as const;
 /** Stands in for a secret value: it must never appear in the guard's output. */
 const FIXTURE_VALUE = "fixture-value-5d1c";
@@ -206,4 +207,180 @@ describe("guard-no-bundled-secrets: ENG-AC6 SUPABASE_SECRET_KEY description upda
   it("ENG-AC6guard3: guard exits 1 when SUPABASE_SECRET_KEY value is present", () => {
     expect(run.status).toBe(1);
   });
+});
+
+// ── PAY1B-AC47: STRIPE_CHECKOUT_KEY is guarded ────────────────────────────────
+
+/**
+ * Key-shaped fixtures are joined at run time: no Stripe-key-shaped literal sits in this
+ * source, where the commit secret scan would (rightly) stop it.
+ */
+const STRIPE_TEST_KEY = ["sk", "test", "fakekeyABCDEF1234567890"].join("_");
+
+describe("PAY1B-AC47: guard-no-bundled-secrets detects STRIPE_CHECKOUT_KEY by value", () => {
+  it("PAY1B-AC47a: exits 1 and reports STRIPE_CHECKOUT_KEY when a sk_test_ value is present in the build output", () => {
+    // Write a fake OpenNext env file that leaks STRIPE_CHECKOUT_KEY by value.
+    // The guard must detect it and exit non-zero.
+    const run = runGuard(
+      outputDir({
+        "app/cloudflare/next-env.mjs": `export const production = ${JSON.stringify({ STRIPE_CHECKOUT_KEY: STRIPE_TEST_KEY })};\n`,
+      }),
+    );
+    expect(run.status).toBe(1);
+    expect(run.leaks.some((l) => l.startsWith("STRIPE_CHECKOUT_KEY "))).toBe(true);
+  });
+
+  it("PAY1B-AC47b: guard output never prints the secret value itself", () => {
+    const run = runGuard(
+      outputDir({
+        "app/cloudflare/next-env.mjs": `export const production = ${JSON.stringify({ STRIPE_CHECKOUT_KEY: STRIPE_TEST_KEY })};\n`,
+      }),
+    );
+    expect(run.output).not.toContain(STRIPE_TEST_KEY);
+  });
+
+  it("PAY1B-AC47c: a process.env.STRIPE_CHECKOUT_KEY read (not a value) passes the guard", () => {
+    const run = runGuard(
+      outputDir({
+        "app/route.js": `const k = process.env.STRIPE_CHECKOUT_KEY; if (!k) return null;`,
+      }),
+    );
+    // A reference in JS source (not a literal value in an env file) must not fail
+    expect(run.status).toBe(0);
+    expect(run.leaks).toEqual([]);
+  });
+
+  // Reading the key as a property of a parsed env object, or destructuring it, leaves its name
+  // in the bundle in a shape the guard cannot tell from a value: the build fails.
+  it.each([
+    ["a member read", "member.js", "(0,s.createCheckoutSession)(e.STRIPE_CHECKOUT_KEY,(0,c.buildParams)(t))"],
+    ["a destructuring", "destructure.js", "const{STRIPE_CHECKOUT_KEY:e,STRIPE_TAX_RATE_ID:t}=(0,n.getStripeEnv)();"],
+  ])("PAY1B-AC47d: %s of STRIPE_CHECKOUT_KEY fails the guard (exit 1)", (_label, file, content) => {
+    const run = runGuard(outputDir({ [file]: content }));
+    expect(run.status).toBe(1);
+    expect(run.leaks).toEqual([`STRIPE_CHECKOUT_KEY ${file}`]);
+  });
+
+  it("PAY1B-AC47e: the shapes the server-only src/config/stripe-env.ts compiles to (from a real cf:build) pass the guard (exit 0)", () => {
+    // Only the server function holds them: no client chunk or middleware loads stripe-env.ts (B10).
+    // webpack inlines it into the billing page's chunk (getStripeEnv inlined into the action's
+    // stripeEnvOrNull): the schema key, then the literal process.env read and the B14 mode check;
+    // OpenNext's esbuild bundle of the server function (handler.mjs) carries the same code with
+    // renamed locals. Copied from the 2026-11-12 cf:build after B12/B14.
+    const schema =
+      "let j=/^(?:(?:sk|rk)_test|rk_live)_[A-Za-z0-9]+$/,k=/^[a-z]+_live_/," +
+      "l=f.Ikc({STRIPE_CHECKOUT_KEY:f.YjP().regex(j)," +
+      "STRIPE_TAX_RATE_ID:f.YjP().regex(/^txr_[A-Za-z0-9]+$/)," +
+      "STRIPE_PORTAL_CONFIGURATION_ID:f.YjP().regex(/^bpc_[A-Za-z0-9]+$/)," +
+      'STRIPE_LIVEMODE:f.k5n(["true","false"])});';
+    const getStripeEnv = (a: string, b: string, c: string, livemode: string) =>
+      `function C(){try{let ${a}=(0,g.Ku)(l,process.env,"Stripe"),` +
+      `${b}=f.YjP().regex(j).parse(process.env.STRIPE_CHECKOUT_KEY),${c}=${livemode};` +
+      `if(k.test(${b})!==${c})throw Error("Invalid Stripe environment variables: STRIPE_LIVEMODE does not match the API key's mode");` +
+      `return{checkoutKey:${b},taxRateId:${a}.STRIPE_TAX_RATE_ID,portalConfigurationId:${a}.STRIPE_PORTAL_CONFIGURATION_ID,livemode:${c}}}` +
+      "catch{return null}}";
+    const run = runGuard(
+      outputDir({
+        "server-functions/default/.next/server/app/monitor/(panel)/billing/page.js":
+          schema + getStripeEnv("a", "b", "c", '"true"===a.STRIPE_LIVEMODE'),
+        "server-functions/default/handler.mjs": schema + getStripeEnv("a3", "b3", "c3", 'a3.STRIPE_LIVEMODE==="true"'),
+      }),
+    );
+    expect(run.status).toBe(0);
+    expect(run.leaks).toEqual([]);
+    expect(run.output).not.toContain("a live Stripe key");
+  });
+});
+
+// ── PAY1B-AC47f/g (B15, B16): a live Stripe key's value, under any name or none ───
+
+/** Live-shaped fake keys (24 letters and digits after the prefix), joined at run time like STRIPE_TEST_KEY. */
+const LIVE_BODY = "F1xtureOnlyNotAKey012345";
+const SK_LIVE = ["sk", "live", LIVE_BODY].join("_");
+const RK_LIVE = ["rk", "live", LIVE_BODY].join("_");
+/** The shortest live key B15 matches: exactly 20 characters after the prefix. */
+const LIVE_BODY_20 = LIVE_BODY.slice(0, 20);
+const RK_LIVE_20 = ["rk", "live", LIVE_BODY_20].join("_");
+/**
+ * next-env.mjs as OpenNext writes a multi-line .env value: JSON.stringify escapes the newline,
+ * so the `n` of `\n` sits right before the prefix (B16: no `\b` before it).
+ */
+const ESCAPED_NEWLINE_ENV = `export const production = ${JSON.stringify({ PAYMENTS_NOTE: `x\n${SK_LIVE}` })};\n`;
+
+describe("PAY1B-AC47 (B15, B16): guard-no-bundled-secrets fails on a live Stripe key's value", () => {
+  let run: GuardRun;
+
+  beforeAll(() => {
+    run = runGuard(
+      outputDir({
+        // Hardcoded in a server chunk: no variable name at all.
+        "server-functions/default/hardcoded.js": `const s=${JSON.stringify(SK_LIVE)};fetch(u,{headers:{a:"Bearer "+s}});`,
+        // An env-file entry under a name the name scan does not know.
+        "cloudflare/renamed.mjs": `export const production = ${JSON.stringify({ PAYMENTS_TOKEN: RK_LIVE })};\n`,
+        // Under the guarded name: reported both ways.
+        "cloudflare/next-env.mjs": `export const production = ${JSON.stringify({ STRIPE_CHECKOUT_KEY: RK_LIVE })};\n`,
+        // Exactly 20 characters after the prefix: the `{20,}` boundary, on the failing side.
+        "server-functions/default/boundary.js": `const s=${JSON.stringify(RK_LIVE_20)};`,
+        // Right after a word character (B16).
+        "server-functions/default/prefixed.js": `const s=${JSON.stringify(`x${RK_LIVE}`)};`,
+        // After an escaped newline in a JSON string, under a name the name scan does not know (B16).
+        "cloudflare/multiline/next-env.mjs": ESCAPED_NEWLINE_ENV,
+      }),
+    );
+  });
+
+  it("PAY1B-AC47f: exits 1 and reports every file holding one, by path only", () => {
+    expect(run.status).toBe(1);
+    const lines = run.output.split(/\r?\n/);
+    expect(lines.filter((line) => line.startsWith("  a live Stripe key in "))).toEqual([
+      "  a live Stripe key in cloudflare/multiline/next-env.mjs",
+      "  a live Stripe key in cloudflare/next-env.mjs",
+      "  a live Stripe key in cloudflare/renamed.mjs",
+      "  a live Stripe key in server-functions/default/boundary.js",
+      "  a live Stripe key in server-functions/default/hardcoded.js",
+      "  a live Stripe key in server-functions/default/prefixed.js",
+    ]);
+    expect(run.leaks).toEqual(["STRIPE_CHECKOUT_KEY cloudflare/next-env.mjs"]);
+    expect(lines).toContain(
+      "A live Stripe key belongs only in `wrangler secret put STRIPE_CHECKOUT_KEY` (a restricted rk_live_ key).",
+    );
+  });
+
+  it("PAY1B-AC47f: never prints a key, nor any part of one past its prefix", () => {
+    for (const value of [SK_LIVE, RK_LIVE, LIVE_BODY, RK_LIVE_20, LIVE_BODY_20]) {
+      expect(run.output).not.toContain(value);
+    }
+  });
+
+  it(
+    "PAY1B-AC47f (B16): a live key right after a word character, glued to a name or after an " +
+      "escaped newline in a JSON string, is a live key (exit 1, file reported)",
+    () => {
+      expect(ESCAPED_NEWLINE_ENV).toContain(`"x\\n${SK_LIVE}"`);
+      expect(run.status).toBe(1);
+      const lines = run.output.split(/\r?\n/);
+      expect(lines).toContain("  a live Stripe key in cloudflare/multiline/next-env.mjs");
+      expect(lines).toContain("  a live Stripe key in server-functions/default/prefixed.js");
+    },
+  );
+
+  it(
+    "PAY1B-AC47g: test keys, a live prefix with fewer than 20 characters after it, and the key " +
+      "patterns src/config/stripe-env.ts compiles to are not live keys (exit 0)",
+    () => {
+      const clean = runGuard(
+        outputDir({
+          "test-keys.mjs": `export const k = ${JSON.stringify([
+            ["sk", "test", LIVE_BODY].join("_"),
+            ["rk", "test", LIVE_BODY].join("_"),
+          ])};\n`,
+          "short.js": `const s=${JSON.stringify(["rk", "live", LIVE_BODY.slice(0, 19)].join("_"))};`,
+          "patterns.js": "let j=/^(?:(?:sk|rk)_test|rk_live)_[A-Za-z0-9]+$/,l=/^[a-z]+_live_/;",
+        }),
+      );
+      expect(clean.status).toBe(0);
+      expect(clean.output).not.toContain("a live Stripe key");
+      expect(clean.output).toContain("and no live Stripe key");
+    },
+  );
 });

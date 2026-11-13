@@ -182,6 +182,7 @@
       "navLabel": "Monitor",
       "dashboard": "Monitors",
       "settings": "Settings",
+      "billing": "Subscription",
       "account": "Account"
     },
     "dashboard": {
@@ -192,7 +193,8 @@
       "listLabel": "Your monitors",
       "usage": "{count} / {limit} monitors used",
       "usageUnlimited": "{count, plural, one {# monitor} other {# monitors}}",
-      "upgradeNote": "Upgrade for more (coming soon)",
+      "upgradeLink": "Upgrade for more",
+      "manageLink": "Manage subscription",
       "limitReached": "You have used all your monitors. Delete one before you add a new one.",
       "emptyTitle": "Add the first page you want to keep an eye on",
       "emptyBody": "Paste the address, and we will check the page and email you when it changes.",
@@ -297,5 +299,34 @@
     "signupNoticeBody": "{email} created an account on Alnyron Monitor and confirmed their email {when}.",
     "signupNoticeWaiting": "{waiting, plural, one {# other is also waiting for a notice.} other {# others are also waiting for a notice.}}",
     "signupNoticeFooter": "You get this email because you own Alnyron. We only write about new accounts that have confirmed their email, and at most once per account."
+  },
+  "Payments": {
+    "billing": {
+      "metaTitle": "Subscription",
+      "title": "Subscription",
+      "lead": "Run more than {limit} monitors with Monitor Plus.",
+      "leadSubscribed": "Your subscription and payment.",
+      "unlimited": "Your account has no limit on monitors.",
+      "planSub": "Up to {limit} monitors. Cancel anytime.",
+      "intervalLegend": "Choose billing period",
+      "perYear": "/ year",
+      "perMonth": "/ month",
+      "price": "{amount} kr",
+      "saveTag": "Save ~{pct}%",
+      "upgrade": "Upgrade",
+      "finePrint": "Prices include VAT. Payment via Stripe – you are sent to Stripe's secure payment page. Cancel or switch between monthly and yearly billing anytime under “Manage subscription”.",
+      "manage": "Manage subscription",
+      "renews": "Renews {date}",
+      "ends": "Ends {date}",
+      "pastDue": "The latest payment failed. Update the payment method under Manage subscription.",
+      "inactive": "The subscription is not active. Complete the payment under Manage subscription.",
+      "activated": "Monitor Plus is active. You can now run up to {limit} monitors.",
+      "pendingTitle": "We're activating your subscription …",
+      "pendingBody": "It usually takes just a moment. Refresh the page shortly.",
+      "pendingRefresh": "Refresh",
+      "unavailable": "Monitor Plus is not available yet.",
+      "errorCheckout": "We couldn't open the payment page. Please try again shortly.",
+      "errorPortal": "We couldn't open subscription management. Please try again shortly."
+    }
   }
 }

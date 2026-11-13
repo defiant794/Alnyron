@@ -553,6 +553,7 @@
       "navLabel": "Monitor",
       "dashboard": "Overvågninger",
       "settings": "Indstillinger",
+      "billing": "Abonnement",
       "account": "Konto"
     },
     "dashboard": {
@@ -563,7 +564,8 @@
       "listLabel": "Dine overvågninger",
       "usage": "{count} / {limit} overvågninger brugt",
       "usageUnlimited": "{count, plural, one {# overvågning} other {# overvågninger}}",
-      "upgradeNote": "Opgradér for flere (snart)",
+      "upgradeLink": "Opgradér for flere",
+      "manageLink": "Administrér abonnement",
       "limitReached": "Du har brugt alle dine overvågninger. Slet en, før du tilføjer en ny.",
       "emptyTitle": "Tilføj den første side, du vil holde øje med",
       "emptyBody": "Indsæt adressen, så tjekker vi siden og sender dig en mail, når den ændrer sig.",
@@ -680,5 +682,34 @@
     "signupNoticeBody": "{email} har oprettet en konto på Alnyron Monitor og bekræftet sin e-mail {when}.",
     "signupNoticeWaiting": "{waiting, plural, one {# anden venter også på en besked.} other {# andre venter også på en besked.}}",
     "signupNoticeFooter": "Du får denne mail, fordi du er ejer af Alnyron. Vi skriver kun om nye konti, der har bekræftet deres e-mail, og højst én gang pr. konto."
+  },
+  "Payments": {
+    "billing": {
+      "metaTitle": "Abonnement",
+      "title": "Abonnement",
+      "lead": "Kør mere end {limit} overvågninger med Monitor Plus.",
+      "leadSubscribed": "Dit abonnement og din betaling.",
+      "unlimited": "Din konto har ingen grænse for overvågninger.",
+      "planSub": "Op til {limit} overvågninger. Opsig når som helst.",
+      "intervalLegend": "Vælg betalingsperiode",
+      "perYear": "/ år",
+      "perMonth": "/ måned",
+      "price": "{amount} kr",
+      "saveTag": "Spar ~{pct}%",
+      "upgrade": "Opgradér",
+      "finePrint": "Priser inkl. moms. Betaling via Stripe – du sendes til Stripes sikre betalingsside. Opsig eller skift mellem månedlig og årlig betaling når som helst under “Administrér abonnement”.",
+      "manage": "Administrér abonnement",
+      "renews": "Fornyes {date}",
+      "ends": "Ophører {date}",
+      "pastDue": "Den seneste betaling mislykkedes. Opdatér betalingsmetoden under Administrér abonnement.",
+      "inactive": "Abonnementet er ikke aktivt. Gør betalingen færdig under Administrér abonnement.",
+      "activated": "Monitor Plus er aktivt. Du kan nu køre op til {limit} overvågninger.",
+      "pendingTitle": "Vi aktiverer dit abonnement …",
+      "pendingBody": "Det tager normalt kun et øjeblik. Opdatér siden om lidt.",
+      "pendingRefresh": "Opdatér",
+      "unavailable": "Monitor Plus er ikke tilgængeligt endnu.",
+      "errorCheckout": "Vi kunne ikke åbne betalingssiden. Prøv igen om lidt.",
+      "errorPortal": "Vi kunne ikke åbne abonnementsstyringen. Prøv igen om lidt."
+    }
   }
 }
