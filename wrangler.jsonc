@@ -60,5 +60,10 @@
   // block alone. At go-live, once the live Stripe ids exist, add "STRIPE_LIVEMODE": "true"
   // and the live STRIPE_TAX_RATE_ID and STRIPE_PORTAL_CONFIGURATION_ID here (.env.example);
   // STRIPE_CHECKOUT_KEY is a secret (`wrangler secret put`).
-  "vars": { "MAIL_FROM": "Alnyron <noreply@send.alnyron.dk>" }
+  "vars": {
+    "MAIL_FROM": "Alnyron <noreply@send.alnyron.dk>",
+    "STRIPE_LIVEMODE": "true",
+    "STRIPE_TAX_RATE_ID": "txr_1Ubdp4FBWtA5MNzbg2ZKznPw",
+    "STRIPE_PORTAL_CONFIGURATION_ID": "bpc_1Ubdp4FBWtA5MNzb1LL0g8Wh"
+  }
 }
