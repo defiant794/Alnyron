@@ -1,0 +1,12 @@
+-- Terms and conditions (payments slice 1d): the 'terms' system page key.
+--
+-- Its own migration, like 20261107000100_monitor_page_key.sql: a value added by ALTER TYPE ... ADD
+-- VALUE cannot be used in the transaction that adds it, and each migration file runs in one
+-- transaction. 20261114000200_system_page_terms.sql seeds the terms page with this key, so the
+-- value must be committed first.
+--
+-- /terms (handelsbetingelser) is the Stripe Dashboard's Terms of Service URL, which Checkout's
+-- consent checkbox links. Its title, lead, eyebrow and SEO fields live in the DB like the privacy
+-- page; its body is the versioned legal module src/config/legal/withdrawal-texts.ts, not DB
+-- markdown. No table, policy or data changes here.
+alter type public.system_page_key add value if not exists 'terms';

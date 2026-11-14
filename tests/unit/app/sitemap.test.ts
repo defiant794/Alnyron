@@ -46,7 +46,8 @@ async function entry(url: string) {
 }
 
 describe("AC-CATPUB-30: sitemap lists the system pages and every public catalog page", () => {
-  it("AC-ENSLUG-06/06b: lists home, contact and privacy at English paths, then the catalog entries", async () => {
+  // Slice 1d (contract C-4: "Sitemap includes it like privacy"): /terms follows privacy (WD-J3-C01).
+  it("AC-ENSLUG-06/06b: lists home, contact, privacy and terms at English paths, then the catalog entries", async () => {
     expect((await sitemap()).map((candidate) => candidate.url)).toEqual([
       `${SITE}/`,
       `${SITE}/en`,
@@ -54,6 +55,8 @@ describe("AC-CATPUB-30: sitemap lists the system pages and every public catalog 
       `${SITE}/en/contact`,
       `${SITE}/privacy`,
       `${SITE}/en/privacy`,
+      `${SITE}/terms`,
+      `${SITE}/en/terms`,
       `${SITE}/services`,
       `${SITE}/en/services`,
       `${SITE}/services/web-development`,
@@ -63,7 +66,7 @@ describe("AC-CATPUB-30: sitemap lists the system pages and every public catalog 
 
   it("lists no catalog page the service leaves out (drafts, sections without a published item)", async () => {
     vi.mocked(getCatalogSitemapEntries).mockResolvedValue([]);
-    expect((await sitemap()).map((candidate) => candidate.url)).toHaveLength(6);
+    expect((await sitemap()).map((candidate) => candidate.url)).toHaveLength(8);
   });
 
   it("keeps each catalog page's last modification", async () => {

@@ -1,10 +1,16 @@
 /**
  * Unit tests: src/lib/payments/checkout-params.ts — pure param builders.
- * Journey: payments-slice1b-billing  PAY1B-AC42
+ * Journey: payments-slice1b-billing PAY1B-AC42; payments-slice1d-withdrawal WD-J1-C01, WD-J1-C06
+ *
+ * Slice 1d adds: consent_collection, custom_text (consent message + submit line),
+ * metadata.withdrawal_text_version and subscription_data.metadata.withdrawal_text_version.
+ * Custom-text values are pinned as literals from slice1d-legal-texts-draft.md, NOT derived
+ * by calling the production checkoutConsentMessage() — that would test the builder against itself.
  */
 import { describe, it, expect } from "vitest";
 import { buildSubscriptionCheckoutParams, buildBillingPortalParams } from "@/lib/payments/checkout-params";
 import { CHECKOUT_SESSION_TTL_SECONDS } from "@/config/payments";
+// No import from @/config/legal/withdrawal-texts — literals below are from the legal draft.
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
 
@@ -13,7 +19,22 @@ const EMAIL = "sub@test.local";
 const PLAN = { id: "plan-uuid-5678", stripePriceId: "price_yr_test123" };
 const TAX_RATE_ID = "txr_test123";
 const MONITOR_ORIGIN = "http://monitor.localhost:3000";
+// 1d: siteOrigin is the main site, used for /terms URLs in consent params (distinct from monitorOrigin).
+const SITE_ORIGIN = "https://alnyron.dk";
 const NOW_SECONDS = 1_700_000_000;
+
+// ── 1d literal pins (from slice1d-legal-texts-draft.md, never derived from production code) ─────
+const WITHDRAWAL_TEXT_VERSION_LITERAL = "2026-11-14.1";
+// DA consent message: termsAcceptPrefix + " " + consent (markdown link; termsUrl = SITE_ORIGIN+/terms)
+const DA_CONSENT_MESSAGE =
+  "Jeg accepterer Alnyrons [handelsbetingelser](https://alnyron.dk/terms). " +
+  "Jeg anmoder om, at Alnyron påbegynder Monitor-abonnementet med det samme, inden fortrydelsesfristen " +
+  "på 14 dage udløber. Jeg er indforstået med, at jeg stadig kan fortryde inden for 14 dage, men at " +
+  "jeg i så fald betaler et forholdsmæssigt beløb for den periode, abonnementet har været aktivt.";
+// DA checkoutSubmit
+const DA_SUBMIT_MESSAGE =
+  "Du har 14 dages fortrydelsesret. Du kan fortryde online under Abonnement i Monitor, " +
+  "og du får fortrydelsesvejledningen på e-mail.";
 
 // ── PAY1B-AC42: buildSubscriptionCheckoutParams ───────────────────────────────
 
@@ -27,6 +48,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — no stripeCustomerId (c
       stripeCustomerId: null,
       taxRateId: TAX_RATE_ID,
       monitorOrigin: MONITOR_ORIGIN,
+      siteOrigin: SITE_ORIGIN,
       nowSeconds: NOW_SECONDS,
     });
 
@@ -35,6 +57,11 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — no stripeCustomerId (c
       ui_mode: "hosted_page",
       locale: "da",
       line_items: [{ price: PLAN.stripePriceId, quantity: 1 }],
+      consent_collection: { terms_of_service: "required" },
+      custom_text: {
+        terms_of_service_acceptance: { message: DA_CONSENT_MESSAGE },
+        submit: { message: DA_SUBMIT_MESSAGE },
+      },
       subscription_data: {
         default_tax_rates: [TAX_RATE_ID],
         metadata: {
@@ -42,6 +69,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — no stripeCustomerId (c
           user_id: USER_ID,
           plan_id: PLAN.id,
           locale: "da",
+          withdrawal_text_version: WITHDRAWAL_TEXT_VERSION_LITERAL,
         },
       },
       metadata: {
@@ -49,6 +77,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — no stripeCustomerId (c
         user_id: USER_ID,
         plan_id: PLAN.id,
         locale: "da",
+        withdrawal_text_version: WITHDRAWAL_TEXT_VERSION_LITERAL,
       },
       client_reference_id: USER_ID,
       customer_email: EMAIL,
@@ -68,6 +97,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — no stripeCustomerId (c
       stripeCustomerId: null,
       taxRateId: TAX_RATE_ID,
       monitorOrigin: MONITOR_ORIGIN,
+      siteOrigin: SITE_ORIGIN,
       nowSeconds: NOW_SECONDS,
     });
     expect(result).not.toHaveProperty("customer");
@@ -77,7 +107,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — no stripeCustomerId (c
     const result = buildSubscriptionCheckoutParams({
       userId: USER_ID, email: EMAIL, locale: "da", plan: PLAN,
       stripeCustomerId: null, taxRateId: TAX_RATE_ID,
-      monitorOrigin: MONITOR_ORIGIN, nowSeconds: NOW_SECONDS,
+      monitorOrigin: MONITOR_ORIGIN, siteOrigin: SITE_ORIGIN, nowSeconds: NOW_SECONDS,
     });
     expect(result).not.toHaveProperty("payment_method_types");
   });
@@ -86,7 +116,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — no stripeCustomerId (c
     const result = buildSubscriptionCheckoutParams({
       userId: USER_ID, email: EMAIL, locale: "da", plan: PLAN,
       stripeCustomerId: null, taxRateId: TAX_RATE_ID,
-      monitorOrigin: MONITOR_ORIGIN, nowSeconds: NOW_SECONDS,
+      monitorOrigin: MONITOR_ORIGIN, siteOrigin: SITE_ORIGIN, nowSeconds: NOW_SECONDS,
     });
     expect(result).not.toHaveProperty("price_data");
     expect(result).not.toHaveProperty("amount");
@@ -103,6 +133,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — with stripeCustomerId 
       stripeCustomerId: "cus_test_abc123",
       taxRateId: TAX_RATE_ID,
       monitorOrigin: MONITOR_ORIGIN,
+      siteOrigin: SITE_ORIGIN,
       nowSeconds: NOW_SECONDS,
     });
 
@@ -111,6 +142,11 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — with stripeCustomerId 
       ui_mode: "hosted_page",
       locale: "da",
       line_items: [{ price: PLAN.stripePriceId, quantity: 1 }],
+      consent_collection: { terms_of_service: "required" },
+      custom_text: {
+        terms_of_service_acceptance: { message: DA_CONSENT_MESSAGE },
+        submit: { message: DA_SUBMIT_MESSAGE },
+      },
       subscription_data: {
         default_tax_rates: [TAX_RATE_ID],
         metadata: {
@@ -118,6 +154,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — with stripeCustomerId 
           user_id: USER_ID,
           plan_id: PLAN.id,
           locale: "da",
+          withdrawal_text_version: WITHDRAWAL_TEXT_VERSION_LITERAL,
         },
       },
       metadata: {
@@ -125,6 +162,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — with stripeCustomerId 
         user_id: USER_ID,
         plan_id: PLAN.id,
         locale: "da",
+        withdrawal_text_version: WITHDRAWAL_TEXT_VERSION_LITERAL,
       },
       client_reference_id: USER_ID,
       customer: "cus_test_abc123",
@@ -139,7 +177,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — with stripeCustomerId 
     const result = buildSubscriptionCheckoutParams({
       userId: USER_ID, email: EMAIL, locale: "da", plan: PLAN,
       stripeCustomerId: "cus_test_abc123", taxRateId: TAX_RATE_ID,
-      monitorOrigin: MONITOR_ORIGIN, nowSeconds: NOW_SECONDS,
+      monitorOrigin: MONITOR_ORIGIN, siteOrigin: SITE_ORIGIN, nowSeconds: NOW_SECONDS,
     });
     expect(result).not.toHaveProperty("customer_email");
   });
@@ -151,7 +189,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — expires_at and locale"
     const result = buildSubscriptionCheckoutParams({
       userId: USER_ID, email: EMAIL, locale: "da", plan: PLAN,
       stripeCustomerId: null, taxRateId: TAX_RATE_ID,
-      monitorOrigin: MONITOR_ORIGIN, nowSeconds: now,
+      monitorOrigin: MONITOR_ORIGIN, siteOrigin: SITE_ORIGIN, nowSeconds: now,
     });
     expect(result.expires_at).toBe(now + 1860);
     expect(CHECKOUT_SESSION_TTL_SECONDS).toBe(1860);
@@ -161,7 +199,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — expires_at and locale"
     const result = buildSubscriptionCheckoutParams({
       userId: USER_ID, email: EMAIL, locale: "en", plan: PLAN,
       stripeCustomerId: null, taxRateId: TAX_RATE_ID,
-      monitorOrigin: MONITOR_ORIGIN, nowSeconds: NOW_SECONDS,
+      monitorOrigin: MONITOR_ORIGIN, siteOrigin: SITE_ORIGIN, nowSeconds: NOW_SECONDS,
     });
     expect(result.locale).toBe("en");
     expect(result.subscription_data.metadata.locale).toBe("en");
@@ -173,7 +211,7 @@ describe("PAY1B-AC42: buildSubscriptionCheckoutParams — expires_at and locale"
     const result = buildSubscriptionCheckoutParams({
       userId: USER_ID, email: EMAIL, locale: "da", plan: PLAN,
       stripeCustomerId: null, taxRateId: TAX_RATE_ID,
-      monitorOrigin: origin, nowSeconds: NOW_SECONDS,
+      monitorOrigin: origin, siteOrigin: SITE_ORIGIN, nowSeconds: NOW_SECONDS,
     });
     expect(result.success_url).toBe(`${origin}/monitor/billing?checkout=done`);
     expect(result.cancel_url).toBe(`${origin}/monitor/billing`);

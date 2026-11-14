@@ -56,6 +56,7 @@ function pEvent(id: string, created: string = EVT_T1): string {
   return JSON.stringify({ id, type: "customer.subscription.updated", created, livemode: false });
 }
 
+// Updated by slice 1d: start_date is now a REQUIRED key in the p_subscription payload.
 function pSub(opts: {
   id: string;
   customerId: string;
@@ -64,6 +65,7 @@ function pSub(opts: {
   status?: string;
   currentPeriodEnd?: string | null;
   cancelAtPeriodEnd?: boolean;
+  startDate?: string | null;
 }): string {
   return JSON.stringify({
     id: opts.id,
@@ -73,6 +75,7 @@ function pSub(opts: {
     status: opts.status ?? "active",
     current_period_end: opts.currentPeriodEnd ?? null,
     cancel_at_period_end: opts.cancelAtPeriodEnd ?? false,
+    start_date: opts.startDate ?? EVT_T1,
   });
 }
 

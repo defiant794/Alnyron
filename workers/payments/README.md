@@ -1,29 +1,42 @@
 # alnyron-payments
 
-Stripe's webhook endpoint for Monitor subscriptions (payments slice 1c): a Cloudflare Worker with
-only a `fetch()` handler, served on the custom domain `pay.alnyron.dk`. Stripe POSTs events to
-`https://pay.alnyron.dk/webhook`; the Worker checks the signature, retrieves the subscription's
-current state from Stripe and writes it through the two service-role-only functions of migration
+Stripe's webhook endpoint for Monitor subscriptions (payments slice 1c) and the right of
+withdrawal (fortrydelsesret, slice 1d): a Cloudflare Worker served on the custom domain
+`pay.alnyron.dk`. Stripe POSTs events to `https://pay.alnyron.dk/webhook`; the Worker checks the
+signature, retrieves the subscription's current state from Stripe and writes it through the two
+service-role-only functions of migration
 `supabase/migrations/20261112000100_payments_foundation.sql`:
 `payments_sync_subscription(p_event, p_subscription)` and
 `payments_record_subscription_invoice(p_event, p_subscription, p_invoice)`. Its only other
-database access is one read of `subscriptions` (a user's other entitling subscriptions), plus one
-Supabase Auth lookup (whether a user's account exists, see Duplicate subscriptions). All
-subscription rules (one effect per event id, older events and ended subscriptions left alone, the
-billing customer link, the lapse pause of monitors over the cap) live in those functions.
+webhook database access is one read of `subscriptions` (a user's other entitling subscriptions),
+one Supabase Auth lookup (whether a user's account exists, see Duplicate subscriptions) and the
+Checkout consent (see Fortrydelse). All subscription rules (one effect per event id, older events
+and ended subscriptions left alone, the billing customer link, the lapse pause of monitors over
+the cap) live in those functions.
 
-Separate from the OpenNext web Worker so the Supabase secret key and the Stripe key never ship in
-the public app. Always pass `--config workers/payments/wrangler.jsonc`: without it,
-`wrangler deploy` hands the root project to OpenNext.
+Besides `fetch`, the Worker exports the named entrypoint `WithdrawalService`, which the web app
+calls over its service binding `PAYMENTS` (never over a route), and a `scheduled` handler, the
+hourly sweep (cron `0 * * * *`); see Fortrydelse. Their rules live in migration
+`supabase/migrations/20261114000300_payments_withdrawal.sql`.
+
+Separate from the OpenNext web Worker so the Supabase secret key, the Stripe key and the Resend
+key never ship in the public app. Always pass `--config workers/payments/wrangler.jsonc`:
+without it, `wrangler deploy` hands the root project to OpenNext.
 
 | file | role |
 |---|---|
-| `wrangler.jsonc` | Worker config: vars (`SUPABASE_URL`, `STRIPE_LIVEMODE`), no routes, no cron |
-| `index.ts` | `fetch()` entry: 404 off `/webhook`, 405 for any method but POST, env check, handler |
+| `wrangler.jsonc` | Worker config: vars (`SUPABASE_URL`, `STRIPE_LIVEMODE`, `MAIL_FROM`, `WITHDRAWAL_ALERT_TO`, `SITE_URL`), the hourly cron, no routes |
+| `index.ts` | `fetch()` entry: 404 off `/webhook`, 405 for any method but POST, env check, handler; `scheduled()`: the sweep; re-exports `WithdrawalService` |
 | `env.ts` | zod/mini schema of the Worker env (names failing keys, never values) |
-| `webhook.ts` | one delivery: size cap, signature, event shape, account, mode, the event's handler |
-| `stripe-api.ts` | the five Stripe calls (retrieve, mark as duplicate, cancel subscription, list invoice payments, refund) |
-| `rpc.ts` | the two writers, the `subscriptions` read and the Supabase Auth account lookup over supabase-js |
+| `webhook.ts` | one delivery: size cap, signature, event shape, account, mode, the event's handler, the Checkout consent |
+| `withdrawal-service.ts` | `WithdrawalService.withdraw`: token → user, begin, one pass |
+| `withdrawal.ts` | `processWithdrawal`: one pass over a withdrawal (cancel, credit note, receipt, owner alert) |
+| `sweep.ts` | `runSweep`: the hourly sweep within its subrequest budget |
+| `consent.ts` | the order confirmation of a recorded consent (send + stamp), shared by webhook and sweep |
+| `mail.ts` | the three Resend emails (order confirmation, receipt, owner alert) |
+| `deps.ts`, `refusal.ts`, `cloudflare-workers.d.ts` | the clients built from the env; the P0001 refusal check; the hand-typed `cloudflare:workers` module |
+| `stripe-api.ts` | the Stripe calls: the webhook's five (retrieve, mark as duplicate, cancel subscription, list invoice payments, refund) and the withdrawal's four (cancel, list invoices, list credit notes, create credit note) |
+| `rpc.ts` | the writers, the `subscriptions` read and the Supabase Auth lookups (account exists, account email, token user) over supabase-js |
 
 The pure parts live in `src/lib/payments/` (`stripe-signature.ts`: the signature check,
 `webhook-mapping.ts`: Stripe objects to writer payloads, `stripe.ts`: the REST client shared with
@@ -68,7 +81,7 @@ never fails on it.
 
 | event | action |
 |---|---|
-| `checkout.session.completed` | only a `mode: subscription` session with `metadata.kind` `monitor_subscription` (else ignored); its `client_reference_id` must equal the `metadata.user_id` the web app set on both the session and the subscription (else rejected `user_mismatch`); then the subscription is synced |
+| `checkout.session.completed` | only a `mode: subscription` session with `metadata.kind` `monitor_subscription` (else ignored); its `client_reference_id` must equal the `metadata.user_id` the web app set on both the session and the subscription (else rejected `user_mismatch`); then the subscription is synced, and unless the writer refused it, the session's consent is recorded and the order confirmation sent (see Fortrydelse) |
 | `customer.subscription.created` / `.updated` / `.deleted` | the subscription is synced |
 | `invoice.payment_failed` | the invoice's subscription (`parent.subscription_details.subscription`) is synced with Stripe's status, e.g. `past_due`; an invoice without one is ignored |
 | `invoice.paid` | the invoice is recorded (amounts in integer øre) with its subscription synced; an invoice without a subscription is ignored; when the subscription carries the duplicate mark, or gets it in that delivery, the invoice's paid payments are refunded (see Duplicate subscriptions). Both ids are checked first; the subscription is then retrieved before the rest of the invoice is checked, so an invoice or subscription the writers cannot take (rejected `invalid_invoice`, else `invalid_subscription`) still has its paid payments refunded when the subscription carries the mark |
@@ -242,9 +255,12 @@ Every delivery that passes the size cap logs exactly one JSON line:
   invoice or the subscription could not be recorded (refunded without a write); for `error` the
   failed call: `stripe_network`, `stripe_invalid_response`, `stripe_http_<status>`,
   `rpc_<code>[_<status>]` (PostgREST/Postgres or Supabase Auth code and HTTP status),
-  `rpc_failed`, or `unexpected` (a defect); `missing_profile` when Supabase Auth has the account
-  of a user the database refused as `unknown_user` (see Operations).
+  `consent_rpc_…` (the consent writer), `rpc_failed`, or `unexpected` (a defect);
+  `missing_profile` when Supabase Auth has the account of a user the database refused as
+  `unknown_user` (see Operations).
 - `paused`: how many monitors the writer's lapse pause paused.
+- `consent` and `mail`: only on a `checkout.session.completed` the sync writer did not refuse
+  (see Fortrydelse > Logs).
 
 Never a header, body, key, secret, email, user id or customer id.
 
@@ -262,6 +278,212 @@ Never a header, body, key, secret, email, user id or customer id.
   after it was created) or with the Stripe CLI (`stripe events resend <event id>
   --webhook-endpoint=<endpoint id>`, up to 30 days), per the same docs.
 
+## Fortrydelse
+
+The right of withdrawal (fortrydelsesret, forbrugeraftaleloven) for the Monitor subscription,
+slice 1d. The legal texts are versioned in `src/config/legal/withdrawal-texts.ts`; the rules
+live in migration `20261114000300_payments_withdrawal.sql`.
+
+### Consent (L-1)
+
+The web app's Checkout requires the terms checkbox (`consent_collection[terms_of_service]`) with
+the text of `WITHDRAWAL_TEXT_VERSION` and puts that version into the session's and the
+subscription's `metadata.withdrawal_text_version`. On `checkout.session.completed`, after the
+sync writer answered anything but a refusal, the Worker records the consent
+(`payments_record_checkout_consent`: session, subscription, version, the sha256 of the texts the
+customer saw, locale, `accepted_at` = the event's `created`) when `consent.terms_of_service` is
+`accepted` and the version is known; otherwise it logs `consent_missing` (a later withdrawal then
+refunds everything). It then sends the order confirmation (the withdrawal information on a
+durable medium) to the account's email (Resend key `withdrawal-info/<session id>`) and stamps
+`info_sent_at`, which starts the 14 days. Not for a subscription that has ended (canceled,
+`incomplete_expired`, or finished as a duplicate in that delivery). A failure of the consent
+writer that a retry may fix answers 500 (Stripe redelivers; the record is evidence); a failed
+email never does (the sweep resends it).
+
+### Withdrawal (L-2)
+
+`/monitor/billing/withdraw` calls `WithdrawalService.withdraw` over the binding with the user's
+access token, never a user id:
+
+1. Supabase Auth resolves the token to the user (id and the account email for the receipt).
+2. `payments_begin_withdrawal` records the notice with the database clock (`requested_at`) after
+   checking ownership, an entitling status and the deadline (`window_expired`,
+   `not_withdrawable`); a second submit resumes the recorded one.
+3. One pass of `processWithdrawal` (`withdrawal.ts`), under a 120 s lease
+   (`payments_claim_withdrawal`):
+   - received: the subscription Stripe returns must be the stored one (customer, `start_date`, no
+     duplicate mark), else `needs_manual subscription_mismatch` WITHOUT a cancel; then
+     `DELETE /v1/subscriptions/{id}` (`prorate=false`, comment `withdrawal`) → step `canceled`.
+   - canceled: the refund, automated only for exactly one paid invoice of the plain shape (one
+     subscription line of the whole amount, no balance, nothing else open, no credit note but
+     this withdrawal's own), else `needs_manual invoice_shape`. Amount (`wd-refund-1`):
+     retained = floor(paid × E / period) with E the seconds from the line's period start to
+     `requested_at` (0 to the period), only with a consent (`retention_basis = consent`; without
+     one nothing is retained). A credit note on the invoice line with the refund to the original
+     payment (`POST /v1/credit_notes`, VAT reversed on the line, `metadata[withdrawal_id]`,
+     Idempotency-Key `wd-cn-<id>`), reused when one with that metadata exists → step `refunded`.
+     Nothing to refund → `no_refund_due`.
+   - the receipt once (`withdrawal-ack/<id>`, also while still in progress), and for
+     `needs_manual` the owner alert once to `WITHDRAWAL_ALERT_TO` (`withdrawal-alert/<id>`: ids
+     and the reason, whether the subscription is stopped and whether the consumer has the
+     receipt, never a name or an email). Both bodies follow the withdrawal's state, so a send
+     whose stamp failed may be retried with another body: Resend then answers its 409
+     `invalid_idempotent_request` (per Resend's docs as of 2026-11), nothing is sent again, and
+     it is stamped with `email_id` `idempotent_replay` (the order confirmation's stamp too). That
+     the first request's email went out is an inference: the docs do not say whether a refused
+     first request keeps its key. A receipt in doubt: Resend dashboard > Emails, search the
+     consumer's address (`ack_email`).
+   - a failure a later pass may fix is recorded as `failed <code>` (`last_error`, a code only);
+     after more than 8 passes (`WITHDRAWAL_MAX_ATTEMPTS`) a withdrawal still received or canceled
+     goes to `needs_manual retries_exhausted`.
+4. The answer is the withdrawal's state once the notice is recorded, whatever the pass got done.
+
+### The sweep (`scheduled`, hourly)
+
+`payments_pending_work(20, 24)` lists withdrawals with work left (no live lease), the least
+recently updated first: a claim and every step move one to the back, so a withdrawal that keeps
+failing never holds the front. One whose only work left is an email (the receipt, or the owner
+alert of a `needs_manual` one) is listed only while it has had fewer than 24 passes
+(`WITHDRAWAL_MAX_MAIL_ATTEMPTS`, a day of sweeps); the pass that reaches 24 and still leaves an
+email unsent logs `"step":"mail","outcome":"given_up","code":"retries_exhausted"` (see manual
+handling). It also lists order confirmations not yet sent (accepted in the last 30 days, of a
+subscription that has not ended). Each withdrawal gets one `processWithdrawal` pass, each
+confirmation is sent and stamped; a failing item is logged and the sweep goes on. Every Stripe,
+Supabase and Resend fetch is counted, and an item starts only when its worst case still fits 45
+subrequests: 15 for a withdrawal pass (charged what it really made, at least 10), 4 for a
+confirmation. While a confirmation waits, a pass starts only when 15 + 4 still fit, so a full
+withdrawal list never starves the confirmations. A run makes 45 at most (Workers Free allows 50,
+per Cloudflare's docs as of 2026-11): the rest waits an hour.
+
+Confirmations keep their order (oldest accepted first) and have no attempt counter: one Resend
+refuses for good (e.g. a bad account address, `mail_rejected`) is retried every hour for its 30
+days ahead of newer ones, and about 11 such rows fill a run's confirmation budget. The sweep log
+names the session of each failure (`"session":…,"outcome":"error","code":"confirmation_failed"`):
+the same session failing hour after hour means check the account's email, send the confirmation
+by hand, and stamp it as `service_role` with `select public.payments_mark_consent_info_sent(
+'<session id>', 'manual');`.
+
+### Logs
+
+Ids and codes only, never a name, an email, a token or an amount but øre integers:
+
+- The webhook line of a `checkout.session.completed` gains `"consent"` (`recorded`, `duplicate`,
+  `consent_missing`, `consent_rejected`) and `"mail"` (`sent`, `not_needed`, `no_recipient`,
+  `failed`, or null without a record).
+- `{"msg":"payments withdraw","withdrawal":…,"outcome":…,"code":…}`: one per
+  `WithdrawalService.withdraw` call; `outcome` `created`/`existing`, `refused` (code
+  `invalid_input`, `invalid_env`, `auth_failed`, `unauthenticated`, `no_email`,
+  `not_withdrawable`, `window_expired`, `begin_failed`) or `process_failed`.
+- `{"msg":"payments withdrawal","withdrawal":…,"step":…,"outcome":…,"code":…}`: one per step of
+  a pass (`claim` claimed/busy/done, then the steps applied/already; `needs_manual` with the
+  reason, `failed` with the code: `stripe_unavailable`, `stripe_refused`, `cancel_failed`,
+  `invoice_not_recorded`, `mail_<rate_limited|quota|config|transient|rejected>`, `rpc_failed`),
+  and `mail` `given_up` with code `retries_exhausted` when the sweep stops retrying an email.
+- `{"msg":"payments sweep",…}`: per failed item (`process_failed`, `confirmation_failed`, or
+  `pending_work_failed`), per confirmation its outcome, and a closing
+  `{"outcome":"done","withdrawals":n,"consents":n,"budgetStop":bool,"subrequests":n}`.
+
+## Fortrydelse: manuel behandling
+
+The owner alert (subject and body name the withdrawal id, the subscription, `requested_at` and
+the reason) means the Worker stopped automating that withdrawal. It says whether the consumer
+has the receipt (in-progress wording); the consumer sees the withdrawal as in progress on
+`/monitor/billing`.
+
+**Deadline: refund within 14 days of `requested_at`** (forbrugeraftaleloven § 22). List them:
+
+```sql
+select id, stripe_subscription_id, manual_reason, last_error, canceled_at,
+       requested_at, requested_at + interval '14 days' as refund_by, retention_basis
+  from public.subscription_withdrawals
+ where status = 'needs_manual'
+ order by requested_at;
+```
+
+### An email the sweep gave up on
+
+The log line `"step":"mail","outcome":"given_up","code":"retries_exhausted"` means a receipt or
+an owner alert still failed after 24 passes (`last_error` has the mail code, e.g.
+`mail_config`: fix the Resend key or the sending domain first). List them, including withdrawals
+whose alert never reached you:
+
+```sql
+select id, status, manual_reason, last_error, attempts, ack_sent_at, alerted_at, requested_at
+  from public.subscription_withdrawals
+ where status in ('completed', 'needs_manual')
+   and (ack_sent_at is null or (status = 'needs_manual' and alerted_at is null))
+ order by requested_at;
+```
+
+A missing receipt (`ack_sent_at` null): send the consumer (`ack_email`) the receipt by hand
+(when the notice was received, for which agreement, and the refund once made), then record it,
+as `service_role`, with `select public.payments_withdrawal_step('<withdrawal id>', 'ack_sent',
+'{"email_id": "manual"}');`. A `needs_manual` withdrawal whose alert was not sent: handle it by
+reason (below) and record the alert with `'alerted', '{}'`. The Worker then sends neither.
+
+### Per reason
+
+- `subscription_mismatch`: the subscription was **not** canceled. In the Stripe Dashboard,
+  open the subscription and compare its customer and start date with `subscriptions`
+  (`stripe_customer_id`, `started_at`), and look for `metadata.duplicate_subscription = true`
+  (a duplicate the webhook already refunds and cancels: check its refunds before doing
+  anything). When it is the consumer's contract, cancel it at once (Cancel subscription >
+  Immediately, no proration credit), record the cancel (below), then refund.
+- `invoice_shape`: the subscription **is** canceled. Look at its invoices: more than one paid
+  invoice (a renewal or an interval switch), a customer balance (`starting_balance`), a credit
+  note already on the invoice, extra lines, or an open invoice (void it: Invoice > Void, so the
+  customer is not charged). Refund the unused part of what was paid for the period the notice
+  falls in, by the formula above (with `retention_basis = no_consent` everything paid).
+- `stripe_refused`: Stripe answered the credit note with a 4xx (e.g. the restricted key lacks
+  Credit notes: Write) or the note did not match the computed refund. Check the invoice's
+  credit notes for one with `metadata.withdrawal_id = <id>`: if one exists, do not issue
+  another; record that one.
+- `retries_exhausted`: more than 8 passes failed (`last_error` has the last code, e.g.
+  `stripe_unavailable`, `rpc_failed`). With `canceled_at` null the subscription was **not**
+  canceled: cancel it first; then refund. Fix the cause first (keys, Stripe or Supabase status).
+
+### Refund by hand: a credit note with a refund
+
+Stripe Dashboard > Invoices > the paid invoice > create a credit note (Dashboard label may be
+"Issue credit note"): the subscription line item with the refund amount (VAT is then reversed
+on the line), reason "Order change", memo `Fortrydelse af Monitor-abonnement`, metadata
+`withdrawal_id = <withdrawal id>` (the Worker reuses a note it finds by that metadata), and
+refund the amount to the original payment method. Note the credit note id (`cn_…`), its total
+tax and the refund id (`re_…`).
+
+### Record it (service_role `payments_withdrawal_step`)
+
+In the Supabase SQL editor of production, as `service_role` (the functions are not executable
+by any other API role). First the cancel, if `canceled_at` is null (a needs_manual withdrawal
+keeps its status), then the refund, which completes it:
+
+```sql
+begin;
+set local role service_role;
+select public.payments_withdrawal_step('<withdrawal id>', 'canceled',
+  '{"canceled_at": "<ISO time Stripe shows for the cancel>"}');
+select public.payments_withdrawal_step('<withdrawal id>', 'refunded', '{
+  "stripe_invoice_id": "in_…",
+  "service_start_at": "<invoice line period start, ISO>",
+  "period_end_at": "<invoice line period end, ISO>",
+  "paid_ore": 0, "retained_ore": 0, "refund_ore": 0, "refund_tax_ore": 0,
+  "calc_version": "wd-refund-1",
+  "stripe_credit_note_id": "cn_…",
+  "stripe_refund_id": "re_…"}');
+commit;
+```
+
+Amounts in øre: `paid_ore = retained_ore + refund_ore`, `refund_ore > 0`, `refund_tax_ore` the
+credit note's total tax, `retained_ore = 0` when `retention_basis = no_consent`. The invoice must
+be recorded in `subscription_invoices` for that subscription (else `invoice_not_recorded`), and
+its `amount_refunded_ore` may not exceed its total (a CHECK). When nothing was paid, record
+`'no_refund_due'` with `{"stripe_invoice_id": null, "paid_ore": 0, "calc_version":
+"wd-refund-1"}` instead (a paid amount there only with a consent: `invalid_transition`
+otherwise). The `refunded` and `no_refund_due` steps take a `needs_manual` withdrawal only once
+`canceled_at` is set. The consumer's billing page then shows the completed withdrawal; the
+Worker sends no second receipt (enable Stripe's credit note emails if the customer should get
+the credit note).
+
 ## Build
 
 ```sh
@@ -276,8 +498,11 @@ the config's directory, so the bundle lands in `workers/payments/.wrangler/payme
 
 1. Copy `.dev.vars.example` to `workers/payments/.dev.vars` (git-ignored) and fill in the
    **isolated e2e project's** URL and secret key (`sb_secret_…`), a Stripe **test** key
-   (`sk_test_…` or `rk_test_…`) and `STRIPE_LIVEMODE=false`. Never point a local run at
-   production or at live mode.
+   (`sk_test_…` or `rk_test_…`, with Credit notes: Write for withdrawals),
+   `STRIPE_LIVEMODE=false`, a Resend key (`RESEND_API_KEY`) and the owner-alert test address
+   `WITHDRAWAL_ALERT_TO=delivered+withdrawal-alert@resend.dev` (`MAIL_FROM` and `SITE_URL` keep
+   the production values; `.dev.vars` keys override the config's vars). Never point a local run
+   at production or at live mode.
 2. Start the Worker, then forward test-mode events to it with the Stripe CLI, which prints the
    `whsec_…` to put into `.dev.vars` as `STRIPE_WEBHOOK_SECRET` (restart the Worker after):
 
@@ -305,6 +530,45 @@ the config's directory, so the bundle lands in `workers/payments/.wrangler/payme
 against the e2e project and Stripe test mode with synthetically signed events:
 `npm run test:integration:e2e-project -- tests/integration/payments/webhook-worker-live.test.ts`.
 No test covers a real Stripe → Worker delivery: that needs the deployed endpoint.
+`tests/integration/payments/withdrawal-live.test.ts` runs `processWithdrawal` with the Worker's
+real Stripe and Supabase modules against a real test subscription (cancel, credit note with VAT,
+the database steps, the reconcile after a pass that died after the credit note).
+
+### The web app's binding, locally
+
+The web app reaches `WithdrawalService` over the service binding `PAYMENTS` (root
+`wrangler.jsonc` `services`). Under `next dev`, `initOpenNextCloudflareForDev` (next.config.mjs)
+takes the app's bindings from wrangler's `getPlatformProxy`, which finds the payments Worker of a
+separate `wrangler dev` on the same machine through wrangler's local dev registry. Verified
+2026-11-14 (wrangler 4.156, Next 15.5, Windows): run the payments Worker first, then the web app
+against the e2e project:
+
+```sh
+npx wrangler dev --config workers/payments/wrangler.jsonc   # terminal 1: reads workers/payments/.dev.vars
+npm run dev:e2e -- -p 3000                                  # terminal 2: the web app (scripts/next-e2e-project.mjs)
+```
+
+- Use `npm run dev:e2e`, not `npm run dev`: the withdraw action forwards the session's access
+  token, and the Worker checks it with the Supabase Auth of its own `SUPABASE_URL`, so the web
+  app must sign in against the same (e2e) project that `.dev.vars` names.
+- Restarting the payments Worker breaks the binding of a running `next dev` (every call fails
+  with "Network connection lost.", still after a minute): restart terminal 2 as well, after
+  terminal 1 shows `Ready on http://127.0.0.1:8787`.
+- What the binding answers (check it after a restart): a call with an invalid input gives
+  `{"ok":false,"code":"invalid_input"}` and the Worker logs
+  `{"msg":"payments withdraw",...,"code":"invalid_input"}`. Without `.dev.vars` the Worker has no
+  secrets (the config's `vars` alone, `SUPABASE_URL` being production's), so a well-formed call
+  answers `unavailable` (log `"code":"invalid_env"`) before any request leaves the Worker.
+- Without terminal 1 the call fails ("Network connection lost.") and the withdraw action
+  answers `?error=unavailable`.
+
+The emails are real Resend sends: `.dev.vars` sets
+`WITHDRAWAL_ALERT_TO=delivered+withdrawal-alert@resend.dev`, and every test account that receives
+an order confirmation or a receipt must have a `delivered+<label>@resend.dev` address (Resend's
+test sink), never a real inbox. Trigger the sweep of the running Worker (terminal 1, no extra
+flag) with `curl "http://127.0.0.1:8787/cdn-cgi/local/scheduled?cron=0+*+*+*+*"`, the route
+wrangler 4.156 prints at start; `/__scheduled` answers 404 unless the Worker was started with
+`--test-scheduled`.
 
 ## Go-live (production)
 
@@ -372,6 +636,68 @@ The Worker is not part of `npm run deploy`; it ships by hand, once, in this orde
    Stripe Dashboard at once and fix the configuration. Per Stripe's webhook docs, an event whose
    retry falls while the endpoint is disabled is not retried (e.g. the `missing_profile` 500s):
    resend those by hand after re-enabling it (see Operations).
+
+### Slice 1d go-live (fortrydelse)
+
+On top of the steps above, in exactly this order. The 1d Worker goes out before the migrations:
+it works against the database before them (its sync payload's extra `start_date` key is ignored
+by the 1c writers; a `checkout.session.completed` fails 500 on the consent writer that does not
+exist yet, so Stripe redelivers it; the sweep logs `pending_work_failed`), while the 1c Worker
+would have its deliveries refused once 0300 requires `start_date`.
+
+1. `STRIPE_PAYMENTS_KEY` (the restricted live key): add **Credit notes: Write** in the Stripe
+   Dashboard's restricted-key editor (`POST /v1/credit_notes`; it includes the read the Worker's
+   reconcile list needs, per Stripe's permissions reference). Without it every refund is answered
+   403 and ends `needs_manual stripe_refused`. The test-mode key used locally needs it too.
+2. The Resend key:
+   `npx wrangler secret put RESEND_API_KEY --config workers/payments/wrangler.jsonc` (`re_…`, a
+   key allowed to send from the verified `send.alnyron.dk` domain). Check the vars in
+   `wrangler.jsonc`: `MAIL_FROM` (same as the web Worker's), `WITHDRAWAL_ALERT_TO`
+   (`info@alnyron.dk`, the owner alert) and `SITE_URL` (`https://alnyron.dk`).
+3. Stripe Dashboard > Settings > Public details: Terms of service URL `https://alnyron.dk/terms`.
+   Checkout's `consent_collection[terms_of_service]=required` needs it (the slice 1d spike made
+   test-mode Checkouts with it set); check it is set for live mode too.
+4. Deploy the payments Worker: `npm run deploy:payments`. This also registers the hourly cron
+   (`0 * * * *`): check Workers & Pages > alnyron-payments > Settings > Triggers.
+5. Right after it, the migrations on production, one at a time and in order:
+   `20261114000100_system_page_terms_key.sql` (adds the enum value `terms`; it must be committed
+   before the next file uses it), then `20261114000200_system_page_terms.sql` (the `/terms` page
+   and its reserved slug), then `20261114000300_payments_withdrawal.sql` (the withdrawal tables
+   and functions, and the sync writer's required `start_date`). Fallback, only if 0300 went in
+   before the 1d Worker: the 1c Worker's deliveries in between are refused `invalid_payload`,
+   answered 200, so Stripe does not retry them; resend (Stripe Dashboard > the event > Resend)
+   every event logged `"outcome":"rejected","code":"invalid_payload"` in between.
+
+   `started_at`: 0300 adds it without a backfill, on the premise that production holds no
+   subscription yet (no live plan, no `monitor_plans` row, was ever seeded there, so no Checkout
+   could make one). Check the premise right after 0300; this must return no row:
+
+   ```sql
+   select stripe_subscription_id, status
+     from public.subscriptions
+    where started_at is null and status not in ('canceled', 'incomplete_expired');
+   ```
+
+   Should it return any, backfill each before step 6, else its withdrawal is refused
+   `not_withdrawable` and the billing page shows no "Fortryd aftale" until its next event sets
+   `started_at` (for a yearly plan up to a year away). Read the subscription's `start_date` (Unix
+   seconds) in the Stripe Dashboard or with `GET /v1/subscriptions/<id>` (the restricted key),
+   then in the SQL editor of production:
+
+   ```sql
+   update public.subscriptions
+      set started_at = to_timestamp(<start_date>), updated_at = now()
+    where stripe_subscription_id = '<sub_…>' and started_at is null;
+   ```
+
+   Such a subscription has no recorded consent, so its window is the start day + 14 days plus 12
+   months and a withdrawal refunds everything paid.
+6. Then deploy the web Worker (`npm run deploy`): its `PAYMENTS` service binding names
+   `alnyron-payments` and its `WithdrawalService` entrypoint, which must exist first. Until it
+   does, `/monitor/billing/withdraw` answers `?error=unavailable` and no withdrawal is recorded.
+7. Check: a test-mode or own live Checkout logs `"consent":"recorded","mail":"sent"` on its
+   `checkout.session.completed` line, the order confirmation arrives, and the next full hour logs
+   `{"msg":"payments sweep",…,"outcome":"done",…}`.
 
 Statements about Stripe, Supabase and Cloudflare dashboards, behaviour, permissions and plan
 features reflect their documentation as of 2026-11 and may have changed; check them at go-live.

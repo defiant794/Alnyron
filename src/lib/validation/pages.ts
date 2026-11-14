@@ -40,6 +40,8 @@ export const PAGE_CONTENT_SCHEMAS = {
     company: z.string(),
   }),
   privacy: z.strictObject({ eyebrow: z.string() }),
+  /** The eyebrow over the title; the terms themselves are the versioned legal module, not `body_md`. */
+  terms: z.strictObject({ eyebrow: z.string() }),
 } satisfies Record<ContentPageKey, z.ZodObject>;
 
 /**
@@ -87,6 +89,7 @@ export const savePageSchema = z.discriminatedUnion("system_key", [
   systemPageSchema("home", PAGE_CONTENT_SCHEMAS.home),
   systemPageSchema("contact", PAGE_CONTENT_SCHEMAS.contact),
   systemPageSchema("privacy", PAGE_CONTENT_SCHEMAS.privacy),
+  systemPageSchema("terms", PAGE_CONTENT_SCHEMAS.terms),
 ]);
 
 export type SavePageInput = z.infer<typeof savePageSchema>;

@@ -36,7 +36,14 @@
     "bindings": [{ "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
-  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "alnyron-web" }],
+  // PAYMENTS: the payments Worker's (workers/payments) WithdrawalService RPC
+  // entrypoint, called by the Monitor withdrawal action
+  // (src/app/monitor/(panel)/billing/withdraw/actions.ts). Deploy the payments
+  // Worker before this one: a binding to a missing entrypoint fails the deploy.
+  "services": [
+    { "binding": "WORKER_SELF_REFERENCE", "service": "alnyron-web" },
+    { "binding": "PAYMENTS", "service": "alnyron-payments", "entrypoint": "WithdrawalService" }
+  ],
   // Per-user throttle on the Monitor billing actions (src/lib/payments/rate-limit.ts):
   // BILLING_RATE_LIMIT sessions per BILLING_RATE_PERIOD_SECONDS (src/config/payments.ts;
   // a unit test pins these numbers to them). Workers Rate Limiting: nothing to create

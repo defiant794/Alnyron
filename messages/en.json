@@ -12,7 +12,8 @@
     "home": "Home",
     "contact": "Contact",
     "privacy": "Privacy",
-    "monitor": "Monitor"
+    "monitor": "Monitor",
+    "terms": "Terms and conditions"
   },
   "Footer": {
     "cvr": "CVR {cvr}"
@@ -314,7 +315,7 @@
       "price": "{amount} kr",
       "saveTag": "Save ~{pct}%",
       "upgrade": "Upgrade",
-      "finePrint": "Prices include VAT. Payment via Stripe – you are sent to Stripe's secure payment page. Cancel or switch between monthly and yearly billing anytime under “Manage subscription”.",
+      "finePrint": "Payment via Stripe – you are sent to Stripe's secure payment page.",
       "manage": "Manage subscription",
       "renews": "Renews {date}",
       "ends": "Ends {date}",
@@ -326,7 +327,54 @@
       "pendingRefresh": "Refresh",
       "unavailable": "Monitor Plus is not available yet.",
       "errorCheckout": "We couldn't open the payment page. Please try again shortly.",
-      "errorPortal": "We couldn't open subscription management. Please try again shortly."
+      "errorPortal": "We couldn't open subscription management. Please try again shortly.",
+      "withdrawButton": "Withdraw from agreement",
+      "withdrawDeadline": "Withdrawal deadline: {date}",
+      "withdrawalReceived": "We received your withdrawal ({date}) and are processing it. You will get a receipt by email.",
+      "withdrawalCompleted": "Your withdrawal is complete. We have refunded {refund} kr.",
+      "withdrawalCompletedNothing": "Your withdrawal is complete. There was nothing to refund.",
+      "withdrawalDetails": "See your withdrawal"
+    },
+    "withdraw": {
+      "metaTitle": "Withdraw from agreement",
+      "step": "Step 2 of 2",
+      "title": "Withdraw from agreement",
+      "lead": "Confirm that you want to withdraw from your Monitor subscription agreement.",
+      "contractHeading": "Your agreement",
+      "account": "Account (email)",
+      "plan": "Subscription",
+      "interval": "Billing period",
+      "intervalMonth": "Monthly",
+      "intervalYear": "Yearly",
+      "startDate": "Agreement made",
+      "statementHeading": "Your statement",
+      "estimate": "Estimated refund: {refund} kr of {paid} kr",
+      "estimateNote": "The final amount is calculated from the time we receive your withdrawal.",
+      "nameLabel": "Your name",
+      "nameHint": "Your full name, at most 200 characters.",
+      "submit": "Confirm withdrawal",
+      "back": "Back",
+      "receiptHeading": "Your withdrawal",
+      "requestedAt": "Received",
+      "status": "Status",
+      "statusReceived": "Received, being processed",
+      "statusCanceled": "Subscription stopped, refund being processed",
+      "statusNeedsManual": "Being processed",
+      "statusCompleted": "Completed",
+      "paid": "Paid",
+      "retained": "Payment for the active period",
+      "refunded": "Refunded",
+      "amount": "{amount} kr",
+      "receiptNote": "We send a receipt to your email.",
+      "noSubscription": "You have no subscription to withdraw from.",
+      "windowClosed": "The withdrawal period for your subscription has expired.",
+      "errors": {
+        "unauthenticated": "Your session has expired. Sign in again and try again.",
+        "invalid_input": "Enter your name (at most 200 characters) and try again.",
+        "not_withdrawable": "Your subscription cannot be withdrawn from here. Write to us if you think this is a mistake.",
+        "window_expired": "The withdrawal period has expired.",
+        "unavailable": "We couldn't take your withdrawal right now. Please try again shortly."
+      }
     }
   }
 }

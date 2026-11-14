@@ -43,7 +43,7 @@ describe("WH-AC25a: syncSubscription calls payments_sync_subscription with p_eve
 
     const rpc = createPaymentsRpc(SUPABASE_URL, SECRET_KEY);
     const event = { id: "evt_001", type: "customer.subscription.created", created: "2026-01-01T00:00:00.000Z", livemode: false };
-    const sub = { id: "sub_001", customer: "cus_001", user_id: "00000000-0000-0000-0000-000000000001", price_id: "price_001", status: "active", current_period_end: null, cancel_at_period_end: false };
+    const sub = { id: "sub_001", customer: "cus_001", user_id: "00000000-0000-0000-0000-000000000001", price_id: "price_001", status: "active", current_period_end: null, cancel_at_period_end: false, start_date: "2026-01-01T00:00:00.000Z" };
 
     await expect(rpc.syncSubscription(event, sub)).resolves.toEqual({ outcome: "applied", paused: 0 });
 
@@ -67,7 +67,7 @@ describe("WH-AC25b: recordSubscriptionInvoice calls payments_record_subscription
 
     const rpc = createPaymentsRpc(SUPABASE_URL, SECRET_KEY);
     const event = { id: "evt_002", type: "invoice.paid", created: "2026-01-01T00:00:00.000Z", livemode: false };
-    const sub = { id: "sub_002", customer: "cus_002", user_id: null, price_id: "price_002", status: "active", current_period_end: null, cancel_at_period_end: false };
+    const sub = { id: "sub_002", customer: "cus_002", user_id: null, price_id: "price_002", status: "active", current_period_end: null, cancel_at_period_end: false, start_date: "2026-01-01T00:00:00.000Z" };
     const invoice = { id: "in_002", subscription_id: "sub_002", email: "", amount_total_ore: 9500, amount_tax_ore: 1900, period_start: null, period_end: null, paid_at: "2026-01-01T00:00:00.000Z" };
 
     await rpc.recordSubscriptionInvoice(event, sub, invoice);
@@ -126,7 +126,7 @@ describe("WH-AC25d: every request is aborted after PAYMENTS_RPC_TIMEOUT_MS", () 
 
     const rpc = createPaymentsRpc(SUPABASE_URL, SECRET_KEY);
     const event = { id: "evt_to", type: "t", created: "2026-01-01T00:00:00.000Z", livemode: false };
-    const sub = { id: "sub_to", customer: "cus_to", user_id: null, price_id: "price_to", status: "active", current_period_end: null, cancel_at_period_end: false };
+    const sub = { id: "sub_to", customer: "cus_to", user_id: null, price_id: "price_to", status: "active", current_period_end: null, cancel_at_period_end: false, start_date: "2026-01-01T00:00:00.000Z" };
     await rpc.syncSubscription(event, sub);
 
     expect(timeout.mock.calls.some((c) => c[0] === PAYMENTS_RPC_TIMEOUT_MS)).toBe(true);
@@ -150,7 +150,7 @@ describe("WH-AC25e: result not {outcome ∈ applied|duplicate|stale, paused inte
 
     const rpc = createPaymentsRpc(SUPABASE_URL, SECRET_KEY);
     const event = { id: "evt_bad", type: "t", created: "2026-01-01T00:00:00.000Z", livemode: false };
-    const sub = { id: "sub_bad", customer: "cus_bad", user_id: null, price_id: "price_bad", status: "active", current_period_end: null, cancel_at_period_end: false };
+    const sub = { id: "sub_bad", customer: "cus_bad", user_id: null, price_id: "price_bad", status: "active", current_period_end: null, cancel_at_period_end: false, start_date: "2026-01-01T00:00:00.000Z" };
 
     await expect(rpc.syncSubscription(event, sub)).rejects.toSatisfy(
       (e) => e instanceof PaymentsRpcError && e.message === "rpc_failed",
@@ -188,7 +188,7 @@ describe("WH-AC25f: PaymentsRpcError carries DB keyword as message, http status 
 
     const rpc = createPaymentsRpc(SUPABASE_URL, SECRET_KEY);
     const event = { id: "evt_22023", type: "t", created: "2026-01-01T00:00:00.000Z", livemode: false };
-    const sub = { id: "sub_22023", customer: "cus_22023", user_id: null, price_id: "price_22023", status: "active", current_period_end: null, cancel_at_period_end: false };
+    const sub = { id: "sub_22023", customer: "cus_22023", user_id: null, price_id: "price_22023", status: "active", current_period_end: null, cancel_at_period_end: false, start_date: "2026-01-01T00:00:00.000Z" };
 
     await expect(rpc.syncSubscription(event, sub)).rejects.toSatisfy(
       (e) => e instanceof PaymentsRpcError && e.message === "unknown_plan" && e.code === "22023",
@@ -233,7 +233,7 @@ describe("WH-AC25g: createPaymentsRpc uses no-session auth (persistSession:false
 
     const rpc = createPaymentsRpc(SUPABASE_URL, SECRET_KEY);
     const event = { id: "evt_auth", type: "t", created: "2026-01-01T00:00:00.000Z", livemode: false };
-    const sub = { id: "sub_auth", customer: "cus_auth", user_id: null, price_id: "price_auth", status: "active", current_period_end: null, cancel_at_period_end: false };
+    const sub = { id: "sub_auth", customer: "cus_auth", user_id: null, price_id: "price_auth", status: "active", current_period_end: null, cancel_at_period_end: false, start_date: "2026-01-01T00:00:00.000Z" };
     await rpc.syncSubscription(event, sub);
 
     expect(authHeaders.length).toBeGreaterThan(0);
@@ -295,7 +295,7 @@ describe("WH-AC25f-A14: PaymentsRpcError exposes a typed refusal field", () => {
     ));
     const rpc = createPaymentsRpc(SUPABASE_URL, SECRET_KEY);
     const event = { id: "evt_A14ref", type: "t", created: "2026-01-01T00:00:00.000Z", livemode: false };
-    const sub = { id: "sub_A14ref", customer: "cus_A14r", user_id: null, price_id: "priceA14r", status: "active", current_period_end: null, cancel_at_period_end: false };
+    const sub = { id: "sub_A14ref", customer: "cus_A14r", user_id: null, price_id: "priceA14r", status: "active", current_period_end: null, cancel_at_period_end: false, start_date: "2026-01-01T00:00:00.000Z" };
 
     const err = await rpc.syncSubscription(event, sub).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(PaymentsRpcError);
@@ -310,7 +310,7 @@ describe("WH-AC25f-A14: PaymentsRpcError exposes a typed refusal field", () => {
     ));
     const rpc = createPaymentsRpc(SUPABASE_URL, SECRET_KEY);
     const event = { id: "evt_A14null", type: "t", created: "2026-01-01T00:00:00.000Z", livemode: false };
-    const sub = { id: "sub_A14null", customer: "cus_A14n", user_id: null, price_id: "priceA14n", status: "active", current_period_end: null, cancel_at_period_end: false };
+    const sub = { id: "sub_A14null", customer: "cus_A14n", user_id: null, price_id: "priceA14n", status: "active", current_period_end: null, cancel_at_period_end: false, start_date: "2026-01-01T00:00:00.000Z" };
 
     const err = await rpc.syncSubscription(event, sub).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(PaymentsRpcError);

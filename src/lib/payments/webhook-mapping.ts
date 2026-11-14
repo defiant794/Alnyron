@@ -42,6 +42,8 @@ export type SubscriptionPayload = {
   status: string;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  /** Stripe's `start_date` (when the contract was made) as ISO text, stored once as `started_at`. */
+  start_date: string;
 };
 
 /**
@@ -145,10 +147,11 @@ export function isDuplicateMarked(subscription: unknown): boolean {
  * A Stripe subscription as the sync writer takes it, or null when it lacks
  * something the writer needs: a {@link SUB_ID_REGEX} id, a {@link CUS_ID_REGEX}
  * customer (an expanded customer's `.id`), one of the 8 statuses, a boolean `cancel_at_period_end`,
- * an integer `created`, and exactly one item with a string `price.id`. The
- * item's integer `current_period_end` becomes ISO text, else null; `user_id`
- * is {@link metadataUserId} (null lets the writer fall back to the customer's
- * user); `duplicate_marked` is {@link isDuplicateMarked}.
+ * integer `created` and `start_date` (Unix seconds; `start_date` becomes ISO
+ * text, stored once as `started_at`), and exactly one item with a string
+ * `price.id`. The item's integer `current_period_end` becomes ISO text, else
+ * null; `user_id` is {@link metadataUserId} (null lets the writer fall back to
+ * the customer's user); `duplicate_marked` is {@link isDuplicateMarked}.
  */
 export function normalizeSubscription(subscription: unknown): NormalizedSubscription | null {
   const sub = asRecord(subscription);
@@ -162,6 +165,7 @@ export function normalizeSubscription(subscription: unknown): NormalizedSubscrip
     !isSubscriptionStatus(sub.status) ||
     typeof sub.cancel_at_period_end !== "boolean" ||
     !isUnixSeconds(sub.created) ||
+    !isUnixSeconds(sub.start_date) ||
     !Array.isArray(items) ||
     items.length !== 1
   ) {
@@ -179,6 +183,7 @@ export function normalizeSubscription(subscription: unknown): NormalizedSubscrip
     status: sub.status,
     current_period_end: isUnixSeconds(periodEnd) ? unixToIso(periodEnd) : null,
     cancel_at_period_end: sub.cancel_at_period_end,
+    start_date: unixToIso(sub.start_date),
     created: sub.created,
     duplicate_marked: isDuplicateMarked(sub),
   };
@@ -194,6 +199,7 @@ export function toSubscriptionPayload(subscription: NormalizedSubscription): Sub
     status: subscription.status,
     current_period_end: subscription.current_period_end,
     cancel_at_period_end: subscription.cancel_at_period_end,
+    start_date: subscription.start_date,
   };
 }
 

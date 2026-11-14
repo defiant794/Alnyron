@@ -6,12 +6,13 @@
  * (migration 20261103000300_catalog_hardening.sql), the P3 MyLife role gate
  * (migration 20261106000200_monitor_schema.sql), the admin Monitor signups list
  * (migration 20261111000100_admin_monitor_signups.sql), the admin Monitor signup
- * delete (migration 20261111000200_admin_delete_monitor_user.sql), and the payments
- * foundation (migration 20261112000100_payments_foundation.sql):
+ * delete (migration 20261111000200_admin_delete_monitor_user.sql), the payments
+ * foundation (migration 20261112000100_payments_foundation.sql) and the payments
+ * withdrawal (migration 20261114000300_payments_withdrawal.sql):
  *   - a function newly created by postgres in `private` is not executable by PUBLIC,
  *     anon, authenticated, or service_role (anon/authenticated hold USAGE on `private`,
  *     so a PUBLIC EXECUTE default would expose every future security-definer helper;
- *     service_role is similarly not granted EXECUTE by default — only the four explicitly
+ *     service_role is similarly not granted EXECUTE by default — only the nine explicitly
  *     granted private helpers carry that privilege)
  *   - existing private functions: no PUBLIC EXECUTE; anon may run only the RLS visibility
  *     helpers, authenticated additionally is_owner(), is_mylife() (the mylife_* policies),
@@ -25,10 +26,15 @@
  *     by authenticated, never by anon / PUBLIC
  *   - payments ACLs: payments_sync_subscription and payments_record_subscription_invoice
  *     (public) are EXECUTE-only for service_role; my_monitor_limit() grants EXECUTE to
- *     authenticated (service_role retains schema default); and of the private helpers,
- *     exactly the four called by the public payments functions (effective_monitor_limit,
- *     payments_valid_timestamptz, payments_apply_subscription, payments_pause_over_cap)
- *     have service_role EXECUTE
+ *     authenticated (service_role retains schema default); the 1d Worker functions
+ *     (payments_begin_withdrawal, payments_claim_withdrawal, payments_withdrawal_step,
+ *     payments_pending_work, payments_record_checkout_consent, payments_mark_consent_info_sent)
+ *     are EXECUTE-only for service_role and my_withdrawal_status() for authenticated; and of
+ *     the private helpers, exactly the nine called by the public payments functions
+ *     (effective_monitor_limit, payments_valid_timestamptz, payments_apply_subscription,
+ *     payments_pause_over_cap, and from 1d dk_easter_sunday, dk_non_working_day,
+ *     withdrawal_deadline, payments_withdrawal_json, payments_consent_mail) have service_role
+ *     EXECUTE
  *
  * Connection: postgres. The probe function is created inside a rolled-back transaction.
  * Journey: payments-slice1-foundation  PAY1-AC5h, PAY1-AC5j, PAY1-AC5k
@@ -292,7 +298,42 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
       });
     }, 12_000);
 
-    it("PAY1-AC5k-service_role: private functions with service_role EXECUTE are exactly the four granted", async () => {
+    it("PAY1-AC5j-1d: the 1d public functions — the Worker's six service_role only (not PUBLIC, anon or authenticated), my_withdrawal_status() authenticated only", async () => {
+      await withTx(client, async (c) => {
+        const workerFunctions = [
+          "payments_begin_withdrawal(p_user_id uuid, p_subscription_id text, p_consumer_name text, p_ack_email text, p_statement_version text, p_locale text)",
+          "payments_claim_withdrawal(p_withdrawal_id uuid, p_lease_seconds integer)",
+          "payments_mark_consent_info_sent(p_checkout_session_id text, p_email_id text)",
+          "payments_pending_work(p_limit integer, p_max_mail_attempts integer)",
+          "payments_record_checkout_consent(p_consent jsonb)",
+          "payments_withdrawal_step(p_withdrawal_id uuid, p_step text, p_data jsonb)",
+        ];
+        const names = [
+          "my_withdrawal_status",
+          "payments_begin_withdrawal",
+          "payments_claim_withdrawal",
+          "payments_mark_consent_info_sent",
+          "payments_pending_work",
+          "payments_record_checkout_consent",
+          "payments_withdrawal_step",
+        ];
+        expect(await execPrivileges(c, "n.nspname = 'public' AND p.proname = ANY($1::text[])", [names])).toEqual([
+          { fn: "my_withdrawal_status()", public_exec: false, anon_exec: false, authenticated_exec: true },
+          ...workerFunctions.map((fn) => ({ fn, public_exec: false, anon_exec: false, authenticated_exec: false })),
+        ]);
+        const { rows } = await c.query<{ fn: string; exec: boolean }>(
+          `SELECT p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS fn,
+                  has_function_privilege('service_role', p.oid, 'EXECUTE') AS exec
+             FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = 'public' AND p.proname = ANY($1::text[]) AND p.proname <> 'my_withdrawal_status'
+            ORDER BY 1`,
+          [names],
+        );
+        expect(rows).toEqual(workerFunctions.map((fn) => ({ fn, exec: true })));
+      });
+    }, 12_000);
+
+    it("PAY1-AC5k-service_role: private functions with service_role EXECUTE are exactly the nine granted", async () => {
       await withTx(client, async (c) => {
         const { rows } = await c.query<{ fn: string }>(
           `SELECT p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS fn
@@ -301,11 +342,19 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
               AND has_function_privilege('service_role', p.oid, 'EXECUTE')
             ORDER BY 1`,
         );
+        // Slice 1d (20261114000300) adds the five helpers its SECURITY INVOKER writers call:
+        // dk_easter_sunday, dk_non_working_day, withdrawal_deadline, payments_withdrawal_json,
+        // payments_consent_mail.
         expect(rows.map((r) => r.fn)).toEqual([
+          "dk_easter_sunday(p_year integer)",
+          "dk_non_working_day(p_day date)",
           "effective_monitor_limit(p_user_id uuid)",
           "payments_apply_subscription(p_event jsonb, p_subscription jsonb, OUT outcome text, OUT account_id uuid)",
+          "payments_consent_mail(p_checkout_session_id text)",
           "payments_pause_over_cap(p_user_id uuid)",
           "payments_valid_timestamptz(p_value text)",
+          "payments_withdrawal_json(p_withdrawal_id uuid)",
+          "withdrawal_deadline(p_started_at timestamp with time zone, p_info_sent_at timestamp with time zone)",
         ]);
       });
     }, 12_000);

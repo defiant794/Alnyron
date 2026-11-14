@@ -6,6 +6,11 @@ import { supabaseDbEnv } from "./tests/helpers/supabase-db-env";
 
 // Path aliases (@/*) via vite-tsconfig-paths; React/JSX transform via plugin-react.
 // With `projects` defined, root plugins do not propagate, so each project repeats them.
+// `cloudflare:workers` exists only inside workerd: tests get a stub (A15, payments Worker).
+const cloudflareWorkersStub = {
+  "cloudflare:workers": fileURLToPath(new URL("./tests/helpers/cloudflare-workers.ts", import.meta.url)),
+};
+
 export default defineConfig({
   test: {
     projects: [
@@ -16,6 +21,7 @@ export default defineConfig({
         // inline object is given).  Empty plugins[] = no PostCSS transforms,
         // so Tailwind v4's @import "tailwindcss" does not crash unit tests.
         css: { postcss: { plugins: [] } },
+        resolve: { alias: cloudflareWorkersStub },
         test: {
           name: "unit",
           environment: "node",
@@ -31,6 +37,7 @@ export default defineConfig({
       },
       {
         plugins: [react(), tsconfigPaths()],
+        resolve: { alias: cloudflareWorkersStub },
         test: {
           name: "integration",
           environment: "node",

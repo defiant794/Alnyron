@@ -102,7 +102,7 @@ describe("AC-CAT-80: catalog config constants are correct and complete", () => {
   });
 
   describe("RESERVED_ROUTE_SLUGS", () => {
-    it("lists exactly the routes_slug_reserved slugs, including mylife", () => {
+    it("lists exactly the routes_slug_reserved slugs, including mylife and terms (slice 1d)", () => {
       expect([...RESERVED_ROUTE_SLUGS]).toEqual([
         "admin",
         "auth",
@@ -114,6 +114,7 @@ describe("AC-CAT-80: catalog config constants are correct and complete", () => {
         "privatliv",
         "privacy",
         "mylife",
+        "terms",
       ]);
     });
   });

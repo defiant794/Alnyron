@@ -78,6 +78,7 @@ function validSub(overrides: Record<string, unknown> = {}): Record<string, unkno
     status: "active",
     cancel_at_period_end: false,
     created: 1_700_000_000,
+    start_date: 1_700_000_000,
     metadata: { kind: "monitor_subscription", user_id: "00000000-0000-0000-0000-000000000001" },
     items: {
       data: [
@@ -227,12 +228,32 @@ describe("WH-AC15j: toSubscriptionPayload omits created from the RPC payload", (
     expect(result!.created).toBe(1_700_000_000);
   });
 
-  it("WH-AC15j2: toSubscriptionPayload has exactly id, customer, user_id, price_id, status, current_period_end, cancel_at_period_end", () => {
+  it("WH-AC15j2: toSubscriptionPayload has exactly id, customer, user_id, price_id, status, current_period_end, cancel_at_period_end, start_date", () => {
     const result = normalizeSubscription(validSub());
     const payload = toSubscriptionPayload(result!);
+    // Slice 1d C-1: the sync writer's p_subscription gains the required key start_date.
     expect(Object.keys(payload).sort()).toEqual(
-      ["cancel_at_period_end", "current_period_end", "customer", "id", "price_id", "status", "user_id"].sort()
+      ["cancel_at_period_end", "current_period_end", "customer", "id", "price_id", "start_date", "status", "user_id"].sort()
     );
+  });
+});
+
+describe("WD-T-MAP-start-date (A14): start_date is required like every other writer field", () => {
+  it("WD-T-MAP-start-date-iso: integer start_date → ISO text in the payload", () => {
+    const result = normalizeSubscription(validSub({ start_date: 1_763_078_400 }));
+    expect(result?.start_date).toBe(unixToIso(1_763_078_400));
+    expect(toSubscriptionPayload(result!).start_date).toBe("2025-11-14T00:00:00.000Z");
+  });
+
+  it.each<[label: string, value: unknown]>([
+    ["absent", undefined],
+    ["null", null],
+    ["string", "1763078400"],
+    ["fraction", 1_763_078_400.5],
+    ["out of range", 9_000_000_000_000],
+  ])("WD-T-MAP-start-date-%s: malformed start_date → null (the malformed-subscription path)", (_label, value) => {
+    const sub = value === undefined ? omitKey(validSub(), "start_date") : validSub({ start_date: value });
+    expect(normalizeSubscription(sub)).toBeNull();
   });
 });
 

@@ -7,6 +7,7 @@ import {
 } from "@/config/payments";
 import { getMonitorLocale } from "@/i18n/monitor-locale";
 import { routing } from "@/i18n/routing";
+import { SUB_ID_REGEX, asRecord } from "@/lib/payments/webhook-mapping";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireMonitor } from "@/services/auth/require-role";
 
@@ -39,16 +40,71 @@ export type MonitorPlanPrice = Omit<MonitorPlan, "name">;
  * its plan is no longer active (RLS hides inactive plans; the subscription
  * still runs on it).
  */
-export type CurrentSubscription = {
+export type CurrentSubscription = SubscriptionPlan & {
   status: string;
-  interval: BillingInterval | null;
-  amountOre: number | null;
-  planName: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
 };
 
+/** A subscription's plan, named in the visitor's Monitor language; every field null when the plan is inactive. */
+export type SubscriptionPlan = {
+  interval: BillingInterval | null;
+  amountOre: number | null;
+  planName: string | null;
+};
+
+/** A withdrawal's state (`subscription_withdrawals.status`). */
+export type WithdrawalState = "received" | "canceled" | "completed" | "needs_manual";
+
+/** The user's withdrawal as `my_withdrawal_status()` reports it; the øre amounts are set once it is completed. */
+export type MyWithdrawal = {
+  id: string;
+  status: WithdrawalState;
+  requested_at: string;
+  paid_ore: number | null;
+  retained_ore: number | null;
+  refund_ore: number | null;
+  refunded_at: string | null;
+};
+
+/** The subscription's newest paid invoice (`subscription_invoices`), for the confirm page's refund estimate. */
+export type MyWithdrawalInvoice = {
+  stripe_invoice_id: string;
+  amount_total_ore: number;
+  period_start: string | null;
+  period_end: string | null;
+};
+
+/**
+ * `my_withdrawal_status()`, keyed as the database answers it: the user's
+ * newest subscription that entitles or has a withdrawal, the end of its
+ * withdrawal period (`deadline_at`, the start of the day after the last day;
+ * null without a start date), whether a withdrawal may be made now
+ * (`window_open`, decided by the database's clock only), whether a consent to
+ * start at once was recorded, its withdrawal and its newest paid invoice.
+ */
+export type MyWithdrawalStatus = {
+  subscription_id: string;
+  status: string;
+  started_at: string | null;
+  deadline_at: string | null;
+  window_open: boolean;
+  has_consent: boolean;
+  withdrawal: MyWithdrawal | null;
+  invoice: MyWithdrawalInvoice | null;
+};
+
 type PlanTranslation = { locale: Locale; name: string };
+
+/** A subscription's `monitor_plans` embed; null when RLS hides an inactive plan. */
+type PlanEmbed = {
+  billing_interval: string;
+  amount_ore: number;
+  monitor_plan_translations: readonly PlanTranslation[];
+} | null;
+
+/** The subscription columns that name its plan (in every language: the caller picks one). */
+const SUBSCRIPTION_PLAN_COLUMNS = "monitor_plans(billing_interval, amount_ore, monitor_plan_translations(locale, name))";
 
 const PLAN_PRICE_COLUMNS = "id, stripe_price_id, billing_interval, monitor_limit, amount_ore";
 
@@ -83,6 +139,15 @@ function planName(translations: readonly PlanTranslation[], locale: Locale): str
   )?.name;
   if (name === undefined) throw new Error("Payments plan has no name");
   return name;
+}
+
+/** A subscription's plan from its `monitor_plans` embed, named in `locale`. */
+function toSubscriptionPlan(plan: PlanEmbed, locale: Locale): SubscriptionPlan {
+  return {
+    interval: plan ? planInterval(plan.billing_interval) : null,
+    amountOre: plan ? planAmount(plan.amount_ore) : null,
+    planName: plan ? planName(plan.monitor_plan_translations, locale) : null,
+  };
 }
 
 function toPlanPrice(row: {
@@ -146,9 +211,7 @@ export async function getCurrentSubscription(): Promise<CurrentSubscription | nu
   const [user, locale, supabase] = await Promise.all([requireMonitor(), getMonitorLocale(), createServerClient()]);
   const { data, error } = await supabase
     .from("subscriptions")
-    .select(
-      "status, current_period_end, cancel_at_period_end, monitor_plans(billing_interval, amount_ore, monitor_plan_translations(locale, name))",
-    )
+    .select(`status, current_period_end, cancel_at_period_end, ${SUBSCRIPTION_PLAN_COLUMNS}`)
     .eq("user_id", user.userId)
     .not("status", "in", ENDED_STATUS_LIST)
     .order("created_at", { ascending: false })
@@ -156,16 +219,31 @@ export async function getCurrentSubscription(): Promise<CurrentSubscription | nu
     .maybeSingle();
   if (error) fail("subscription", error);
   if (data === null) return null;
-  // Typed as always present (plan_id is NOT NULL), but RLS hides an inactive plan: null then.
-  const plan: typeof data.monitor_plans | null = data.monitor_plans ?? null;
   return {
     status: data.status,
-    interval: plan ? planInterval(plan.billing_interval) : null,
-    amountOre: plan ? planAmount(plan.amount_ore) : null,
-    planName: plan ? planName(plan.monitor_plan_translations, locale) : null,
+    // Typed as always present (plan_id is NOT NULL), but RLS hides an inactive plan: null then.
+    ...toSubscriptionPlan(data.monitor_plans ?? null, locale),
     currentPeriodEnd: data.current_period_end,
     cancelAtPeriodEnd: data.cancel_at_period_end,
   };
+}
+
+/**
+ * The plan of the user's own subscription `stripeSubscriptionId` (any
+ * status), named in the visitor's Monitor language; null when the user has no
+ * such subscription. The withdrawal page names the plan of exactly the
+ * subscription `my_withdrawal_status()` reports.
+ */
+export async function getSubscriptionPlan(stripeSubscriptionId: string): Promise<SubscriptionPlan | null> {
+  const [user, locale, supabase] = await Promise.all([requireMonitor(), getMonitorLocale(), createServerClient()]);
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select(SUBSCRIPTION_PLAN_COLUMNS)
+    .eq("user_id", user.userId)
+    .eq("stripe_subscription_id", stripeSubscriptionId)
+    .maybeSingle();
+  if (error) fail("subscription plan", error);
+  return data === null ? null : toSubscriptionPlan(data.monitor_plans ?? null, locale);
 }
 
 /** The user's Stripe customer id (`billing_customers`), or null before their first subscription. */
@@ -178,4 +256,98 @@ export async function getBillingCustomerId(): Promise<string | null> {
     .maybeSingle();
   if (error) fail("customer", error);
   return data?.stripe_customer_id ?? null;
+}
+
+const WITHDRAWAL_STATES: readonly WithdrawalState[] = ["received", "canceled", "completed", "needs_manual"];
+
+function isWithdrawalState(value: unknown): value is WithdrawalState {
+  return (WITHDRAWAL_STATES as readonly unknown[]).includes(value);
+}
+
+/** An ISO timestamp as the database's jsonb carries it. */
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
+}
+
+/** A whole, non-negative number of øre. */
+function isOre(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function orNull<T>(value: unknown, isT: (value: unknown) => value is T): value is T | null {
+  return value === null || isT(value);
+}
+
+/** `value` as a {@link MyWithdrawal}, or undefined for any other shape. */
+function toWithdrawal(value: unknown): MyWithdrawal | undefined {
+  const row = asRecord(value);
+  if (row === null) return undefined;
+  const { id, status, requested_at, paid_ore, retained_ore, refund_ore, refunded_at } = row;
+  if (
+    typeof id !== "string" ||
+    !isWithdrawalState(status) ||
+    !isTimestamp(requested_at) ||
+    !orNull(paid_ore, isOre) ||
+    !orNull(retained_ore, isOre) ||
+    !orNull(refund_ore, isOre) ||
+    !orNull(refunded_at, isTimestamp)
+  ) {
+    return undefined;
+  }
+  return { id, status, requested_at, paid_ore, retained_ore, refund_ore, refunded_at };
+}
+
+/** `value` as a {@link MyWithdrawalInvoice}, or undefined for any other shape. */
+function toInvoice(value: unknown): MyWithdrawalInvoice | undefined {
+  const row = asRecord(value);
+  if (row === null) return undefined;
+  const { stripe_invoice_id, amount_total_ore, period_start, period_end } = row;
+  if (
+    typeof stripe_invoice_id !== "string" ||
+    !isOre(amount_total_ore) ||
+    !orNull(period_start, isTimestamp) ||
+    !orNull(period_end, isTimestamp)
+  ) {
+    return undefined;
+  }
+  return { stripe_invoice_id, amount_total_ore, period_start, period_end };
+}
+
+/** `value` as a {@link MyWithdrawalStatus} (only its documented keys), or null for any other shape. */
+function toWithdrawalStatus(value: unknown): MyWithdrawalStatus | null {
+  const row = asRecord(value);
+  if (row === null) return null;
+  const { subscription_id, status, started_at, deadline_at, window_open, has_consent } = row;
+  const withdrawal = row.withdrawal === null ? null : toWithdrawal(row.withdrawal);
+  const invoice = row.invoice === null ? null : toInvoice(row.invoice);
+  if (
+    typeof subscription_id !== "string" ||
+    !SUB_ID_REGEX.test(subscription_id) ||
+    typeof status !== "string" ||
+    !orNull(started_at, isTimestamp) ||
+    !orNull(deadline_at, isTimestamp) ||
+    typeof window_open !== "boolean" ||
+    typeof has_consent !== "boolean" ||
+    withdrawal === undefined ||
+    invoice === undefined
+  ) {
+    return null;
+  }
+  return { subscription_id, status, started_at, deadline_at, window_open, has_consent, withdrawal, invoice };
+}
+
+/**
+ * The signed-in user's withdrawal status (`my_withdrawal_status()`, with the
+ * user's own session: the function answers for `auth.uid()` only), or null
+ * when the user has no subscription that entitles or has a withdrawal. An
+ * answer of any other shape is treated as null and logged without its values.
+ */
+export async function getMyWithdrawalStatus(): Promise<MyWithdrawalStatus | null> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.rpc("my_withdrawal_status");
+  if (error) fail("withdrawal status", error);
+  if (data === null) return null;
+  const status = toWithdrawalStatus(data);
+  if (status === null) console.error("Payments withdrawal status malformed");
+  return status;
 }

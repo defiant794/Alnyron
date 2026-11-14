@@ -44,6 +44,12 @@ const FAKE_STRIPE_KEY = "sk_test_harness1234";
  */
 const HARNESS_SBKEY = "sb_secret_harness1234";
 
+/**
+ * Fake Resend key for the harness run (must match ^re_[A-Za-z0-9_]+$).
+ * Not a real credential.
+ */
+const HARNESS_RE = "re_harness1234";
+
 // signStripeHeader is imported from tests/helpers/stripe-webhook.ts.
 
 /** A minimal valid Stripe event JSON string. */
@@ -71,10 +77,13 @@ beforeAll(async () => {
           SUPABASE_URL: NON_ROUTABLE_SUPABASE_URL,
           STRIPE_LIVEMODE: "false",
         },
+        // Slice 1d (C-3): RESEND_API_KEY is a required secret; MAIL_FROM, WITHDRAWAL_ALERT_TO and
+        // SITE_URL come from the real wrangler.jsonc vars.
         secrets: {
           SUPABASE_SECRET_KEY: HARNESS_SBKEY,
           STRIPE_PAYMENTS_KEY: FAKE_STRIPE_KEY,
           STRIPE_WEBHOOK_SECRET: HARNESS_WHSEC,
+          RESEND_API_KEY: HARNESS_RE,
         },
       },
     ],

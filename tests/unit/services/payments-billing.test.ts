@@ -1,8 +1,9 @@
 /**
  * Unit tests: src/services/payments/billing.ts — billing service (mocked Supabase).
- * Journey: payments-slice1b-billing  PAY1B-AC43, PAY1B-AC44
+ * Journey: payments-slice1b-billing  PAY1B-AC43, PAY1B-AC44;
+ *          payments-slice1d-withdrawal  WD-J4-C01, WD-J4-C02 (A5: getMyWithdrawalStatus, getSubscriptionPlan)
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import {
   SUBSCRIPTION_ENDED_STATUSES,
   ENTITLING_SUBSCRIPTION_STATUSES,
@@ -11,9 +12,10 @@ import {
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 const mockFrom = vi.fn();
+const mockRpc = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
-  createServerClient: vi.fn(async () => ({ from: mockFrom })),
+  createServerClient: vi.fn(async () => ({ from: mockFrom, rpc: mockRpc })),
 }));
 // B1: getCurrentSubscription names the plan in the visitor's Monitor language (a cookie; no request here).
 vi.mock("@/i18n/monitor-locale", () => ({ getMonitorLocale: vi.fn(async () => "da") }));
@@ -31,6 +33,8 @@ import {
   getMonitorPlanByInterval,
   getCurrentSubscription,
   getBillingCustomerId,
+  getMyWithdrawalStatus,
+  getSubscriptionPlan,
 } from "@/services/payments/billing";
 
 beforeEach(() => {
@@ -492,5 +496,135 @@ describe("PAY1B-AC44: getBillingCustomerId — returns stripe_customer_id or nul
   it("PAY1B-AC44p: a database error throws 'Payments customer failed: <code> <message>'", async () => {
     stubQuery({ data: null, error: DENIED });
     await expect(getBillingCustomerId()).rejects.toThrow(new Error("Payments customer failed: 42501 denied"));
+  });
+});
+
+// ── 1d A5: getSubscriptionPlan ────────────────────────────────────────────────
+
+describe("WD-J4-C02: getSubscriptionPlan — the plan of the session's own subscription by id", () => {
+  it("reads subscriptions by the session's user id and the given subscription id, one row", async () => {
+    const calls = stubQuery({ data: { monitor_plans: subRow().monitor_plans }, error: null });
+
+    expect(await getSubscriptionPlan("sub_abc123")).toEqual({ interval: "year", amountOre: 9500, planName: "Monitor Plus" });
+    expect(mockFrom).toHaveBeenCalledExactlyOnceWith("subscriptions");
+    expect(calls).toEqual([
+      ["select", "monitor_plans(billing_interval, amount_ore, monitor_plan_translations(locale, name))"],
+      ["eq", "user_id", SESSION_USER_ID],
+      ["eq", "stripe_subscription_id", "sub_abc123"],
+      ["maybeSingle"],
+    ]);
+  });
+
+  it("names the plan in the visitor's Monitor language", async () => {
+    vi.mocked(getMonitorLocale).mockResolvedValueOnce("en");
+    stubQuery({ data: { monitor_plans: subRow().monitor_plans }, error: null });
+    expect((await getSubscriptionPlan("sub_abc123"))?.planName).toBe("Monitor Plus EN");
+  });
+
+  it("null without such a subscription of the user; plan fields null when RLS hides an inactive plan", async () => {
+    stubQuery({ data: null, error: null });
+    expect(await getSubscriptionPlan("sub_abc123")).toBeNull();
+    stubQuery({ data: { monitor_plans: null }, error: null });
+    expect(await getSubscriptionPlan("sub_abc123")).toEqual({ interval: null, amountOre: null, planName: null });
+  });
+
+  it("a database error throws 'Payments subscription plan failed: <code> <message>'", async () => {
+    stubQuery({ data: null, error: DENIED });
+    await expect(getSubscriptionPlan("sub_abc123")).rejects.toThrow(
+      new Error("Payments subscription plan failed: 42501 denied"),
+    );
+  });
+});
+
+// ── 1d A5: getMyWithdrawalStatus ──────────────────────────────────────────────
+
+/** A my_withdrawal_status() answer (jsonb), window open, no withdrawal yet. */
+function withdrawalStatusRow(overrides: Record<string, unknown> = {}) {
+  return {
+    subscription_id: "sub_abc123",
+    status: "active",
+    started_at: "2026-11-14T09:00:00+00:00",
+    deadline_at: "2026-11-30T23:00:00+00:00",
+    window_open: true,
+    has_consent: true,
+    withdrawal: null,
+    invoice: {
+      stripe_invoice_id: "in_abc123",
+      amount_total_ore: 1000,
+      period_start: "2026-11-14T09:00:00+00:00",
+      period_end: "2026-12-14T09:00:00+00:00",
+    },
+    ...overrides,
+  };
+}
+
+const COMPLETED_WITHDRAWAL = {
+  id: "6f1d1c2e-0000-4000-8000-000000000001",
+  status: "completed",
+  requested_at: "2026-11-15T09:00:00+00:00",
+  paid_ore: 1000,
+  retained_ore: 33,
+  refund_ore: 967,
+  refunded_at: "2026-11-15T09:01:00+00:00",
+};
+
+describe("WD-J4-C01 (A5): getMyWithdrawalStatus — my_withdrawal_status() with the user's session, validated", () => {
+  let consoleError: MockInstance<typeof console.error>;
+  beforeEach(() => {
+    consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    consoleError.mockRestore();
+  });
+
+  it("calls the RPC with no arguments (the function answers for auth.uid() only) and returns the shape", async () => {
+    mockRpc.mockResolvedValueOnce({ data: withdrawalStatusRow(), error: null });
+    expect(await getMyWithdrawalStatus()).toEqual(withdrawalStatusRow());
+    expect(mockRpc).toHaveBeenCalledExactlyOnceWith("my_withdrawal_status");
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it("keeps a withdrawal, null invoice periods and null start/deadline", async () => {
+    const row = withdrawalStatusRow({
+      started_at: null,
+      deadline_at: null,
+      window_open: false,
+      withdrawal: COMPLETED_WITHDRAWAL,
+      invoice: { stripe_invoice_id: "in_abc123", amount_total_ore: 0, period_start: null, period_end: null },
+    });
+    mockRpc.mockResolvedValueOnce({ data: row, error: null });
+    expect(await getMyWithdrawalStatus()).toEqual(row);
+  });
+
+  it("drops keys the contract does not name", async () => {
+    mockRpc.mockResolvedValueOnce({ data: { ...withdrawalStatusRow(), extra: "x" }, error: null });
+    expect(await getMyWithdrawalStatus()).toEqual(withdrawalStatusRow());
+  });
+
+  it("null when the user has no such subscription (SQL null)", async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: null });
+    expect(await getMyWithdrawalStatus()).toBeNull();
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["not an object", "x"],
+    ["a bad subscription id", withdrawalStatusRow({ subscription_id: "cus_abc" })],
+    ["window_open not a boolean", withdrawalStatusRow({ window_open: "true" })],
+    ["has_consent missing", withdrawalStatusRow({ has_consent: undefined })],
+    ["an invalid deadline", withdrawalStatusRow({ deadline_at: "soon" })],
+    ["an unknown withdrawal status", withdrawalStatusRow({ withdrawal: { ...COMPLETED_WITHDRAWAL, status: "done" } })],
+    ["a fractional refund", withdrawalStatusRow({ withdrawal: { ...COMPLETED_WITHDRAWAL, refund_ore: 9.5 } })],
+    ["a negative invoice total", withdrawalStatusRow({ invoice: { ...withdrawalStatusRow().invoice, amount_total_ore: -1 } })],
+    ["a withdrawal that is not an object", withdrawalStatusRow({ withdrawal: "x" })],
+  ])("malformed (%s) → null, logged without its values", async (_case, data) => {
+    mockRpc.mockResolvedValueOnce({ data, error: null });
+    expect(await getMyWithdrawalStatus()).toBeNull();
+    expect(consoleError).toHaveBeenCalledExactlyOnceWith("Payments withdrawal status malformed");
+  });
+
+  it("a database error throws 'Payments withdrawal status failed: <code> <message>'", async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: DENIED });
+    await expect(getMyWithdrawalStatus()).rejects.toThrow(new Error("Payments withdrawal status failed: 42501 denied"));
   });
 });

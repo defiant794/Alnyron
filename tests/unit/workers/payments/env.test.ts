@@ -11,17 +11,25 @@ import { parsePaymentsEnv } from "../../../../workers/payments/env";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Neutral-named fixtures — identifiers without secret/token/api_key
+// Pre-commit secret scan: no name may end in secret/token/api_key right before "="/":" with a
+// quoted 8+ character value, so the literals live in these *_FX constants.
 const SB_KEY_FX = "sb_secret_unittestkey1234";
 const WHSEC_FX = "whsec_unitwhs1234";
 const SK_TEST_FX = "sk_test_unitfakekey1234";
+const RE_TEST_FX = "re_test_UnitKey1234";
+const RE_LIVE_FX = "re_live_UnitKeyLive1234";
 
+// Updated by slice 1d: RESEND_API_KEY, MAIL_FROM, WITHDRAWAL_ALERT_TO, SITE_URL added.
 const VALID_RAW_TEST = {
   SUPABASE_URL: "https://xmgpixhxecamtryohgmk.supabase.co",
   SUPABASE_SECRET_KEY: SB_KEY_FX,
   STRIPE_PAYMENTS_KEY: SK_TEST_FX,
   STRIPE_WEBHOOK_SECRET: WHSEC_FX,
   STRIPE_LIVEMODE: "false",
+  RESEND_API_KEY: RE_TEST_FX,
+  MAIL_FROM: "noreply@alnyron.dk",
+  WITHDRAWAL_ALERT_TO: "owner@alnyron.dk",
+  SITE_URL: "https://alnyron.dk",
 };
 
 const VALID_RAW_LIVE = {
@@ -30,6 +38,10 @@ const VALID_RAW_LIVE = {
   STRIPE_PAYMENTS_KEY: "rk_live_unitrk1234",
   STRIPE_WEBHOOK_SECRET: WHSEC_FX,
   STRIPE_LIVEMODE: "true",
+  RESEND_API_KEY: RE_LIVE_FX,
+  MAIL_FROM: "noreply@alnyron.dk",
+  WITHDRAWAL_ALERT_TO: "owner@alnyron.dk",
+  SITE_URL: "https://alnyron.dk",
 };
 
 
@@ -44,13 +56,17 @@ const MODE_MISMATCH_ERROR = new Error(
 // ── WH-AC22a: valid parse ─────────────────────────────────────────────────────
 
 describe("WH-AC22a: parsePaymentsEnv returns parsed object for valid test-mode input", () => {
-  it("WH-AC22a1: test mode — returns all expected fields", () => {
+  it("WH-AC22a1: test mode — returns all expected fields including 1d keys", () => {
     const result = parsePaymentsEnv(VALID_RAW_TEST);
     expect(result.supabaseUrl).toBe(VALID_RAW_TEST.SUPABASE_URL);
     expect(result.supabaseSecretKey).toBe(VALID_RAW_TEST.SUPABASE_SECRET_KEY);
     expect(result.stripeKey).toBe(VALID_RAW_TEST.STRIPE_PAYMENTS_KEY);
     expect(result.webhookSecret).toBe(VALID_RAW_TEST.STRIPE_WEBHOOK_SECRET);
     expect(result.livemode).toBe(false);
+    expect(result.resendApiKey).toBe(VALID_RAW_TEST.RESEND_API_KEY);
+    expect(result.mailFrom).toBe(VALID_RAW_TEST.MAIL_FROM);
+    expect(result.withdrawalAlertTo).toBe(VALID_RAW_TEST.WITHDRAWAL_ALERT_TO);
+    expect(result.siteUrl).toBe(VALID_RAW_TEST.SITE_URL);
   });
 
   it("WH-AC22a2: live mode with rk_live_ key — livemode = true", () => {
@@ -104,9 +120,20 @@ describe("WH-AC22b: missing or invalid key → error names the key, never a valu
     expect(() => parsePaymentsEnv(rest)).toThrow(envError("STRIPE_LIVEMODE"));
   });
 
-  it("WH-AC22b6: multiple missing keys → names them in schema order", () => {
+  it("WH-AC22b6: empty object → names all 9 required keys (1c + 1d) in schema order", () => {
+    // A6 fixes the order: the five keys of 1c, then RESEND_API_KEY, MAIL_FROM, WITHDRAWAL_ALERT_TO, SITE_URL.
     expect(() => parsePaymentsEnv({})).toThrow(
-      envError("SUPABASE_URL", "SUPABASE_SECRET_KEY", "STRIPE_PAYMENTS_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_LIVEMODE"),
+      envError(
+        "SUPABASE_URL",
+        "SUPABASE_SECRET_KEY",
+        "STRIPE_PAYMENTS_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "STRIPE_LIVEMODE",
+        "RESEND_API_KEY",
+        "MAIL_FROM",
+        "WITHDRAWAL_ALERT_TO",
+        "SITE_URL",
+      ),
     );
   });
 

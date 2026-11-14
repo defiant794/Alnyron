@@ -166,3 +166,20 @@ describe("PAY1B-AC45: CSP form-action is 'self' everywhere; Stripe is added on t
     },
   );
 });
+
+// Slice 1d (payments-slice1d-withdrawal, WD-J4-C03): the confirm page's only form posts its Server
+// Action to the page itself and the action redirects back there (same origin), so the catch-all
+// form-action 'self' covers it. Stripe's origins stay on the billing page alone: the withdrawal
+// never sends the browser to Stripe, so the billing rule is deliberately NOT widened to the sub-path.
+describe("WD-J4-C03: the withdrawal confirm page keeps form-action 'self' (its action posts and redirects same-origin)", () => {
+  it.each([
+    ["monitor.localhost:3000", "/monitor/billing/withdraw"],
+    ["monitor.alnyron.dk", "/monitor/billing/withdraw"],
+    ["monitor.alnyron.dk", "/billing/withdraw"],
+    ["alnyron.dk", "/monitor/billing/withdraw"],
+  ])("a request on %s for %s gets the catch-all CSP, whose form-action is exactly 'self'", async (host, path) => {
+    const { global } = await policies();
+    await expect(effectiveCsp(host, path)).resolves.toBe(global);
+    expect(formActions(global)).toEqual([SELF_FORM_ACTION]);
+  });
+});

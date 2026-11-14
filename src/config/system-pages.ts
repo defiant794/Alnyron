@@ -15,6 +15,7 @@ export const SYSTEM_PAGE_IS_AREA = {
   contact: false,
   privacy: false,
   monitor: true,
+  terms: false,
 } as const satisfies Record<SystemPageKey, boolean>;
 
 /** A system page with editable copy and a next-intl route: every key {@link SYSTEM_PAGE_IS_AREA} does not mark. */
@@ -36,6 +37,7 @@ export const SYSTEM_PAGE_PATHNAMES = {
   contact: "/contact",
   privacy: "/privacy",
   monitor: "/monitor",
+  terms: "/terms",
 } as const satisfies Record<SystemPageKey, string>;
 
 /**
@@ -47,12 +49,17 @@ export const SYSTEM_PAGE_AREA_ORIGIN = {
   monitor: monitorSiteOrigin,
 } as const satisfies Record<AreaPageKey, (siteUrl: string) => string>;
 
-/** Whether the page's markdown body (`body_md`) is shown on the site, so the editor offers it. */
+/**
+ * Whether the page's markdown body (`body_md`) is shown on the site, so the
+ * editor offers it. The terms page's body is the versioned legal module
+ * (`config/legal/withdrawal-texts.ts`), not DB markdown.
+ */
 export const SYSTEM_PAGE_HAS_BODY: Record<SystemPageKey, boolean> = {
   home: false,
   contact: false,
   privacy: true,
   monitor: false,
+  terms: false,
 };
 
 /** Content fields (dotted `content` paths) edited in a multi-line text area. */

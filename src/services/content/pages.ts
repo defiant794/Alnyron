@@ -41,9 +41,13 @@ const contactContentSchema = readSchema(PAGE_CONTENT_SCHEMAS.contact);
 /** `content` of the privacy page: the eyebrow over the title (the policy itself is `body_md`). */
 const privacyContentSchema = readSchema(PAGE_CONTENT_SCHEMAS.privacy);
 
+/** `content` of the terms page: the eyebrow over the title (the terms are the versioned legal module). */
+const termsContentSchema = readSchema(PAGE_CONTENT_SCHEMAS.terms);
+
 export type HomeContent = z.infer<typeof homeContentSchema>;
 export type ContactContent = z.infer<typeof contactContentSchema>;
 export type PrivacyContent = z.infer<typeof privacyContentSchema>;
+export type TermsContent = z.infer<typeof termsContentSchema>;
 
 export interface HomePageTranslation {
   title: string;
@@ -61,6 +65,13 @@ export interface SystemPageTranslation<Content> {
 
 export type ContactPageTranslation = SystemPageTranslation<ContactContent>;
 export type PrivacyPageTranslation = SystemPageTranslation<PrivacyContent>;
+
+/** The terms page's DB fields (its body is the versioned legal module). */
+export interface TermsPageTranslation {
+  title: string;
+  lead: string;
+  content: TermsContent;
+}
 
 /** SEO overrides of a system page (`seo_title`, `seo_description`); blank = use the page defaults. */
 export interface PageMetadataTranslation {
@@ -154,6 +165,24 @@ export async function getPrivacyPage(locale: Locale): Promise<ResolvedContent<Pr
     .replaceAll(EMAIL_TOKEN, `<${settings.contactEmail}>`)
     .replaceAll(CVR_TOKEN, settings.cvr ?? "");
   return { value: { ...value, body_md: body }, fallbackKeys };
+}
+
+/**
+ * The terms system page (`/terms`, `/en/terms`) for `locale`: title, lead
+ * and eyebrow, with the same per-field Danish fallback as {@link getHomePage}.
+ * The terms themselves are not DB copy: the page renders the versioned legal
+ * module (`config/legal/withdrawal-texts.ts`).
+ *
+ * @throws like {@link getHomePage}.
+ */
+export async function getTermsPage(locale: Locale): Promise<ResolvedContent<TermsPageTranslation>> {
+  const { da, own } = await loadTranslations("terms", locale);
+  const toTranslation = (row: { title: string; lead: string; content: unknown }): TermsPageTranslation => ({
+    title: row.title,
+    lead: row.lead,
+    content: termsContentSchema.parse(row.content),
+  });
+  return resolveContent(toTranslation(da), own && toTranslation(own), locale);
 }
 
 /**

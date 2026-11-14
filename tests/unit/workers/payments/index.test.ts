@@ -29,21 +29,33 @@ import { handleStripeWebhook } from "../../../../workers/payments/webhook";
 
 const SB_KEY_FX = "sb_secret_unittest";
 const WHSEC_FX = "whsec_unittest1234";
+const SK_TEST_FX = "sk_test_unittest";
+const RE_FX = "re_unittest1234";
 
+// Slice 1d (A6): RESEND_API_KEY, MAIL_FROM, WITHDRAWAL_ALERT_TO, SITE_URL join the env; the
+// fetch handler builds the mailer (consent confirmation) from them.
 const VALID_ENV_RESULT = {
   supabaseUrl: "https://example.invalid",
   supabaseSecretKey: SB_KEY_FX,
-  stripeKey: "sk_test_unittest",
+  stripeKey: SK_TEST_FX,
   webhookSecret: WHSEC_FX,
   livemode: false,
+  resendApiKey: RE_FX,
+  mailFrom: "Alnyron <noreply@send.alnyron.dk>",
+  withdrawalAlertTo: "owner@alnyron.dk",
+  siteUrl: "https://alnyron.dk",
 };
 
 const FAKE_ENV = {
   SUPABASE_URL: "https://example.invalid",
   SUPABASE_SECRET_KEY: SB_KEY_FX,
-  STRIPE_PAYMENTS_KEY: "sk_test_unittest",
+  STRIPE_PAYMENTS_KEY: SK_TEST_FX,
   STRIPE_WEBHOOK_SECRET: WHSEC_FX,
   STRIPE_LIVEMODE: "false",
+  RESEND_API_KEY: RE_FX,
+  MAIL_FROM: "Alnyron <noreply@send.alnyron.dk>",
+  WITHDRAWAL_ALERT_TO: "owner@alnyron.dk",
+  SITE_URL: "https://alnyron.dk",
 };
 
 const fakeCtx = { waitUntil: () => {}, passThroughOnException: () => {} };

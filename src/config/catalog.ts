@@ -114,6 +114,7 @@ export const RESERVED_ROUTE_SLUGS = [
   "privatliv",
   "privacy",
   "mylife",
+  "terms",
 ] as const;
 
 /** Max lengths of the `category_translations` text columns (their CHECK constraints). */

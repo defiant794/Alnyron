@@ -183,12 +183,9 @@ test.describe("DA billing page render", () => {
       await expect(yearOption.getByText("Spar ~21%", { exact: true })).toBeVisible();
       await expect(monthOption).not.toContainText("Spar");
 
+      // The card's fine print: the Stripe payment sentence only (design review D6, WD-J9-C05).
       await expect(
-        main.getByText(
-          "Priser inkl. moms. Betaling via Stripe – du sendes til Stripes sikre betalingsside. " +
-            "Opsig eller skift mellem månedlig og årlig betaling når som helst under “Administrér abonnement”.",
-          { exact: true },
-        ),
+        main.getByText("Betaling via Stripe – du sendes til Stripes sikre betalingsside.", { exact: true }),
       ).toBeVisible();
     },
   );

@@ -21,13 +21,20 @@ import {
   normalizeInvoice,
   normalizeSubscription,
   toSubscriptionPayload,
+  unixToIso,
   type NormalizedSubscription,
   type RpcEvent,
   type StripeEventHeader,
   type SubscriptionPayload,
 } from "@/lib/payments/webhook-mapping";
+import { withdrawalTextDigest } from "@/config/legal/withdrawal-texts";
+import { sendConsentConfirmation } from "./consent";
+import type { Mailer } from "./mail";
 import { PaymentsRpcError, type PaymentsRpc, type WriterOutcome, type WriterRefusal } from "./rpc";
 import type { StripeApi } from "./stripe-api";
+
+/** A Checkout Session id (test or live). */
+const CHECKOUT_SESSION_ID_REGEX = /^cs_(test|live)_[A-Za-z0-9]+$/;
 
 /**
  * One Stripe webhook delivery (`POST /webhook`): size cap, signature, event
@@ -69,18 +76,22 @@ import type { StripeApi } from "./stripe-api";
  * bad signature only outcome and reason. Never a header, body, key, secret,
  * email, user id or customer id.
  *
- * Subrequests per delivery (Workers Free allows 50, per Cloudflare's limits):
- * 3 (the event's subscription retrieve, one writer, the database read of the
- * user's other subscriptions), at most PAYMENTS_MAX_DUPLICATE_CANDIDATES (5)
- * retrieves of those, per finished duplicate a mark (unless it already
- * carries the mark), a payments list, one refund per paid payment, a cancel
- * and a re-retrieve after a refused cancel, and on `invoice.paid` of a
- * subscription carrying the mark by then a payments list and its refunds for
- * that invoice (none when its finish refunded it as the latest). With one
- * paid payment each: the event's subscription, unmarked, is itself a
- * candidate to keep, so one is always kept and at most 5 are finished,
- * 3 + 5 + 5 × 5 = 33; when it is one of them, its `invoice.paid` adds 2: the
- * worst case is 35 ≤ 50. A marked event subscription is finished alone,
+ * Subrequests per delivery (Workers Free allows 50, per Cloudflare's limits
+ * docs as of 2026-11): 3 (the event's subscription retrieve, one writer, the
+ * database read of the user's other subscriptions), at most
+ * PAYMENTS_MAX_DUPLICATE_CANDIDATES (5) retrieves of those, per finished
+ * duplicate a mark (unless it already carries the mark), a payments list, one
+ * refund per paid payment, a cancel and a re-retrieve after a refused cancel,
+ * and on `invoice.paid` of a subscription carrying the mark by then a
+ * payments list and its refunds for that invoice (none when its finish
+ * refunded it as the latest). With one paid payment each: the event's
+ * subscription, unmarked, is itself a candidate to keep, so one is always
+ * kept and at most 5 are finished, 3 + 5 + 5 × 5 = 33; when it is one of
+ * them, its `invoice.paid` adds 2 (35). A `checkout.session.completed` the
+ * writer did not refuse then records the consent and sends the order
+ * confirmation: the consent writer, the account email lookup (Auth), the send
+ * and its stamp, 4 more, so its worst case and the Worker's is
+ * 33 + 4 = 37 ≤ 50. A marked event subscription is finished alone,
  * without the read or a mark: 2 + 4 = 6 (8 on `invoice.paid`). An unmarked
  * one refused unknown_user although the app's metadata names its user is
  * finished alone too, without the read but after the Auth lookup:
@@ -102,6 +113,8 @@ export type WebhookDeps = {
   livemode: boolean;
   stripe: StripeApi;
   rpc: PaymentsRpc;
+  /** The order confirmation after Checkout (the consent's withdrawal information). */
+  mail: Pick<Mailer, "sendConfirmationEmail">;
   /** The current time in milliseconds (`Date.now`). */
   now: () => number;
   /** Writes one log line. */
@@ -115,8 +128,22 @@ type Outcome =
   | "duplicate_subscription_canceled"
   | "duplicate_invoice_refunded";
 
-/** What a handled event did: the log line's outcome, code and paused. */
-type Handled = { outcome: Outcome; code: string | null; paused: number | null };
+/**
+ * What became of a `checkout.session.completed`'s consent (see
+ * {@link recordConsent}): `consent` the record (`recorded` or `duplicate`, the
+ * writer's outcome; `consent_missing` when the session carries no accepted
+ * consent for a known text version; `consent_rejected` when the writer
+ * refused it for good), `mail` the order confirmation (`sent`, `not_needed`
+ * when already stamped or the contract has ended, `no_recipient`, `failed`
+ * for the sweep to resend; null without a record).
+ */
+type ConsentLog = {
+  consent: "recorded" | "duplicate" | "consent_missing" | "consent_rejected";
+  mail: "sent" | "not_needed" | "no_recipient" | "failed" | null;
+};
+
+/** What a handled event did: the log line's outcome, code and paused (and, for a Checkout, its consent). */
+type Handled = { outcome: Outcome; code: string | null; paused: number | null; consent?: ConsentLog };
 
 /** A verified event: the fields the writers record, `data.object`, and whether a connected account (`account`) sent it. */
 type StripeEvent = StripeEventHeader & { object: Record<string, unknown>; connect: boolean };
@@ -278,9 +305,22 @@ export async function handleStripeWebhook(request: Request, deps: WebhookDeps): 
   }
 
   const event = parseEvent(payload);
-  const log = (outcome: Outcome | "invalid_event" | "error", code: string | null, paused: number | null) =>
+  const log = (
+    outcome: Outcome | "invalid_event" | "error",
+    code: string | null,
+    paused: number | null,
+    consent?: ConsentLog,
+  ) =>
     deps.log(
-      JSON.stringify({ msg: LOG_MSG, event: event?.id ?? null, type: event?.type ?? null, outcome, code, paused }),
+      JSON.stringify({
+        msg: LOG_MSG,
+        event: event?.id ?? null,
+        type: event?.type ?? null,
+        outcome,
+        code,
+        paused,
+        ...consent,
+      }),
     );
   if (event === null) {
     log("invalid_event", null, null);
@@ -295,7 +335,7 @@ export async function handleStripeWebhook(request: Request, deps: WebhookDeps): 
     log("error", error.code, null);
     return Response.json({ error: "unavailable" }, { status: 500 });
   }
-  log(handled.outcome, handled.code, handled.paused);
+  log(handled.outcome, handled.code, handled.paused, handled.consent);
   return Response.json(HANDLED, { status: 200 });
 }
 
@@ -306,9 +346,10 @@ async function handleEvent(event: StripeEvent, deps: WebhookDeps): Promise<Handl
   const sync = async (retrieved: unknown): Promise<Handled> => {
     const subscription = normalizeSubscription(retrieved);
     if (subscription === null) return rejected("invalid_subscription");
-    return applySubscription(event, subscription, retrieved, deps, (rpcEvent, payload) =>
+    const applied = await applySubscription(event, subscription, retrieved, deps, (rpcEvent, payload) =>
       deps.rpc.syncSubscription(rpcEvent, payload),
     );
+    return applied.handled;
   };
 
   switch (event.type) {
@@ -327,7 +368,7 @@ async function handleEvent(event: StripeEvent, deps: WebhookDeps): Promise<Handl
       if (typeof userId !== "string" || userId !== metadataUserId(retrieved.subscription) || userId !== metadataUserId(session)) {
         return rejected("user_mismatch");
       }
-      return sync(retrieved.subscription);
+      return checkoutCompleted(event, session, retrieved.subscription, deps);
     }
 
     case "customer.subscription.created":
@@ -391,7 +432,7 @@ async function invoicePaid(
   const invoice = normalizeInvoice(event.object);
   const subscription = normalizeSubscription(retrieved);
   if (invoice !== null && subscription !== null) {
-    return applySubscription(
+    const applied = await applySubscription(
       event,
       subscription,
       retrieved,
@@ -399,6 +440,7 @@ async function invoicePaid(
       (rpcEvent, payload) => deps.rpc.recordSubscriptionInvoice(rpcEvent, payload, invoice),
       invoiceId,
     );
+    return applied.handled;
   }
   const refused = rejected(invoice === null ? "invalid_invoice" : "invalid_subscription");
   if (asRecord(retrieved)?.id !== subscriptionId || !isDuplicateMarked(retrieved)) return refused;
@@ -505,7 +547,7 @@ async function applySubscription(
   deps: WebhookDeps,
   write: (event: RpcEvent, payload: SubscriptionPayload) => Promise<WriterOutcome>,
   paidInvoiceId?: string,
-): Promise<Handled> {
+): Promise<Applied> {
   const self: Candidate = {
     id: subscription.id,
     created: subscription.created,
@@ -527,8 +569,9 @@ async function applySubscription(
   const duplicates = isEntitlingStatus(subscription.status) ? await duplicateRule(subscription, self, refusal, deps) : null;
   const handled: Handled =
     duplicates === null ? written : { outcome: duplicates.outcome, code: duplicates.code, paused: written.paused };
-  if (paidInvoiceId === undefined) return handled;
-  return refundEventInvoice(handled, self, duplicates?.self ?? null, paidInvoiceId, deps);
+  const applied = { refusal, finished: duplicates?.self ?? null, marked: self.marked };
+  if (paidInvoiceId === undefined) return { ...applied, handled };
+  return { ...applied, handled: await refundEventInvoice(handled, self, duplicates?.self ?? null, paidInvoiceId, deps) };
 }
 
 /**
@@ -766,4 +809,97 @@ async function refundEventInvoice(
   }
   if (!(await refundPaidPayments(invoiceId, self.id, deps))) return handled;
   return { outcome: "duplicate_invoice_refunded", code: null, paused: handled.paused };
+}
+
+/**
+ * What {@link applySubscription} did: the event's outcome (`handled`), the
+ * writer's refusal (null when it wrote, also as duplicate or stale), what the
+ * duplicate rule did with the event's own subscription (`finished`, null when
+ * kept or not applied) and whether it carried the duplicate mark.
+ */
+type Applied = { handled: Handled; refusal: WriterRefusal | null; finished: Finished | null; marked: boolean };
+
+/**
+ * `checkout.session.completed` once the session passed its checks: the
+ * subscription is synced like any other event, then, unless the writer
+ * refused it (A1), the session's consent is recorded ({@link recordConsent}).
+ */
+async function checkoutCompleted(
+  event: StripeEvent,
+  session: Record<string, unknown>,
+  retrieved: unknown,
+  deps: WebhookDeps,
+): Promise<Handled> {
+  const subscription = normalizeSubscription(retrieved);
+  if (subscription === null) return rejected("invalid_subscription");
+  const applied = await applySubscription(event, subscription, retrieved, deps, (rpcEvent, payload) =>
+    deps.rpc.syncSubscription(rpcEvent, payload),
+  );
+  if (applied.refusal !== null) return applied.handled;
+  // A2: an ended contract (also a duplicate marked or finished in this delivery) gets no confirmation.
+  const ended =
+    applied.marked || applied.finished === "canceled" || subscription.status === "canceled" ||
+    subscription.status === "incomplete_expired";
+  return { ...applied.handled, consent: await recordConsent(event, session, subscription.id, ended, deps) };
+}
+
+/**
+ * L-1: the Checkout's consent checkbox. Recorded (`payments_record_checkout_consent`)
+ * only when `consent.terms_of_service` is `accepted` and the session names a
+ * known text version (`metadata.withdrawal_text_version`, with its digest in
+ * `metadata.locale`), else `consent_missing` (a later withdrawal then gets a
+ * full refund). `accepted_at` is the event's `created`. A failure of the
+ * writer that a retry may fix fails the delivery (the consent is evidence:
+ * Stripe redelivers, the sync answers duplicate, the writer is idempotent);
+ * a refusal stands (`consent_rejected`). While the record's order
+ * confirmation is unsent and the contract has not ended (`ended`), it is
+ * sent and stamped ({@link sendConsentConfirmation}); a failure there never
+ * fails the delivery (`failed`: the hourly sweep resends it).
+ */
+async function recordConsent(
+  event: StripeEvent,
+  session: Record<string, unknown>,
+  subscriptionId: string,
+  ended: boolean,
+  deps: WebhookDeps,
+): Promise<ConsentLog> {
+  const metadata = asRecord(session.metadata);
+  const version = metadata?.withdrawal_text_version;
+  const locale = metadata?.locale;
+  const sessionId = session.id;
+  if (
+    asRecord(session.consent)?.terms_of_service !== "accepted" ||
+    typeof version !== "string" ||
+    (locale !== "da" && locale !== "en") ||
+    typeof sessionId !== "string" ||
+    !CHECKOUT_SESSION_ID_REGEX.test(sessionId)
+  ) {
+    return { consent: "consent_missing", mail: null };
+  }
+  const digest = withdrawalTextDigest(version, locale);
+  if (digest === null) return { consent: "consent_missing", mail: null };
+
+  let recorded;
+  try {
+    recorded = await deps.rpc.paymentsRecordCheckoutConsent({
+      checkout_session_id: sessionId,
+      subscription_id: subscriptionId,
+      text_version: version,
+      text_sha256: digest,
+      locale,
+      stripe_consent: "accepted",
+      accepted_at: unixToIso(event.created),
+    });
+  } catch (error) {
+    if (error instanceof PaymentsRpcError && (error.refusal !== null || error.message === "unknown_subscription")) {
+      return { consent: "consent_rejected", mail: null };
+    }
+    throw new TransientFailure(`consent_${rpcFailure(error)}`);
+  }
+  if (recorded.mail === null || ended) return { consent: recorded.outcome, mail: "not_needed" };
+  try {
+    return { consent: recorded.outcome, mail: await sendConsentConfirmation(deps, recorded.mail) };
+  } catch {
+    return { consent: recorded.outcome, mail: "failed" };
+  }
 }

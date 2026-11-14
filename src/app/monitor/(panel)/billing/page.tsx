@@ -3,11 +3,14 @@ import type { Locale } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
 import { openBillingPortal, startSubscriptionCheckout } from "@/app/monitor/(panel)/billing/actions";
+import { BILLING_CARD } from "@/app/monitor/(panel)/billing/card";
 import MonitorShell from "@/components/monitor/MonitorShell";
 import Badge from "@/components/ui/Badge";
 import Link from "@/components/ui/Link";
+import LinkButton from "@/components/ui/LinkButton";
 import Notice from "@/components/ui/Notice";
 import SubmitButton from "@/components/ui/SubmitButton";
+import { WITHDRAWAL_TEXTS } from "@/config/legal/withdrawal-texts";
 import { MONITOR_ROBOTS } from "@/config/monitor";
 import {
   BILLING_CHECKOUT_DONE,
@@ -15,14 +18,18 @@ import {
   BILLING_ERROR_CHECKOUT,
   BILLING_ERROR_PORTAL,
   MONITOR_BILLING_PATH,
+  MONITOR_WITHDRAW_PATH,
   isEntitlingStatus,
+  termsPageUrl,
   type BillingInterval,
 } from "@/config/payments";
+import { siteOrigin } from "@/config/site-origin";
 import { getMonitorLocale } from "@/i18n/monitor-locale";
 import { formatKroner } from "@/lib/payments/money";
+import { formatWithdrawalDate, formatWithdrawalLastDay } from "@/lib/payments/withdrawal-emails";
 import { requireMonitor } from "@/services/auth/require-role";
 import { getMonitorUsage } from "@/services/monitor/monitors";
-import { getCurrentSubscription, listMonitorPlans } from "@/services/payments/billing";
+import { getCurrentSubscription, getMyWithdrawalStatus, listMonitorPlans } from "@/services/payments/billing";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations({ locale: await getMonitorLocale(), namespace: "Payments.billing" });
@@ -39,9 +46,6 @@ const DATE_FORMATS: Record<Locale, Intl.DateTimeFormat> = {
   da: new Intl.DateTimeFormat("da-DK", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Copenhagen" }),
   en: new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Copenhagen" }),
 };
-
-/** The page's cards: white, bordered, at most 560px wide (approved billing mock). */
-const CARD = "flex w-full max-w-140 flex-col gap-6 rounded-card border border-border bg-bg p-6 shadow-card sm:p-8";
 
 /** A plan's price as its two parts ("95 kr", "/ år") and as one phrase ("95 kr / år"). */
 type PriceText = { amount: string; per: string; text: string };
@@ -64,14 +68,22 @@ type IntervalOption = { id: string; interval: BillingInterval; price: PriceText;
  * so above the card. Nothing here writes: the subscription appears once
  * Stripe's webhook has recorded it. Owner and `monitor_user` only. In the
  * visitor's Monitor language.
+ *
+ * Withdrawal right (fortrydelsesret, `my_withdrawal_status()`): the legal
+ * fine print with a link to the main site's /terms sits under the upgrade
+ * card and under the subscription card. While the 14-day window is open (the
+ * database decides), the subscription card offers "Fortryd aftale" (step 1 of
+ * 2, to the confirm page) with the last day of the window; once a withdrawal
+ * exists, a status notice says how far it is, with a link to its receipt.
  */
 export default async function BillingPage({ searchParams }: BillingPageProps) {
   const user = await requireMonitor();
   const locale = await getMonitorLocale();
-  const [usage, subscription, plans, query, t] = await Promise.all([
+  const [usage, subscription, plans, withdrawalStatus, query, t] = await Promise.all([
     getMonitorUsage(),
     getCurrentSubscription(),
     listMonitorPlans(locale),
+    getMyWithdrawalStatus(),
     searchParams,
     getTranslations({ locale }),
   ]);
@@ -95,6 +107,10 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
   } else if (subscription !== null) {
     lead = t("Payments.billing.leadSubscribed");
     const entitling = isEntitlingStatus(subscription.status);
+    const withdrawDeadline =
+      withdrawalStatus?.window_open === true && withdrawalStatus.deadline_at !== null
+        ? formatWithdrawalLastDay(withdrawalStatus.deadline_at, locale)
+        : null;
     const periodEnd =
       subscription.currentPeriodEnd === null ? null : DATE_FORMATS[locale].format(new Date(subscription.currentPeriodEnd));
     content = (
@@ -104,7 +120,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
             {t("Payments.billing.activated", { limit: usage.limit })}
           </Notice>
         )}
-        <section aria-labelledby="billing-plan" className={CARD}>
+        <section aria-labelledby="billing-plan" className={BILLING_CARD}>
           <div className="flex flex-col gap-1">
             {/* An inactive plan is hidden from the user (RLS): its name and price then stay unknown. */}
             <h2 id="billing-plan" className="text-h3 font-semibold">
@@ -126,13 +142,29 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
           <form action={openBillingPortal}>
             <SubmitButton className="w-full">{t("Payments.billing.manage")}</SubmitButton>
           </form>
+          {withdrawDeadline !== null && (
+            <div className="flex flex-col gap-2">
+              <LinkButton
+                href={MONITOR_WITHDRAW_PATH}
+                variant="secondary"
+                aria-describedby="billing-withdraw-deadline"
+                className="w-full"
+              >
+                {t("Payments.billing.withdrawButton")}
+              </LinkButton>
+              <p id="billing-withdraw-deadline" className="text-small text-muted">
+                {t("Payments.billing.withdrawDeadline", { date: withdrawDeadline })}
+              </p>
+            </div>
+          )}
         </section>
+        <LegalFinePrint locale={locale} />
       </>
     );
   } else if (checkoutDone) {
     lead = t("Payments.billing.lead", { limit: usage.limit });
     content = (
-      <div role="status" className={CARD}>
+      <div role="status" className={BILLING_CARD}>
         <div className="flex flex-col gap-1">
           <h2 className="text-h3 font-semibold">{t("Payments.billing.pendingTitle")}</h2>
           <p className="text-muted">{t("Payments.billing.pendingBody")}</p>
@@ -148,7 +180,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
   } else if (plans.length === 0) {
     lead = t("Payments.billing.lead", { limit: usage.limit });
     content = (
-      <div className={CARD}>
+      <div className={BILLING_CARD}>
         <p className="font-semibold">{t("Payments.billing.unavailable")}</p>
       </div>
     );
@@ -164,21 +196,38 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
     // The yearly price against twelve monthly payments, in whole percent.
     const saving = yearly && monthly ? Math.round((1 - yearly.amountOre / (12 * monthly.amountOre)) * 100) : 0;
     content = (
-      <UpgradeCard
-        name={preselected.name}
-        sub={t("Payments.billing.planSub", { limit: preselected.monitorLimit })}
-        legend={t("Payments.billing.intervalLegend")}
-        options={offered.map((plan) => ({
-          id: plan.id,
-          interval: plan.interval,
-          price: priceText(plan.amountOre, plan.interval),
-          saveTag: plan === yearly && saving > 0 ? t("Payments.billing.saveTag", { pct: saving }) : null,
-        }))}
-        preselected={preselected.interval}
-        upgrade={t("Payments.billing.upgrade")}
-        finePrint={t("Payments.billing.finePrint")}
-      />
+      <>
+        <UpgradeCard
+          name={preselected.name}
+          sub={t("Payments.billing.planSub", { limit: preselected.monitorLimit })}
+          legend={t("Payments.billing.intervalLegend")}
+          options={offered.map((plan) => ({
+            id: plan.id,
+            interval: plan.interval,
+            price: priceText(plan.amountOre, plan.interval),
+            saveTag: plan === yearly && saving > 0 ? t("Payments.billing.saveTag", { pct: saving }) : null,
+          }))}
+          preselected={preselected.interval}
+          upgrade={t("Payments.billing.upgrade")}
+          finePrint={t("Payments.billing.finePrint")}
+        />
+        <LegalFinePrint locale={locale} />
+      </>
     );
+  }
+  // A withdrawal's state: completed (with the refund, if any) or still in progress (received,
+  // canceled or awaiting manual handling: the in-progress wording).
+  const withdrawal = withdrawalStatus?.withdrawal ?? null;
+  let withdrawalNotice: string | null = null;
+  if (withdrawal !== null && withdrawal.status !== "completed") {
+    withdrawalNotice = t("Payments.billing.withdrawalReceived", {
+      date: formatWithdrawalDate(withdrawal.requested_at, locale),
+    });
+  } else if (withdrawal !== null) {
+    withdrawalNotice =
+      withdrawal.refund_ore !== null && withdrawal.refund_ore > 0
+        ? t("Payments.billing.withdrawalCompleted", { refund: formatKroner(withdrawal.refund_ore, locale) })
+        : t("Payments.billing.withdrawalCompletedNothing");
   }
 
   return (
@@ -200,9 +249,31 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
             {error}
           </Notice>
         )}
+        {withdrawalNotice !== null && (
+          <div role="status" className="flex max-w-140 flex-col gap-2">
+            <Notice tone="success">{withdrawalNotice}</Notice>
+            <Link href={MONITOR_WITHDRAW_PATH} className="inline-flex min-h-11 items-center self-start">
+              {t("Payments.billing.withdrawalDetails")}
+            </Link>
+          </div>
+        )}
         {content}
       </div>
     </MonitorShell>
+  );
+}
+
+/**
+ * The legal fine print under the upgrade and subscription cards (the
+ * versioned legal module's `billingFinePrint`, never DB or message copy) and
+ * its link to the terms on the main site, in the visitor's Monitor language.
+ */
+function LegalFinePrint({ locale }: { locale: Locale }) {
+  const { text, termsLinkLabel } = WITHDRAWAL_TEXTS[locale].billingFinePrint;
+  return (
+    <p className="max-w-140 text-small text-muted">
+      {text} <Link href={termsPageUrl(siteOrigin(), locale)}>{termsLinkLabel}</Link>
+    </p>
   );
 }
 
@@ -219,12 +290,14 @@ type UpgradeCardProps = {
 /**
  * The upgrade card (approved billing mock): the plan's name and cap, one
  * native radio option per billing period styled as a selectable row (the
- * preselected one checked), "Opgradér" and the fine print. The form sends
- * only the chosen `interval`.
+ * preselected one checked), "Opgradér" and the card's fine print, which says
+ * only how payment works (Stripe): VAT and cancellation are stated once, in
+ * the legal fine print below the card. The form sends only the chosen
+ * `interval`.
  */
 function UpgradeCard({ name, sub, legend, options, preselected, upgrade, finePrint }: UpgradeCardProps) {
   return (
-    <section aria-labelledby="billing-plan" className={CARD}>
+    <section aria-labelledby="billing-plan" className={BILLING_CARD}>
       <div className="flex flex-col gap-1">
         <h2 id="billing-plan" className="text-h3 font-semibold">
           {name}

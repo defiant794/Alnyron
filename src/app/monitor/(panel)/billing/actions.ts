@@ -94,6 +94,8 @@ export async function startSubscriptionCheckout(formData: FormData): Promise<nev
       taxRateId: env.taxRateId,
       // From NEXT_PUBLIC_SITE_URL (allowlist-checked), never the request's Host.
       monitorOrigin: monitorSiteOrigin(parseSiteEnv().NEXT_PUBLIC_SITE_URL),
+      // The main site serves /terms, which Checkout's consent text links.
+      siteOrigin: new URL(parseSiteEnv().NEXT_PUBLIC_SITE_URL).origin,
       nowSeconds: Math.floor(Date.now() / 1000),
     }),
   );

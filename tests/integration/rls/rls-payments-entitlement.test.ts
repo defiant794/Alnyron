@@ -103,7 +103,7 @@ function pEvent(id: string, created: string = EVT_T1): string {
   return JSON.stringify({ id, type: "customer.subscription.updated", created, livemode: false });
 }
 
-/** Build a valid p_subscription jsonb string. */
+/** Build a valid p_subscription jsonb string (slice 1d C-1: start_date is a required key). */
 function pSubscription(opts: {
   id: string;
   customerId: string;
@@ -119,6 +119,7 @@ function pSubscription(opts: {
     status: opts.status,
     current_period_end: null,
     cancel_at_period_end: false,
+    start_date: EVT_T1,
   });
 }
 

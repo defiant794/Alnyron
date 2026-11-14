@@ -1,7 +1,17 @@
 # Copy to workers/payments/.dev.vars (git-ignored) for `wrangler dev --config workers/payments/wrangler.jsonc`.
 # Local runs use the ISOLATED e2e Supabase project and Stripe TEST mode only, never production.
+# Keys here override the same-named wrangler.jsonc vars (which hold the production values).
 SUPABASE_URL=https://<e2e-project-ref>.supabase.co
 SUPABASE_SECRET_KEY=<e2e sb_secret_…>
-STRIPE_PAYMENTS_KEY=<sk_test_… or rk_test_…>
+STRIPE_PAYMENTS_KEY=<sk_test_… or rk_test_… (Credit notes: Write)>
 STRIPE_WEBHOOK_SECRET=<whsec_… from stripe listen>
 STRIPE_LIVEMODE=false
+# Resend API key (re_…). Sends real email: every local recipient must be a Resend test address.
+RESEND_API_KEY=<re_…>
+# A sender on a domain verified in that Resend account (the production value is fine).
+MAIL_FROM=Alnyron <noreply@send.alnyron.dk>
+# The owner alert's recipient: locally Resend's test sink, never a real inbox.
+WITHDRAWAL_ALERT_TO=delivered+withdrawal-alert@resend.dev
+# The main site the emails link (/terms, the Monitor withdraw page). Must be https with a Monitor
+# host (monitorSiteOrigin): keep the production value locally, the links are only read.
+SITE_URL=https://alnyron.dk

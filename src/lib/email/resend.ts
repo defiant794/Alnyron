@@ -14,11 +14,13 @@ export type EmailMessage = { from: string; to: string; subject: string; html: st
  * daily or monthly sending quota), `config` (401/403: bad key or unverified
  * domain), `transient` (5xx, network, timeout, or a 409 other than a payload
  * conflict, e.g. `concurrent_idempotent_requests`: the same message with the same
- * idempotency key may be retried) and `rejected` (any other 4xx, including the 409
- * `invalid_idempotent_request` of a key already used with a different payload:
- * retrying the same request cannot help).
+ * idempotency key may be retried), `replayed` (the 409 `invalid_idempotent_request`
+ * of a key already used with a different payload, per Resend's docs as of 2026-11:
+ * nothing is sent again; that an email under the key went out before is inferred,
+ * the docs not saying whether a refused first request keeps its key) and
+ * `rejected` (any other 4xx: retrying the same request cannot help).
  */
-export type SendFailure = "rate_limited" | "quota" | "config" | "transient" | "rejected";
+export type SendFailure = "rate_limited" | "quota" | "config" | "transient" | "replayed" | "rejected";
 
 export type SendResult = { ok: true; id: string } | { ok: false; kind: SendFailure; status: number | null };
 
@@ -53,7 +55,7 @@ async function bodyField(response: Response, field: string): Promise<string | nu
  * makes a retry within 24 hours with the same payload return the first send's
  * result instead of sending again, so a caller may retry a `transient` failure
  * with the same key. A retry under that key whose payload changed is answered
- * with a 409 payload conflict, a `rejected` failure: nothing is sent again.
+ * with a 409 payload conflict, a `replayed` failure: nothing is sent again.
  */
 export async function sendEmail(
   apiKey: string,
@@ -92,7 +94,7 @@ export async function sendEmail(
   }
   if (status === 409) {
     const name = await bodyField(response, "name");
-    return { ok: false, kind: name === IDEMPOTENT_PAYLOAD_CONFLICT ? "rejected" : "transient", status };
+    return { ok: false, kind: name === IDEMPOTENT_PAYLOAD_CONFLICT ? "replayed" : "transient", status };
   }
   await response.body?.cancel().catch(() => {});
   if (status === 401 || status === 403) return { ok: false, kind: "config", status };

@@ -7,7 +7,7 @@
  *   key "monitor-event/<event_id>", transient failure → same key on retry,
  *   quota stop → mailStop:'quota' + deferred, rejected → markEmailed + no retry,
  *   a change email sent but not marked, retried next run after the monitor was renamed:
- *   the real sendEmail maps Resend's 409 invalid_idempotent_request to a rejection →
+ *   the real sendEmail maps Resend's 409 invalid_idempotent_request to `replayed` →
  *   marked, emailsRejected, no mail stop, the next pending event still sent,
  *   stale applied:false → staleSkips, legacy hash → baseline,
  *   error with notify_error → error email key, the claim cut to the monitors
@@ -386,7 +386,7 @@ describe("runMonitorChecks — ENG-AC1: rejected → markEmailed called, no retr
   });
 });
 
-// ── A retry whose payload changed → Resend's 409 → rejected, sending goes on ──
+// ── A retry whose payload changed → Resend's 409 → replayed, sending goes on ──
 
 describe("runMonitorChecks — ENG-AC1: a retry whose payload changed gets Resend's 409 → marked, sending goes on", () => {
   const RETRIED: PendingRow = {

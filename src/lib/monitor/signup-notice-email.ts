@@ -9,7 +9,7 @@ import { formatDateTime } from "@/lib/monitor/format";
  * cron (`workers/monitor-cron/run.ts`). Pure (no env, no I/O). Built only from
  * the pending-signup row; its `waiting` count can differ on a later run, so a
  * retry under the same idempotency key may carry another payload, which
- * Resend refuses with a 409 (`sendEmail` reports it as a rejection) instead of
+ * Resend refuses with a 409 (`sendEmail` reports it as `replayed`) instead of
  * sending twice. The new account's address is chosen by whoever signed up:
  * it is defanged ({@link defangAddress}) and HTML-escaped, and the email holds
  * no link at all (no button, no URL).

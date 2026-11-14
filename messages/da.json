@@ -12,7 +12,8 @@
     "home": "Forside",
     "contact": "Kontakt",
     "privacy": "Privatliv",
-    "monitor": "Monitor"
+    "monitor": "Monitor",
+    "terms": "Handelsbetingelser"
   },
   "Footer": {
     "cvr": "CVR {cvr}"
@@ -171,6 +172,9 @@
             "company": "Virksomhed"
           },
           "privacy": {
+            "eyebrow": "Overlinje"
+          },
+          "terms": {
             "eyebrow": "Overlinje"
           }
         },
@@ -697,7 +701,7 @@
       "price": "{amount} kr",
       "saveTag": "Spar ~{pct}%",
       "upgrade": "Opgradér",
-      "finePrint": "Priser inkl. moms. Betaling via Stripe – du sendes til Stripes sikre betalingsside. Opsig eller skift mellem månedlig og årlig betaling når som helst under “Administrér abonnement”.",
+      "finePrint": "Betaling via Stripe – du sendes til Stripes sikre betalingsside.",
       "manage": "Administrér abonnement",
       "renews": "Fornyes {date}",
       "ends": "Ophører {date}",
@@ -709,7 +713,54 @@
       "pendingRefresh": "Opdatér",
       "unavailable": "Monitor Plus er ikke tilgængeligt endnu.",
       "errorCheckout": "Vi kunne ikke åbne betalingssiden. Prøv igen om lidt.",
-      "errorPortal": "Vi kunne ikke åbne abonnementsstyringen. Prøv igen om lidt."
+      "errorPortal": "Vi kunne ikke åbne abonnementsstyringen. Prøv igen om lidt.",
+      "withdrawButton": "Fortryd aftale",
+      "withdrawDeadline": "Fortrydelsesfrist: {date}",
+      "withdrawalReceived": "Vi har modtaget din fortrydelse ({date}) og behandler den. Du får en kvittering på e-mail.",
+      "withdrawalCompleted": "Din fortrydelse er gennemført. Vi har tilbagebetalt {refund} kr.",
+      "withdrawalCompletedNothing": "Din fortrydelse er gennemført. Der var intet at tilbagebetale.",
+      "withdrawalDetails": "Se din fortrydelse"
+    },
+    "withdraw": {
+      "metaTitle": "Fortryd aftale",
+      "step": "Trin 2 af 2",
+      "title": "Fortryd aftale",
+      "lead": "Bekræft, at du vil fortryde din aftale om Monitor-abonnement.",
+      "contractHeading": "Din aftale",
+      "account": "Konto (e-mail)",
+      "plan": "Abonnement",
+      "interval": "Betalingsperiode",
+      "intervalMonth": "Månedlig",
+      "intervalYear": "Årlig",
+      "startDate": "Aftalen blev indgået",
+      "statementHeading": "Din erklæring",
+      "estimate": "Anslået tilbagebetaling: {refund} kr af {paid} kr",
+      "estimateNote": "Det endelige beløb beregnes ud fra tidspunktet, hvor vi modtager din fortrydelse.",
+      "nameLabel": "Dit navn",
+      "nameHint": "Dit fulde navn, højst 200 tegn.",
+      "submit": "Bekræft fortrydelse",
+      "back": "Tilbage",
+      "receiptHeading": "Din fortrydelse",
+      "requestedAt": "Modtaget",
+      "status": "Status",
+      "statusReceived": "Modtaget, behandles",
+      "statusCanceled": "Abonnementet er stoppet, tilbagebetalingen behandles",
+      "statusNeedsManual": "Under behandling",
+      "statusCompleted": "Gennemført",
+      "paid": "Betalt",
+      "retained": "Betaling for den aktive periode",
+      "refunded": "Tilbagebetalt",
+      "amount": "{amount} kr",
+      "receiptNote": "Vi sender en kvittering til din e-mail.",
+      "noSubscription": "Du har ikke et abonnement, der kan fortrydes.",
+      "windowClosed": "Fortrydelsesfristen for dit abonnement er udløbet.",
+      "errors": {
+        "unauthenticated": "Din session er udløbet. Log ind igen, og prøv igen.",
+        "invalid_input": "Skriv dit navn (højst 200 tegn), og prøv igen.",
+        "not_withdrawable": "Dit abonnement kan ikke fortrydes her. Skriv til os, hvis du mener, det er en fejl.",
+        "window_expired": "Fortrydelsesfristen er udløbet.",
+        "unavailable": "Vi kunne ikke tage imod din fortrydelse lige nu. Prøv igen om lidt."
+      }
     }
   }
 }

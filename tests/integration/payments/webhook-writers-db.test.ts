@@ -59,6 +59,8 @@ function rawEvent(id: string, type: string, createdUnix: number): unknown {
  * `items.data[0].current_period_end` is an integer unix timestamp (the 2026 basil+ shape).
  * `created` is unix seconds.
  */
+// Updated by slice 1d: start_date is now a REQUIRED key in the p_subscription payload
+// (payments_apply_subscription raises 22023 invalid_payload without it).
 function rawSub(opts: {
   id: string;
   customerId: string;
@@ -68,6 +70,7 @@ function rawSub(opts: {
   currentPeriodEndUnix?: number | null;
   cancelAtPeriodEnd?: boolean;
   createdUnix?: number;
+  startDateUnix?: number;
 }): unknown {
   const userId = opts.userId !== undefined ? opts.userId : USER_UUID;
   return {
@@ -76,6 +79,7 @@ function rawSub(opts: {
     status: opts.status ?? "active",
     cancel_at_period_end: opts.cancelAtPeriodEnd ?? false,
     created: opts.createdUnix ?? T1_UNIX,
+    start_date: opts.startDateUnix ?? T1_UNIX,
     metadata: userId
       ? { kind: "monitor_subscription", user_id: userId, plan_id: "plan_test", locale: "da" }
       : {},

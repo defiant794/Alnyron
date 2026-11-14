@@ -1,20 +1,32 @@
 {
-  // Cloudflare Worker "alnyron-payments": Stripe's webhook endpoint (payments slice 1c). Stripe
-  // POSTs subscription, Checkout and invoice events to https://pay.alnyron.dk/webhook; index.ts's
-  // fetch() checks the signature, retrieves the subscription's current state from Stripe and
-  // writes it through the service-role-only payments_sync_subscription /
-  // payments_record_subscription_invoice functions (migration 20261112000100), and cancels and
-  // refunds a duplicate subscription from parallel Checkouts. See README.md.
-  // Separate from the OpenNext web Worker (root wrangler.jsonc) so the Supabase secret key and the
-  // Stripe key never sit in the public app's bundle. No workers.dev URL, no previews, no cron.
+  // Cloudflare Worker "alnyron-payments": Stripe's webhook endpoint (payments slice 1c) and the
+  // right of withdrawal (fortrydelsesret, slice 1d). Stripe POSTs subscription, Checkout and
+  // invoice events to https://pay.alnyron.dk/webhook; index.ts's fetch() checks the signature,
+  // retrieves the subscription's current state from Stripe and writes it through the
+  // service-role-only payments_sync_subscription / payments_record_subscription_invoice functions
+  // (migration 20261112000100), cancels and refunds a duplicate subscription from parallel
+  // Checkouts, and records a Checkout's consent (migration 20261114000300) with its order
+  // confirmation email. The named entrypoint WithdrawalService (withdrawal-service.ts) is reached
+  // only from the web Worker over its service binding PAYMENTS (root wrangler.jsonc), never over a
+  // route. See README.md.
+  // Separate from the OpenNext web Worker (root wrangler.jsonc) so the Supabase secret key, the
+  // Stripe key and the Resend key never sit in the public app's bundle. No workers.dev URL, no
+  // previews.
+  //
+  // Cron: "0 * * * *" (hourly, minute 0, UTC) runs scheduled() = the sweep (sweep.ts): finishes
+  // withdrawals a call left undone (cancel, refund, receipt, owner alert) and resends unsent order
+  // confirmations, making 45 subrequests a run at most (Workers Free allows 50, per Cloudflare's
+  // docs as of 2026-11).
   //
   // Build / deploy (always pass --config; without it wrangler hands off to OpenNext):
   //   npm run build:payments    (wrangler deploy --dry-run … --outdir .wrangler/payments)
-  //   npm run deploy:payments   (NOT chained into `npm run deploy`: shipped by hand at go-live)
+  //   npm run deploy:payments   (NOT chained into `npm run deploy`: shipped by hand at go-live,
+  //                              BEFORE the web Worker, whose PAYMENTS binding needs this Worker)
   // Secrets (never in vars, never in a root .env* file):
   //   wrangler secret put SUPABASE_SECRET_KEY --config workers/payments/wrangler.jsonc
   //   wrangler secret put STRIPE_WEBHOOK_SECRET --config workers/payments/wrangler.jsonc
   //   wrangler secret put STRIPE_PAYMENTS_KEY --config workers/payments/wrangler.jsonc
+  //   wrangler secret put RESEND_API_KEY --config workers/payments/wrangler.jsonc
   // Local runs read workers/payments/.dev.vars (see .dev.vars.example and README.md), which must
   // point at the e2e Supabase project and Stripe test mode (STRIPE_LIVEMODE=false).
   "$schema": "../../node_modules/wrangler/config-schema.json",
@@ -33,6 +45,13 @@
   "vars": {
     "SUPABASE_URL": "https://xmgpixhxecamtryohgmk.supabase.co",
     // Production processes live-mode events only; test-mode deliveries are answered and ignored.
-    "STRIPE_LIVEMODE": "true"
-  }
+    "STRIPE_LIVEMODE": "true",
+    // The withdrawal emails' sender: the same verified Resend domain as the web Worker's MAIL_FROM.
+    "MAIL_FROM": "Alnyron <noreply@send.alnyron.dk>",
+    // Where the owner alert about a withdrawal that needs manual handling goes (README runbook).
+    "WITHDRAWAL_ALERT_TO": "info@alnyron.dk",
+    // The main site: the emails link its /terms page and the Monitor withdraw page.
+    "SITE_URL": "https://alnyron.dk"
+  },
+  "triggers": { "crons": ["0 * * * *"] }
 }

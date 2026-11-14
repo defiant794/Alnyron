@@ -4,7 +4,7 @@
  *
  * Covers: POST URL/headers/body shape, any 2xx → ok (id or ""), 429+quota_name → quota,
  *   429 other → rate_limited, 401/403 → config, 409 invalid_idempotent_request (key reused
- *   with a different payload) → rejected, 409 concurrent_idempotent_requests or without a
+ *   with a different payload) → replayed, 409 concurrent_idempotent_requests or without a
  *   known name → transient, 5xx → transient, thrown → transient(status:null), 422 → rejected,
  *   the status-range edges (299/300, 399/400, 499/500, 599), idempotency-key header, the
  *   request's abort signal = AbortSignal.timeout(MONITOR_EMAIL_SEND_TIMEOUT_MS = 10 000 ms),
@@ -40,7 +40,7 @@ function makeFetch(
   };
 }
 
-const TEST_API_KEY = "re_test_key_abcdef123456";
+const RESEND_KEY_FX = "re_test_key_abcdef123456";
 const TEST_RECIPIENT = "user@monitor-test.local";
 
 const TEST_MSG: EmailMessage = {
@@ -61,7 +61,7 @@ describe("sendEmail — ENG-AC1: POST to api.resend.com/emails with correct head
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ id: "res_1" }), { status: 200 }),
     );
-    await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(captured.req?.url).toBe("https://api.resend.com/emails");
     expect(captured.req?.method).toBe("POST");
   });
@@ -71,9 +71,9 @@ describe("sendEmail — ENG-AC1: POST to api.resend.com/emails with correct head
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ id: "res_2" }), { status: 200 }),
     );
-    await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(captured.req?.headers).toEqual({
-      authorization: `Bearer ${TEST_API_KEY}`,
+      authorization: `Bearer ${RESEND_KEY_FX}`,
       "content-type": "application/json",
       "idempotency-key": TEST_KEY,
     });
@@ -84,7 +84,7 @@ describe("sendEmail — ENG-AC1: POST to api.resend.com/emails with correct head
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ id: "res_3" }), { status: 200 }),
     );
-    await sendEmail(TEST_API_KEY, TEST_MSG, "monitor-event/evt-abc", fetchImpl);
+    await sendEmail(RESEND_KEY_FX, TEST_MSG, "monitor-event/evt-abc", fetchImpl);
     expect(captured.req?.headers["idempotency-key"]).toBe("monitor-event/evt-abc");
   });
 
@@ -93,7 +93,7 @@ describe("sendEmail — ENG-AC1: POST to api.resend.com/emails with correct head
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ id: "res_4" }), { status: 200 }),
     );
-    await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     const body = captured.req?.body as Record<string, unknown> | undefined;
     expect(Array.isArray(body?.["to"])).toBe(true);
     expect(body?.["to"]).toEqual([TEST_RECIPIENT]);
@@ -104,7 +104,7 @@ describe("sendEmail — ENG-AC1: POST to api.resend.com/emails with correct head
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ id: "res_5" }), { status: 200 }),
     );
-    await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(captured.req?.body).toEqual({
       from: TEST_MSG.from,
       to: [TEST_RECIPIENT],
@@ -122,7 +122,7 @@ describe("sendEmail — ENG-AC1: POST to api.resend.com/emails with correct head
         signal = init?.signal;
         return new Response(JSON.stringify({ id: "res_timeout" }), { status: 200 });
       };
-      expect(await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl)).toEqual({ ok: true, id: "res_timeout" });
+      expect(await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl)).toEqual({ ok: true, id: "res_timeout" });
       expect(MONITOR_EMAIL_SEND_TIMEOUT_MS).toBe(10_000);
       expect(timeout.mock.calls).toEqual([[10_000]]);
       expect(signal).toBe(timeout.mock.results[0]?.value);
@@ -140,7 +140,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ id: "res_ok_200" }), { status: 200 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: true, id: "res_ok_200" });
   });
 
@@ -149,14 +149,14 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ id: "res_ok_201" }), { status: 201 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: true, id: "res_ok_201" });
   });
 
   it("ENG-AC1rs23: 200 with body {} (no id) → {ok:true, id:''}", async () => {
     const captured: { req?: FakeRequest } = {};
     const fetchImpl = makeFetch(captured, () => new Response("{}", { status: 200 }));
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: true, id: "" });
   });
 
@@ -166,7 +166,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
   ])("ENG-AC1rs24: 202 with %s → {ok:true, id:''}", async (_kind, body) => {
     const captured: { req?: FakeRequest } = {};
     const fetchImpl = makeFetch(captured, () => new Response(body, { status: 202 }));
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: true, id: "" });
   });
 
@@ -175,7 +175,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ name: "daily_quota_exceeded" }), { status: 429 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "quota", status: 429 });
   });
 
@@ -184,7 +184,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ name: "monthly_quota_exceeded" }), { status: 429 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "quota", status: 429 });
   });
 
@@ -193,7 +193,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ name: "too_many_requests" }), { status: 429 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "rate_limited", status: 429 });
   });
 
@@ -202,7 +202,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response("{}", { status: 429 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "rate_limited", status: 429 });
   });
 
@@ -211,7 +211,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "config", status: 401 });
   });
 
@@ -220,7 +220,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ message: "Forbidden" }), { status: 403 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "config", status: 403 });
   });
 
@@ -229,17 +229,17 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response("{}", { status: 409 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "transient", status: 409 });
   });
 
-  it("SNE-AC1f-rs1: 409 invalid_idempotent_request (key already used with a different payload) → {ok:false, kind:'rejected', status:409}", async () => {
+  it("SNE-AC1f-rs1: 409 invalid_idempotent_request (key already used with a different payload) → {ok:false, kind:'replayed', status:409}", async () => {
     const captured: { req?: FakeRequest } = {};
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ name: "invalid_idempotent_request" }), { status: 409 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
-    expect(result).toEqual({ ok: false, kind: "rejected", status: 409 });
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
+    expect(result).toEqual({ ok: false, kind: "replayed", status: 409 });
   });
 
   it("SNE-AC1e-rs2: 409 concurrent_idempotent_requests (the key's first request still in progress) → {ok:false, kind:'transient', status:409}", async () => {
@@ -247,7 +247,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ name: "concurrent_idempotent_requests" }), { status: 409 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "transient", status: 409 });
   });
 
@@ -256,7 +256,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response("Server Error", { status: 500 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "transient", status: 500 });
   });
 
@@ -264,7 +264,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl: typeof fetch = async () => {
       throw new Error("Network failure");
     };
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "transient", status: null });
   });
 
@@ -273,7 +273,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response(JSON.stringify({ message: "Invalid" }), { status: 422 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "rejected", status: 422 });
   });
 
@@ -282,7 +282,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
     const fetchImpl = makeFetch(captured, () =>
       new Response("{}", { status: 400 }),
     );
-    const result = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "rejected", status: 400 });
   });
 
@@ -295,7 +295,7 @@ describe("sendEmail — ENG-AC1: status code mapping", () => {
   ])("ENG-AC1rs22: status-range edge %i → %o", async (status, expected) => {
     const captured: { req?: FakeRequest } = {};
     const fetchImpl = makeFetch(captured, () => new Response(JSON.stringify({ id: "res_edge" }), { status }));
-    expect(await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl)).toEqual(expected);
+    expect(await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl)).toEqual(expected);
   });
 });
 
@@ -307,21 +307,21 @@ describe("sendEmail — ENG-AC1: API key and recipient never appear in return va
   it("ENG-AC1rs19: 5xx body echoing the API key → result does not contain it", async () => {
     const fetchImpl: typeof fetch = async () =>
       new Response(
-        JSON.stringify({ error: `Bad key: ${TEST_API_KEY}`, to: TEST_RECIPIENT }),
+        JSON.stringify({ error: `Bad key: ${RESEND_KEY_FX}`, to: TEST_RECIPIENT }),
         { status: 500 },
       );
-    const result: SendResult = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result: SendResult = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "transient", status: 500 });
-    expect(JSON.stringify(result)).not.toContain(TEST_API_KEY);
+    expect(JSON.stringify(result)).not.toContain(RESEND_KEY_FX);
   });
 
   it("ENG-AC1rs20: 5xx body echoing the recipient → result does not contain it", async () => {
     const fetchImpl: typeof fetch = async () =>
       new Response(
-        JSON.stringify({ error: `Undeliverable: ${TEST_RECIPIENT}`, key: TEST_API_KEY }),
+        JSON.stringify({ error: `Undeliverable: ${TEST_RECIPIENT}`, key: RESEND_KEY_FX }),
         { status: 500 },
       );
-    const result: SendResult = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result: SendResult = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "transient", status: 500 });
     expect(JSON.stringify(result)).not.toContain(TEST_RECIPIENT);
   });
@@ -329,10 +329,10 @@ describe("sendEmail — ENG-AC1: API key and recipient never appear in return va
   it("ENG-AC1rs21: thrown error whose message contains the API key → result does not", async () => {
     // A buggy catch block might propagate the error message into the return value.
     const fetchImpl: typeof fetch = async () => {
-      throw new Error(`Auth failed for ${TEST_API_KEY}`);
+      throw new Error(`Auth failed for ${RESEND_KEY_FX}`);
     };
-    const result: SendResult = await sendEmail(TEST_API_KEY, TEST_MSG, TEST_KEY, fetchImpl);
+    const result: SendResult = await sendEmail(RESEND_KEY_FX, TEST_MSG, TEST_KEY, fetchImpl);
     expect(result).toEqual({ ok: false, kind: "transient", status: null });
-    expect(JSON.stringify(result)).not.toContain(TEST_API_KEY);
+    expect(JSON.stringify(result)).not.toContain(RESEND_KEY_FX);
   });
 });

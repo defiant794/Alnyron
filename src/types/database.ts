@@ -628,6 +628,56 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_consents: {
+        Row: {
+          accepted_at: string
+          created_at: string
+          info_email_id: string | null
+          info_sent_at: string | null
+          locale: Database["public"]["Enums"]["locale_code"]
+          stripe_checkout_session_id: string
+          stripe_consent: string
+          stripe_subscription_id: string
+          text_sha256: string
+          text_version: string
+          user_id: string | null
+        }
+        Insert: {
+          accepted_at: string
+          created_at?: string
+          info_email_id?: string | null
+          info_sent_at?: string | null
+          locale: Database["public"]["Enums"]["locale_code"]
+          stripe_checkout_session_id: string
+          stripe_consent: string
+          stripe_subscription_id: string
+          text_sha256: string
+          text_version: string
+          user_id?: string | null
+        }
+        Update: {
+          accepted_at?: string
+          created_at?: string
+          info_email_id?: string | null
+          info_sent_at?: string | null
+          locale?: Database["public"]["Enums"]["locale_code"]
+          stripe_checkout_session_id?: string
+          stripe_consent?: string
+          stripe_subscription_id?: string
+          text_sha256?: string
+          text_version?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_consents_stripe_subscription_id_fkey"
+            columns: ["stripe_subscription_id"]
+            isOneToOne: true
+            referencedRelation: "subscriptions"
+            referencedColumns: ["stripe_subscription_id"]
+          },
+        ]
+      }
       subscription_invoices: {
         Row: {
           amount_refunded_ore: number
@@ -678,6 +728,119 @@ export type Database = {
           },
         ]
       }
+      subscription_withdrawals: {
+        Row: {
+          ack_email: string
+          ack_email_id: string | null
+          ack_sent_at: string | null
+          alerted_at: string | null
+          attempts: number
+          calc_version: string | null
+          canceled_at: string | null
+          consumer_name: string
+          created_at: string
+          deadline_at: string
+          id: string
+          last_error: string | null
+          lease_until: string | null
+          locale: Database["public"]["Enums"]["locale_code"]
+          manual_reason: string | null
+          paid_ore: number | null
+          period_end_at: string | null
+          refund_ore: number | null
+          refund_tax_ore: number | null
+          refunded_at: string | null
+          requested_at: string
+          retained_ore: number | null
+          retention_basis: string | null
+          service_start_at: string | null
+          statement_version: string
+          status: string
+          stripe_credit_note_id: string | null
+          stripe_invoice_id: string | null
+          stripe_refund_id: string | null
+          stripe_subscription_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          ack_email: string
+          ack_email_id?: string | null
+          ack_sent_at?: string | null
+          alerted_at?: string | null
+          attempts?: number
+          calc_version?: string | null
+          canceled_at?: string | null
+          consumer_name: string
+          created_at?: string
+          deadline_at: string
+          id?: string
+          last_error?: string | null
+          lease_until?: string | null
+          locale: Database["public"]["Enums"]["locale_code"]
+          manual_reason?: string | null
+          paid_ore?: number | null
+          period_end_at?: string | null
+          refund_ore?: number | null
+          refund_tax_ore?: number | null
+          refunded_at?: string | null
+          requested_at?: string
+          retained_ore?: number | null
+          retention_basis?: string | null
+          service_start_at?: string | null
+          statement_version: string
+          status?: string
+          stripe_credit_note_id?: string | null
+          stripe_invoice_id?: string | null
+          stripe_refund_id?: string | null
+          stripe_subscription_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          ack_email?: string
+          ack_email_id?: string | null
+          ack_sent_at?: string | null
+          alerted_at?: string | null
+          attempts?: number
+          calc_version?: string | null
+          canceled_at?: string | null
+          consumer_name?: string
+          created_at?: string
+          deadline_at?: string
+          id?: string
+          last_error?: string | null
+          lease_until?: string | null
+          locale?: Database["public"]["Enums"]["locale_code"]
+          manual_reason?: string | null
+          paid_ore?: number | null
+          period_end_at?: string | null
+          refund_ore?: number | null
+          refund_tax_ore?: number | null
+          refunded_at?: string | null
+          requested_at?: string
+          retained_ore?: number | null
+          retention_basis?: string | null
+          service_start_at?: string | null
+          statement_version?: string
+          status?: string
+          stripe_credit_note_id?: string | null
+          stripe_invoice_id?: string | null
+          stripe_refund_id?: string | null
+          stripe_subscription_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_withdrawals_stripe_subscription_id_fkey"
+            columns: ["stripe_subscription_id"]
+            isOneToOne: true
+            referencedRelation: "subscriptions"
+            referencedColumns: ["stripe_subscription_id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           cancel_at_period_end: boolean
@@ -685,6 +848,7 @@ export type Database = {
           current_period_end: string | null
           last_event_created: string
           plan_id: string
+          started_at: string | null
           status: string
           stripe_customer_id: string
           stripe_subscription_id: string
@@ -697,6 +861,7 @@ export type Database = {
           current_period_end?: string | null
           last_event_created: string
           plan_id: string
+          started_at?: string | null
           status: string
           stripe_customer_id: string
           stripe_subscription_id: string
@@ -709,6 +874,7 @@ export type Database = {
           current_period_end?: string | null
           last_event_created?: string
           plan_id?: string
+          started_at?: string | null
           status?: string
           stripe_customer_id?: string
           stripe_subscription_id?: string
@@ -900,12 +1066,44 @@ export type Database = {
         Returns: string
       }
       my_monitor_limit: { Args: never; Returns: number }
+      my_withdrawal_status: { Args: never; Returns: Json }
+      payments_begin_withdrawal: {
+        Args: {
+          p_ack_email: string
+          p_consumer_name: string
+          p_locale: string
+          p_statement_version: string
+          p_subscription_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      payments_claim_withdrawal: {
+        Args: { p_lease_seconds: number; p_withdrawal_id: string }
+        Returns: Json
+      }
+      payments_mark_consent_info_sent: {
+        Args: { p_checkout_session_id: string; p_email_id: string }
+        Returns: Json
+      }
+      payments_pending_work: {
+        Args: { p_limit: number; p_max_mail_attempts: number }
+        Returns: Json
+      }
+      payments_record_checkout_consent: {
+        Args: { p_consent: Json }
+        Returns: Json
+      }
       payments_record_subscription_invoice: {
         Args: { p_event: Json; p_invoice: Json; p_subscription: Json }
         Returns: Json
       }
       payments_sync_subscription: {
         Args: { p_event: Json; p_subscription: Json }
+        Returns: Json
+      }
+      payments_withdrawal_step: {
+        Args: { p_data: Json; p_step: string; p_withdrawal_id: string }
         Returns: Json
       }
     }
@@ -915,7 +1113,7 @@ export type Database = {
       content_status: "draft" | "published"
       locale_code: "da" | "en"
       price_type: "fixed" | "from" | "contact"
-      system_page_key: "home" | "contact" | "privacy" | "monitor"
+      system_page_key: "home" | "contact" | "privacy" | "monitor" | "terms"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1048,7 +1246,7 @@ export const Constants = {
       content_status: ["draft", "published"],
       locale_code: ["da", "en"],
       price_type: ["fixed", "from", "contact"],
-      system_page_key: ["home", "contact", "privacy", "monitor"],
+      system_page_key: ["home", "contact", "privacy", "monitor", "terms"],
     },
   },
 } as const

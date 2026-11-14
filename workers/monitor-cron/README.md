@@ -277,7 +277,7 @@ that has no room for them simply leaves them to a later one.
    Resend returns the first send's result instead of a second email, but the notice's `waiting`
    count may have changed since, and a key reused with a different payload gets a 409
    `invalid_idempotent_request` (per Resend's docs as of 2026-11). `sendEmail` reports that 409
-   as a rejection, so the account is stamped, sending goes on, and the owner keeps only the first
+   as `replayed`, handled like a rejection, so the account is stamped, sending goes on, and the owner keeps only the first
    notice (a 409 `concurrent_idempotent_requests` stays a transient failure). Without an owner
    profile nothing is sent or stamped. The notice states the new address (defanged in full and
    escaped, e.g. `ny[.]bruger[at]eksempel[.]dk`), when it was confirmed and, when others wait, how
@@ -457,7 +457,7 @@ Accepted residuals:
   instead of a second email, and a retry whose payload changed (the monitor renamed or its URL
   edited, or the owner's address changed, meanwhile) gets Resend's 409
   `invalid_idempotent_request` (per Resend's docs as of 2026-11). `sendEmail` reports that 409 as
-  a rejection, so the event is marked and counted in `emailsRejected`, with no second email, and
+  `replayed`, handled like a rejection, so the event is marked and counted in `emailsRejected`, with no second email, and
   sending goes on. The first send under that key was most likely delivered (inferred; Resend's
   docs don't say so).
 - The error email is claimed in the database before it is sent: at most one per error streak,

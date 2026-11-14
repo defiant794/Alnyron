@@ -2,7 +2,8 @@
 /**
  * Unit tests — SiteFooter (src/components/site/SiteFooter.tsx)
  * Acceptance: AC-CVR-01 (the footer on every page shows the company's CVR
- * from site_settings.cvr), AC-HOME-09 (© year, company, email, privacy link).
+ * from site_settings.cvr), AC-HOME-09 (© year, company, email, privacy link),
+ * WD-J3-C05 (the terms link next to the privacy link).
  *
  * The footer is an async server component: it is awaited and its element
  * rendered. Site settings are mocked; NavLink (a client island with its own
@@ -130,5 +131,32 @@ describe("SHIP-AC8c: SiteFooter with siteOrigin prop — absolute privacy link",
     render(await SiteFooter({ locale: "da" }));
     const link = screen.getByRole("link", { name: /privatliv/i });
     expect(link).toHaveAttribute("href", "/privacy");
+  });
+});
+
+// ── WD-J3-C05 (WD-T-TERMS-04): the terms link next to the privacy link ───────
+
+describe("WD-J3-C05 (WD-T-TERMS-04): SiteFooter links the terms page next to the privacy link", () => {
+  it("WD-T-TERMS-04a: DA 'Handelsbetingelser' → /terms, right after the privacy link", async () => {
+    const footer = await renderFooter("da");
+    expect(screen.getByRole("link", { name: "Handelsbetingelser" })).toHaveAttribute("href", "/terms");
+    expect(Array.from(footer.querySelectorAll("li a"), (link) => link.textContent)).toEqual([
+      "info@alnyron.dk",
+      "Privatliv",
+      "Handelsbetingelser",
+    ]);
+  });
+
+  it("WD-T-TERMS-04b: EN 'Terms and conditions' → /en/terms", async () => {
+    await renderFooter("en");
+    expect(screen.getByRole("link", { name: "Terms and conditions" })).toHaveAttribute("href", "/en/terms");
+  });
+
+  it.each<[locale: Locale, name: string, href: string]>([
+    ["da", "Handelsbetingelser", "https://alnyron.dk/terms"],
+    ["en", "Terms and conditions", "https://alnyron.dk/en/terms"],
+  ])("WD-T-TERMS-04c: with siteOrigin (Monitor host), %s → absolute %s link to %s", async (locale, name, href) => {
+    render(await SiteFooter({ locale, siteOrigin: "https://alnyron.dk" }));
+    expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
   });
 });

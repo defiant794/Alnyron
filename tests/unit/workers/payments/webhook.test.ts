@@ -35,7 +35,7 @@ import { describe, expect, it, vi, beforeEach, afterEach, type Mock } from "vite
 import type { StripeApi } from "../../../../workers/payments/stripe-api";
 import type { PaymentsRpc } from "../../../../workers/payments/rpc";
 import { PaymentsRpcError } from "../../../../workers/payments/rpc";
-import { handleStripeWebhook } from "../../../../workers/payments/webhook";
+import { handleStripeWebhook, type WebhookDeps } from "../../../../workers/payments/webhook";
 import { PAYMENTS_WEBHOOK_MAX_BODY_BYTES } from "@/config/payments";
 
 // Mock verifyStripeSignature so we can control ok/fail independently
@@ -64,6 +64,10 @@ function fakeRpc(overrides: Partial<PaymentsRpc> = {}): PaymentsRpc {
     otherEntitlingSubscriptionIds: vi.fn().mockResolvedValue([]),
     // A28 default: account exists (true → missing_profile → 500); forces explicit false override on A27(a) tests
     accountExists: vi.fn().mockResolvedValue(true),
+    // Slice 1d consent writers + Auth email lookup (webhook-consent.test.ts covers them).
+    paymentsRecordCheckoutConsent: vi.fn().mockResolvedValue({ outcome: "recorded", mail: null }),
+    paymentsMarkConsentInfoSent: vi.fn().mockResolvedValue({ outcome: "stamped" }),
+    getUserEmail: vi.fn().mockResolvedValue("user@test.local"),
     ...overrides,
   };
 }
@@ -76,6 +80,7 @@ type WebhookTestDeps = {
   livemode: boolean;
   stripe: StripeApi;
   rpc: PaymentsRpc;
+  mail: WebhookDeps["mail"];
   now: () => number;
   log: Mock<(line: string) => void>;
 };
@@ -86,6 +91,8 @@ function fakeDeps(opts: { stripe?: Partial<StripeApi>; rpc?: Partial<PaymentsRpc
     livemode: opts.livemode ?? false,
     stripe: fakeStripe(opts.stripe ?? {}),
     rpc: fakeRpc(opts.rpc ?? {}),
+    // Slice 1d: the Checkout consent's order confirmation (webhook-consent.test.ts covers it).
+    mail: { sendConfirmationEmail: vi.fn().mockResolvedValue({ id: "email-unit-001" }) },
     now: () => 1_700_000_000_000,
     log: vi.fn(),
   };
@@ -98,6 +105,7 @@ function validStripeSubscription(overrides: Record<string, unknown> = {}) {
     status: "active",
     cancel_at_period_end: false,
     created: 1_700_000_000,
+    start_date: 1_700_000_000,
     metadata: { kind: "monitor_subscription", user_id: "00000000-0000-0000-0000-000000000001" },
     items: { data: [{ price: { id: "price_test001" }, current_period_end: 1_732_000_000 }] },
     latest_invoice: "in_test001",
@@ -626,6 +634,7 @@ describe("WH-AC8e: checkout.session.completed happy path → applied", () => {
     const [, subArg8e] = syncCall8e;
     expect(subArg8e.id).toBe("sub_test001");
     expect(subArg8e.user_id).toBe(userId);
+    // Slice 1d A13: the log line gains consent + mail; this session carries no consent.
     expect(parseLog(deps)).toEqual({
       msg: "payments webhook",
       event: "evt_test001",
@@ -633,6 +642,8 @@ describe("WH-AC8e: checkout.session.completed happy path → applied", () => {
       outcome: "applied",
       code: null,
       paused: 0,
+      consent: "consent_missing",
+      mail: null,
     });
   });
 });
@@ -658,6 +669,30 @@ describe("WH-AC9a..b: customer.subscription.created/updated/deleted → getSub +
       outcome: "applied",
       code: null,
       paused: 0,
+    });
+  });
+});
+
+// ── A14 (slice 1d): a subscription without a usable start_date is malformed ──
+
+describe("WD-T-MAP-start-date (A14): retrieved subscription without a valid start_date → rejected invalid_subscription before the writer", () => {
+  it.each<[label: string, subscription: unknown]>([
+    ["absent", omitKey(validStripeSubscription(), "start_date")],
+    ["null", validStripeSubscription({ start_date: null })],
+    ["string", validStripeSubscription({ start_date: "1700000000" })],
+  ])("WD-T-MAP-start-date-webhook-%s: customer.subscription.updated → 200 rejected invalid_subscription; no writer", async (_label, subscription) => {
+    const body = makeEventBody({ type: "customer.subscription.updated", dataObject: { id: "sub_test001" } });
+    const deps = fakeDeps({ stripe: { retrieveSubscription: vi.fn().mockResolvedValue({ ok: true, data: subscription }) } });
+    const resp = await handleStripeWebhook(makeRequest(body), deps);
+    expect(resp.status).toBe(200);
+    expectNoCollaboratorCalls(deps, { allow: ["retrieveSubscription"] });
+    expect(parseLog(deps)).toEqual({
+      msg: "payments webhook",
+      event: "evt_test001",
+      type: "customer.subscription.updated",
+      outcome: "rejected",
+      code: "invalid_subscription",
+      paused: null,
     });
   });
 });
@@ -995,6 +1030,7 @@ describe("WH-AC18b: log line never contains PII — email, user_id, customer_id"
         }),
       }),
       rpc: fakeRpc(),
+      mail: { sendConfirmationEmail: vi.fn().mockResolvedValue({ id: "email-unit-001" }) },
       now: () => 1_700_000_000_000,
       log: vi.fn((line: string) => { logs.push(line); }),
     };

@@ -15,16 +15,21 @@ import type * as EnvModule from "@/config/env";
 
 // ── vi.hoisted ─────────────────────────────────────────────────────────────────
 
+// Updated by slice 1d: added mockGetMyWithdrawalStatus (new billing service function;
+// returns null by default so all existing 1b tests are unaffected).
 const {
   mockRequireMonitor,
   mockGetMonitorUsage,
   mockGetCurrentSubscription,
   mockListMonitorPlans,
+  mockGetMyWithdrawalStatus,
 } = vi.hoisted(() => ({
-  mockRequireMonitor: vi.fn(),
-  mockGetMonitorUsage: vi.fn(),
+  mockRequireMonitor:        vi.fn(),
+  mockGetMonitorUsage:       vi.fn(),
   mockGetCurrentSubscription: vi.fn(),
-  mockListMonitorPlans: vi.fn(),
+  mockListMonitorPlans:      vi.fn(),
+  // 1d: getMyWithdrawalStatus() (my_withdrawal_status(), contract amendment A5).
+  mockGetMyWithdrawalStatus: vi.fn(),
 }));
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
@@ -62,6 +67,8 @@ vi.mock("@/services/monitor/monitors", () => ({ getMonitorUsage: mockGetMonitorU
 vi.mock("@/services/payments/billing", () => ({
   getCurrentSubscription: mockGetCurrentSubscription,
   listMonitorPlans: mockListMonitorPlans,
+  // 1d: withdrawal status for the billing page's Fortryd aftale button
+  getMyWithdrawalStatus: mockGetMyWithdrawalStatus,
 }));
 vi.mock("@/app/monitor/(auth)/actions", () => ({ signOut: vi.fn() }));
 vi.mock("@/app/monitor/(panel)/billing/actions", () => ({
@@ -147,9 +154,9 @@ const SUB_ACTIVE = {
   cancelAtPeriodEnd: false,
 };
 
-const FINE_PRINT_DA =
-  "Priser inkl. moms. Betaling via Stripe – du sendes til Stripes sikre betalingsside. " +
-  "Opsig eller skift mellem månedlig og årlig betaling når som helst under “Administrér abonnement”.";
+// The card's own fine print: the Stripe payment sentence only (design review D6, WD-J9-C05: VAT
+// and cancellation are stated once, in slice 1d's legal fine print below the card).
+const FINE_PRINT_DA = "Betaling via Stripe – du sendes til Stripes sikre betalingsside.";
 
 /** Renders the billing page with the given searchParams. */
 async function renderBilling(params: Record<string, string> = {}) {
@@ -172,6 +179,7 @@ beforeEach(() => {
   mockGetMonitorUsage.mockResolvedValue({ count: 5, limit: 20 });
   mockGetCurrentSubscription.mockResolvedValue(null);
   mockListMonitorPlans.mockResolvedValue([PLAN_YEAR, PLAN_MONTH]);
+  mockGetMyWithdrawalStatus.mockResolvedValue(null); // 1d: no window open by default
   vi.mocked(getMonitorLocale).mockResolvedValue("da");
 });
 

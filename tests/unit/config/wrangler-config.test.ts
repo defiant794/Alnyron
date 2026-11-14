@@ -343,10 +343,17 @@ describe('workers/payments/wrangler.jsonc — WH-AC28: payments Worker config', 
     expect(paymentsConfig.vars?.['STRIPE_LIVEMODE']).toBe('true');
   });
 
-  it('WH-AC28h: no routes, route, or triggers key', () => {
+  // Updated by slice 1d: triggers.crons added ("0 * * * *"). Assert no routes/route only.
+  // The cron trigger is pinned in tests/unit/config/wrangler-withdrawal.test.ts (WD-T-CFG-01).
+  it('WH-AC28h: no routes or route key (custom domain attached in Dashboard, not via routes key)', () => {
     expect(paymentsConfig.routes).toBeUndefined();
     expect(paymentsConfig.route).toBeUndefined();
-    expect(paymentsConfig.triggers).toBeUndefined();
+  });
+
+  it('WH-AC28h2: triggers.crons includes "0 * * * *" (hourly sweep added in slice 1d)', () => {
+    const crons = (paymentsConfig.triggers as { crons?: string[] } | undefined)?.crons;
+    expect(Array.isArray(crons)).toBe(true);
+    expect(crons).toContain("0 * * * *");
   });
 
   it('WH-AC28i: observability.enabled = true', () => {

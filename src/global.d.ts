@@ -1,4 +1,5 @@
 import type { routing } from "@/i18n/routing";
+import type { WithdrawInput } from "@/lib/payments/withdrawal-contract";
 import type da from "../messages/da.json";
 
 // Strict next-intl typing: `Locale` is "da" | "en", and message keys are
@@ -24,6 +25,17 @@ declare global {
      */
     BILLING_RATE_LIMITER?: {
       limit(options: { key: string }): Promise<{ success: boolean }>;
+    };
+    /**
+     * Service binding to the payments Worker's `WithdrawalService` RPC
+     * entrypoint (wrangler.jsonc `services`, workers/payments/withdrawal-service.ts):
+     * the Monitor withdrawal action's only way to withdraw a subscription.
+     * The answer is `unknown` until `parseWithdrawResult` has checked it.
+     * Absent (no binding in this Worker or dev proxy) → the action fails
+     * closed with `?error=unavailable`.
+     */
+    PAYMENTS?: {
+      withdraw(input: WithdrawInput): Promise<unknown>;
     };
   }
 }

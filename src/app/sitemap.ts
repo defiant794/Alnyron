@@ -15,7 +15,7 @@ import { Constants } from "@/types/database";
 export const revalidate = 3600;
 
 /**
- * `/sitemap.xml`: the content system pages (home, contact, privacy) and every
+ * `/sitemap.xml`: the content system pages (home, contact, privacy, terms) and every
  * public catalog section and item, each in both locales with hreflang
  * alternates (`x-default` = Danish). Paths are English on both locales
  * (`/contact`, `/en/contact`, `/services`, `/en/services`). Drafts and

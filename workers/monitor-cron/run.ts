@@ -100,6 +100,15 @@ const EMAIL_WALL_MS = MONITOR_EMAIL_SEND_TIMEOUT_MS + MONITOR_RPC_TIMEOUT_MS;
 const SWEEP_WALL_MS = MONITOR_RPC_TIMEOUT_MS + EMAIL_WALL_MS;
 
 /**
+ * Whether sending goes on after a failed send: Resend refused this one email for good
+ * (`rejected`), or an email went out under its key before with another payload (`replayed`).
+ * Either way the row is marked and counted as rejected; no retry can change it.
+ */
+function sendSettled(kind: SendFailure): boolean {
+  return kind === "rejected" || kind === "replayed";
+}
+
+/**
  * One cron run of the monitor engine:
  * 1. email pending change events (older runs' unsent ones first);
  * 2. lease up to `batchSize` due monitors, no more than the subrequests left
@@ -152,23 +161,25 @@ const SWEEP_WALL_MS = MONITOR_RPC_TIMEOUT_MS + EMAIL_WALL_MS;
  * owner address nothing is sent or stamped. A notice sent but not stamped (the
  * mark call failed) is sent again next run under the same key; its `waiting`
  * count may have changed since, and Resend answers a key reused with a
- * different payload with a 409 that `sendEmail` reports as a rejection, so the
- * account is then stamped without a second email and sending goes on.
+ * different payload with a 409 that `sendEmail` reports as `replayed`, handled
+ * like a rejection, so the account is then stamped without a second email and
+ * sending goes on.
  *
  * Every change email is built from the stored event plus the monitor's current
  * URL and label and the owner's current address, and sent with the key
  * `monitor-event/<event id>`; a rate-limit, quota, config or transient failure
  * stops sending for the rest of the run and leaves the events pending, a
- * rejection marks the event emailed (no retry). A change email sent but not
- * marked (the mark call failed) is sent again next run under the same key: for
- * the same payload Resend returns the first send's result instead of a second
- * email, and a retry whose payload changed (the monitor renamed or its URL
- * edited, or the owner's address changed, meanwhile) gets Resend's 409
- * `invalid_idempotent_request` (per Resend's docs as of 2026-11): `sendEmail`
- * reports it as a rejection, so the event is marked and counted in
- * `emailsRejected`, with no second email, and sending goes on. The first send
- * under that key was most likely delivered (inferred; Resend's docs don't say
- * so). The run stays within `subrequestLimit` (Cloudflare's
+ * rejection (or a `replayed` send, below) marks the event emailed (no retry).
+ * A change email sent but not marked (the mark call failed) is sent again next
+ * run under the same key: for the same payload Resend returns the first send's
+ * result instead of a second email, and a retry whose payload changed (the
+ * monitor renamed or its URL edited, or the owner's address changed,
+ * meanwhile) gets Resend's 409 `invalid_idempotent_request` (per Resend's docs
+ * as of 2026-11): `sendEmail` reports it as `replayed`, handled like a
+ * rejection, so the event is marked and counted in `emailsRejected`, with no
+ * second email, and sending goes on. The first send under that key was most
+ * likely delivered (inferred; Resend's docs don't say so). The run stays
+ * within `subrequestLimit` (Cloudflare's
  * per-invocation subrequest cap) by not starting a claim, check, email or sweep
  * it could not finish, and within {@link MONITOR_RUN_WALL_LIMIT_MS} (Cloudflare
  * stops a cron run after 15 minutes) by not starting a claim, email or second
@@ -294,7 +305,7 @@ export async function runMonitorChecks(deps: {
         siteUrl: config.siteUrl,
       });
       const result = await send({ from: config.mailFrom, to: row.email, ...content }, `monitor-event/${row.event_id}`);
-      if (!result.ok && result.kind !== "rejected") {
+      if (!result.ok && !sendSettled(result.kind)) {
         summary.mailStop = result.kind;
         summary.emailsDeferred += rows.length - index;
         return;
@@ -307,7 +318,7 @@ export async function runMonitorChecks(deps: {
       } catch {
         // Sent again next run under the same key: Resend sends no second email, deduplicating
         // the same payload and answering a changed one (monitor URL/label or owner address
-        // edited) with a 409 that `sendEmail` reports as a rejection, so the event is marked then.
+        // edited) with a 409 that `sendEmail` reports as `replayed`, so the event is marked then.
         summary.rpcErrors += 1;
       }
     }
@@ -371,7 +382,7 @@ export async function runMonitorChecks(deps: {
       }
       const content = buildSignupNoticeEmail({ email: row.email, confirmedAt: row.confirmed_at, waiting: row.waiting });
       const result = await send({ from: config.mailFrom, to: owner, ...content }, `monitor-signup/${row.user_id}`);
-      if (!result.ok && result.kind !== "rejected") {
+      if (!result.ok && !sendSettled(result.kind)) {
         summary.mailStop = result.kind;
         summary.signupNoticesDeferred += rows.length - index;
         return;
@@ -382,7 +393,7 @@ export async function runMonitorChecks(deps: {
         await rpc.markSignupNotified(row.user_id);
       } catch {
         // Sent again next run under the same key: Resend returns the first send's result for the
-        // same payload, and a 409 (a rejection: stamped, no second email) when `waiting` changed.
+        // same payload, and a 409 (`replayed`: stamped, no second email) when `waiting` changed.
         summary.rpcErrors += 1;
       }
     }
@@ -421,7 +432,7 @@ export async function runMonitorChecks(deps: {
       `monitor-error/${monitor.id}/${result.notified_at}`,
     );
     if (sent.ok) summary.errorEmails += 1;
-    else if (sent.kind !== "rejected") summary.mailStop = sent.kind;
+    else if (!sendSettled(sent.kind)) summary.mailStop = sent.kind;
   }
 
   /** Checks one leased monitor and records the outcome; returns whether it created a change event. */
