@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from "vitest";
 import { ITEMS_REORDER_MAX, MEDIA_ALT_MAX, RESERVED_ROUTE_SLUGS } from "@/config/catalog";
+import { OFFER_PRICE_MAX_ORE, OFFER_PRICE_MIN_ORE } from "@/config/payments";
 import {
   slugSchema,
   saveCategorySchema,
@@ -519,5 +520,77 @@ describe("AC-CAT-S14: reorderItemsSchema accepts at most ITEMS_REORDER_MAX item 
     expect(result.success).toBe(false);
     const issues = !result.success ? result.error.issues : [];
     expect(issues.map((i) => [i.path.join("."), i.code])).toEqual([["itemIds", "too_big"]]);
+  });
+});
+
+// ── S2: saveItemSchema offers field ─────────────────────────────────────────
+// Contract §1.2: saveItemSchema gains optional `offers` array; each kind once.
+// Every refusal carries the one issue message the editor maps to its copy: OFFERS_INVALID.
+// Test IDs: S2-T-IE-OFR-SCHEMA-01..04
+
+const BASE_ITEM = {
+  id: VALID_ITEM_UUID,
+  price_type: null,
+  price_amount: null,
+  price_currency: "DKK",
+  external_links: {},
+  translations: {
+    da: { slug: "drage-12-cm", title: "Drage, 12 cm", summary: "", body_md: "", seo_title: "", seo_description: "" },
+  },
+};
+
+/** The issue messages of saving BASE_ITEM with `offers` (empty when it parses). */
+function offerIssueMessages(offers: unknown): string[] {
+  const result = saveItemSchema.safeParse({ ...BASE_ITEM, offers });
+  return result.success ? [] : result.error.issues.map((issue) => issue.message);
+}
+
+describe("S2-T-IE-OFR-SCHEMA-01: saveItemSchema — accepts valid physical offer", () => {
+  it("accepts offers:[{kind:'physical', price_ore:24995, active:true}]", () => {
+    const result = saveItemSchema.safeParse({
+      ...BASE_ITEM,
+      offers: [{ kind: "physical", price_ore: 24995, active: true }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts empty offers:[]", () => {
+    expect(saveItemSchema.safeParse({ ...BASE_ITEM, offers: [] }).success).toBe(true);
+  });
+
+  it("accepts absent offers (unchanged, regression gate)", () => {
+    expect(saveItemSchema.safeParse(BASE_ITEM).success).toBe(true);
+  });
+});
+
+describe("S2-T-IE-OFR-SCHEMA-02: saveItemSchema — rejects digital active offer (22023 offers_invalid)", () => {
+  it("rejects offers:[{kind:'digital', price_ore:9900, active:true}] with exactly ['offers-invalid']", () => {
+    expect(offerIssueMessages([{ kind: "digital", price_ore: 9900, active: true }])).toEqual(["offers-invalid"]);
+  });
+});
+
+describe("S2-T-IE-OFR-SCHEMA-03: saveItemSchema — price_ore within OFFER_PRICE_MIN_ORE..OFFER_PRICE_MAX_ORE", () => {
+  const physical = (priceOre: number) => offerIssueMessages([{ kind: "physical", price_ore: priceOre, active: true }]);
+
+  it("accepts both bounds (2,50 kr. and 50.000 kr., the item_offers CHECK)", () => {
+    expect([OFFER_PRICE_MIN_ORE, OFFER_PRICE_MAX_ORE]).toEqual([250, 5_000_000]);
+    expect(physical(OFFER_PRICE_MIN_ORE)).toEqual([]);
+    expect(physical(OFFER_PRICE_MAX_ORE)).toEqual([]);
+  });
+
+  it("rejects one øre below OFFER_PRICE_MIN_ORE and one above OFFER_PRICE_MAX_ORE with exactly ['offers-invalid']", () => {
+    expect(physical(OFFER_PRICE_MIN_ORE - 1)).toEqual(["offers-invalid"]);
+    expect(physical(OFFER_PRICE_MAX_ORE + 1)).toEqual(["offers-invalid"]);
+  });
+});
+
+describe("S2-T-IE-OFR-SCHEMA-04: saveItemSchema — rejects duplicate kind in offers", () => {
+  it("rejects offers with two physical entries with exactly ['offers-invalid']", () => {
+    expect(
+      offerIssueMessages([
+        { kind: "physical", price_ore: 24995, active: true },
+        { kind: "physical", price_ore: 19900, active: false },
+      ]),
+    ).toEqual(["offers-invalid"]);
   });
 });

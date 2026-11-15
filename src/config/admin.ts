@@ -1,4 +1,5 @@
 import type { CatalogKind } from "@/config/catalog";
+import { ORDER_STATUSES } from "@/config/payments";
 
 /**
  * Admin and auth routes live outside `[locale]` (architecture §2); the admin UI
@@ -13,6 +14,26 @@ export const ADMIN_NO_ACCESS_PATH = "/admin/no-access";
 export const ADMIN_PAGES_PATH = "/admin/pages";
 export const ADMIN_CATALOG_PATH = "/admin/catalog";
 export const ADMIN_MONITOR_USERS_PATH = "/admin/monitor-users";
+/** Admin › Ordrer: the goods orders list; one order at `/admin/orders/<order number>` ({@link adminOrderPath}). */
+export const ADMIN_ORDERS_PATH = "/admin/orders";
+
+/**
+ * The `?status=` filters of Admin › Ordrer: an order status, or `withdrawal`
+ * (every order with a withdrawal, whatever its status).
+ */
+export const ADMIN_ORDER_FILTERS = [...ORDER_STATUSES, "withdrawal"] as const;
+
+export type AdminOrderFilter = (typeof ADMIN_ORDER_FILTERS)[number];
+
+/** Admin › Ordrer filtered by `filter`. */
+export function adminOrdersFilterPath(filter: AdminOrderFilter): string {
+  return `${ADMIN_ORDERS_PATH}?status=${filter}`;
+}
+
+/** One order in Admin › Ordrer, by its order number. */
+export function adminOrderPath(orderNumber: number): string {
+  return `${ADMIN_ORDERS_PATH}/${orderNumber}`;
+}
 
 /** Sidebar shortcut to a kind's section editor (`catalog/[kind]` redirects to its category). */
 export function adminCatalogKindPath(kind: CatalogKind): string {

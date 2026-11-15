@@ -17,6 +17,7 @@ import {
   SLUG_PATTERN,
   type PriceType,
 } from "@/config/catalog";
+import { OFFER_KINDS, OFFER_PRICE_MAX_ORE, OFFER_PRICE_MIN_ORE } from "@/config/payments";
 import { DA_TITLE_REQUIRED } from "@/lib/validation/pages";
 import type { Database } from "@/types/database";
 
@@ -46,6 +47,8 @@ export const TOO_MANY_MEDIA = "too-many-media";
 export const TOO_LARGE = "too-large";
 /** Upload type the `media` bucket does not accept. */
 export const UNSUPPORTED_TYPE = "unsupported-type";
+/** An offer list `admin_save_item` refuses with 22023 `offers_invalid` (see {@link offersSchema}). */
+export const OFFERS_INVALID = "offers-invalid";
 
 const EXTERNAL_LINK_PATTERN = /^https:\/\/[^\s<>"]+$/;
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -171,12 +174,34 @@ const mediaEntrySchema = z.object({
 });
 
 /**
+ * One way the item is sold (`item_offers`): a kind, a whole-øre price incl.
+ * moms and delivery within the `price_ore` CHECK, and whether it can be
+ * bought. A digital offer cannot be live yet (`item_offers_digital_not_live`).
+ */
+const offerSchema = z
+  .object({
+    kind: z.enum(OFFER_KINDS, { error: OFFERS_INVALID }),
+    price_ore: z
+      .int({ error: OFFERS_INVALID })
+      .min(OFFER_PRICE_MIN_ORE, { error: OFFERS_INVALID })
+      .max(OFFER_PRICE_MAX_ORE, { error: OFFERS_INVALID }),
+    active: z.boolean({ error: OFFERS_INVALID }),
+  })
+  .refine((offer) => offer.kind !== "digital" || !offer.active, { error: OFFERS_INVALID });
+
+/** The item's whole offer set (each kind at most once); present replaces the stored set, `[]` clears it. */
+const offersSchema = z
+  .array(offerSchema, { error: OFFERS_INVALID })
+  .refine((offers) => new Set(offers.map((offer) => offer.kind)).size === offers.length, { error: OFFERS_INVALID });
+
+/**
  * An item save (`admin_save_item`): no `id` creates a draft item at the end
  * of `category_id` (required then). With an `id`, a `category_id` naming
  * another section moves the item to the end of that section; absent or the
  * same section keeps it in place. The price, currency and links are always
  * sent and replace the stored ones; `media` updates the alt text and order of
- * the item's own images.
+ * the item's own images. `offers` (absent: kept) replaces the item's offer
+ * set; only a `models3d` item may have offers.
  */
 export const saveItemSchema = z
   .object({
@@ -195,6 +220,7 @@ export const saveItemSchema = z
       en: itemTranslationSchema(z.string().max(ITEM_TEXT_LIMITS.title)).optional(),
     }),
     media: z.array(mediaEntrySchema).max(MEDIA_MAX_PER_ITEM, { error: TOO_MANY_MEDIA }).optional(),
+    offers: offersSchema.optional(),
   })
   .refine((item) => item.id !== undefined || item.category_id !== undefined, {
     error: "category-required",

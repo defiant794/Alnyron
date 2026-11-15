@@ -63,6 +63,12 @@
       "title": "Interesseret?",
       "text": "Skriv til os, så vender vi tilbage med et uforpligtende bud.",
       "button": "Kontakt os"
+    },
+    "offer": {
+      "label": "Køb som 3D-print",
+      "price": "{amount} kr.",
+      "buy": "Køb",
+      "buyPending": "Sender dig til betaling …"
     }
   },
   "Admin": {
@@ -74,7 +80,8 @@
       "catalogGroup": "Kataloger",
       "catalog": "Katalog",
       "pages": "Sider",
-      "monitorUsers": "Monitor-brugere"
+      "monitorUsers": "Monitor-brugere",
+      "orders": "Ordrer"
     },
     "account": {
       "label": "Konto",
@@ -231,6 +238,195 @@
         }
       }
     },
+    "orders": {
+      "title": "Ordrer",
+      "lead": "Køb af 3D-figurer, nyeste først. Beløbet reserveres ved bestillingen og trækkes, når du markerer ordren som afsendt.",
+      "filters": {
+        "label": "Filtrér efter status",
+        "all": "Alle ({count})",
+        "authorized": "Reserveret ({count})",
+        "shipped": "Afsendt ({count})",
+        "withdrawal": "Fortrydelse ({count})",
+        "refunded": "Refunderet ({count})",
+        "canceled": "Annulleret ({count})"
+      },
+      "table": {
+        "caption": "Ordrer, nyeste først",
+        "number": "Nr.",
+        "date": "Dato",
+        "buyer": "Køber",
+        "item": "Vare",
+        "amount": "Beløb",
+        "status": "Status"
+      },
+      "status": {
+        "authorized": "Reserveret",
+        "shipped": "Afsendt",
+        "refunded": "Refunderet",
+        "canceled": "Annulleret"
+      },
+      "withdrawal": {
+        "received": "Fortrydelse modtaget",
+        "approved": "Fortrydelse modtaget",
+        "needs_manual": "Til manuel behandling"
+      },
+      "anomaly": "Afvigelse: {codes}",
+      "amount": "{amount} kr.",
+      "noName": "Intet navn",
+      "empty": "Ingen ordrer endnu.",
+      "emptyFilter": "Ingen ordrer med denne status.",
+      "detail": {
+        "metaTitle": "Ordre",
+        "title": "Ordre #{number}",
+        "breadcrumb": "Brødkrummesti",
+        "buyer": {
+          "heading": "Køber og levering",
+          "name": "Navn",
+          "email": "E-mail",
+          "phone": "Telefon",
+          "address": "Leveringsadresse",
+          "language": "Sprog",
+          "missing": "Ikke oplyst",
+          "languages": {
+            "da": "Dansk",
+            "en": "Engelsk"
+          }
+        },
+        "lines": {
+          "heading": "Varer",
+          "item": "Vare",
+          "quantity": "Antal",
+          "amount": "Beløb",
+          "kinds": {
+            "physical": "3D-print",
+            "digital": "digital fil"
+          },
+          "line": "{title} ({kind})",
+          "tax": "Heraf moms (25 %)",
+          "total": "I alt inkl. moms og levering",
+          "refunded": "Refunderet"
+        },
+        "stripe": {
+          "heading": "Stripe",
+          "session": "Checkout-session",
+          "paymentIntent": "Betaling",
+          "customer": "Kunde",
+          "invoice": "Faktura"
+        },
+        "anomaly": {
+          "heading": "Afvigelser",
+          "lead": "Tjek ordren i Stripe, før du sender varen.",
+          "codes": {
+            "amount_mismatch": "Beløbet passer ikke med varens pris.",
+            "currency_not_dkk": "Betalingen er ikke i danske kroner.",
+            "consent_missing": "Køberen har ikke accepteret handelsbetingelserne i Stripe.",
+            "terms_version_unknown": "Versionen af vilkårene er ukendt.",
+            "shipping_missing": "Stripe sendte ingen leveringsadresse.",
+            "shipping_not_dk": "Leveringsadressen er ikke i Danmark.",
+            "tax_mismatch": "Momsen passer ikke med 25 % af beløbet.",
+            "user_unverified": "Kontoen kunne ikke bekræftes, så ordren er registreret som gæstekøb.",
+            "captured_at_checkout": "Betalingen blev trukket allerede ved bestillingen.",
+            "capture_failed": "Betalingen kunne ikke trækkes, da ordren skulle sendes."
+          }
+        },
+        "reservation": {
+          "until": "Betaling reserveret til {date}",
+          "expiresSoon": "Reservationen udløber om under {hours} timer. Send varen, og markér den afsendt inden da, ellers bortfalder betalingen.",
+          "expired": "Reservationen er udløbet. Send ikke varen."
+        },
+        "timeline": {
+          "heading": "Forløb",
+          "reserved": "Betaling reserveret {date}",
+          "confirmation": "Ordrebekræftelse sendt {date}",
+          "captured": "Betaling trukket {date}",
+          "shipped": "Afsendt {date}",
+          "tracking": "track & trace {ref}",
+          "withdrawal": "Fortrydelse modtaget {date}",
+          "deadline": "frist {date}",
+          "onTime": "rettidig",
+          "late": "For sent (efter fristen)",
+          "refundDue": "Tilbagebetal senest {date}",
+          "refunded": "Refunderet {amount} kr. {date}",
+          "deduction": "Fradrag {amount} kr.: {reason}",
+          "released": "Reservationen frigivet {date}",
+          "manual": "Til manuel behandling: {reason}",
+          "manualReasons": {
+            "stripe_refused": "Stripe afviste refunderingen eller frigivelsen.",
+            "retries_exhausted": "Det lykkedes ikke efter flere forsøg."
+          },
+          "canceled": {
+            "withdrawn": "Annulleret {date}: købet blev fortrudt før afsendelse",
+            "authorization_expired": "Annulleret {date}: reservationen udløb",
+            "owner": "Annulleret {date}"
+          }
+        },
+        "errors": {
+          "invalid": "Oplysningerne kunne ikke bruges. Tjek felterne, og prøv igen.",
+          "unauthenticated": "Din session er udløbet. Log ind igen, og prøv igen.",
+          "forbidden": "Du har ikke adgang til at ændre ordrer.",
+          "not-found": "Ordren findes ikke længere.",
+          "conflict": "Ordren kan ikke ændres sådan lige nu. Genindlæs siden, og se ordrens status.",
+          "unavailable": "Betalingstjenesten svarede ikke. Genindlæs siden for at se, om handlingen gik igennem, og prøv igen om lidt.",
+          "order-closed": "Ordren er refunderet eller annulleret og kan ikke sendes.",
+          "withdrawal-pending": "Køberen har fortrudt købet. Send ikke varen.",
+          "authorization-expired": "Betalingen er udløbet. Send ikke varen; kontakt køberen.",
+          "capture-refused": "Betalingen kunne ikke trækkes. Varen er ikke markeret som afsendt.",
+          "deduction-format": "Skriv fradraget i kroner, fx 49,95.",
+          "deduction-too-large": "Fradraget er for stort. Der skal refunderes mindst 0,01 kr.",
+          "reason-required": "Skriv en begrundelse for fradraget.",
+          "order-refunded": "Ordren er allerede refunderet.",
+          "order-shipped": "Varen er sendt. Vælg \"Varen er modtaget retur\".",
+          "order-not-shipped": "Varen er ikke sendt. Vælg \"Varen er ikke afsendt\"."
+        },
+        "ship": {
+          "heading": "Markér afsendt",
+          "lead": "Når du markerer ordren som afsendt, trækkes betalingen, og køberen får en e-mail med track & trace.",
+          "leadCaptured": "Betalingen er allerede trukket. Køberen får en e-mail med track & trace.",
+          "tracking": "Track & trace (valgfri)",
+          "trackingPlaceholder": "fx PostNord-nummer",
+          "submit": "Markér afsendt og træk betalingen",
+          "submitCaptured": "Markér afsendt",
+          "confirmCapture": "Træk {amount} kr. og markér ordre #{number} som afsendt? Det kan ikke fortrydes.",
+          "confirmShip": "Markér ordre #{number} som afsendt? Køberen får en e-mail.",
+          "captureButton": "Træk {amount} kr.",
+          "shipButton": "Bekræft afsendelse",
+          "back": "Tilbage",
+          "done": {
+            "shipped": "Ordren er markeret som afsendt, og betalingen er trukket. Køberen får en e-mail.",
+            "already_shipped": "Ordren var allerede markeret som afsendt."
+          }
+        },
+        "refund": {
+          "heading": "Behandl fortrydelse",
+          "lead": "Køberen har fortrudt købet. Godkend, når varen er kommet retur, eller frigiv reservationen, hvis varen ikke er sendt.",
+          "offlineHeading": "Registrér fortrydelse",
+          "offlineLead": "Har køberen fortrudt købet i en e-mail eller et brev, registrerer du fortrydelsen her. Godkend, når varen er kommet retur, eller frigiv reservationen, hvis varen ikke er sendt.",
+          "goodsState": "Varens tilstand",
+          "returned": "Varen er modtaget retur",
+          "notShipped": "Varen er ikke afsendt",
+          "release": "Reservationen frigives (intet trækkes).",
+          "refundAll": "Betalingen blev trukket ved bestillingen, så hele beløbet refunderes: {amount} kr.",
+          "deduction": "Fradrag for værdiforringelse (kr., valgfri)",
+          "deductionHint": "Fx 49,95. Kun hvis varen er håndteret mere end nødvendigt for at prøve den.",
+          "reason": "Begrundelse (kræves ved fradrag)",
+          "computed": "Refunderes: {refund} kr. ({available} kr. − {deduction} kr.)",
+          "computedFull": "Refunderes: {refund} kr.",
+          "submitReturned": "Bekræft retur",
+          "submitNotShipped": "Bekræft ikke afsendt",
+          "confirmRefund": "Refundér {amount} kr. til {email}? Det kan ikke fortrydes.",
+          "confirmRelease": "Frigiv reservationen på {amount} kr. for {email}? Køberen trækkes ikke. Det kan ikke fortrydes.",
+          "refundButton": "Refundér {amount} kr.",
+          "releaseButton": "Frigiv reservationen",
+          "back": "Tilbage",
+          "done": {
+            "completed": "Refunderingen er gennemført. Køberen får en kreditnota på e-mail.",
+            "canceled": "Reservationen er frigivet, og køberen er ikke trukket. Køberen får en kvittering på e-mail.",
+            "approved": "Godkendt. Refunderingen eller frigivelsen gennemføres om lidt.",
+            "needs_manual": "Stripe afviste handlingen. Ordren er sat til manuel behandling, og du har fået en e-mail."
+          }
+        }
+      }
+    },
     "catalog": {
       "title": "Katalog",
       "lead": "Rediger sektionerne, deres tekst og synlighed.",
@@ -349,6 +545,21 @@
           "featured": "Udvalgt",
           "featuredHint": "Vises med badge og først i sektionen."
         },
+        "offers": {
+          "heading": "Salg",
+          "lead": "Sælg figuren som 3D-print gennem Stripe, kun med levering i Danmark. Når salget er slået til, viser sitet salgsprisen i stedet for pristypen.",
+          "physicalActive": "Sælg som 3D-print",
+          "physicalPrice": "Pris inkl. moms og levering i DK (kr.)",
+          "priceHint": "Fx 249 eller 249,95. Fra {min} til {max} kr.",
+          "digitalPrice": "Digital fil: pris (kr.)",
+          "digitalActive": "Sælg den digitale fil",
+          "digitalNote": "Den digitale fil kan ikke købes endnu. Prisen gemmes til senere.",
+          "errors": {
+            "price-required": "Skriv en pris, før figuren kan sælges.",
+            "price-format": "Skriv prisen i kroner, fx 249 eller 249,95.",
+            "price-range": "Prisen skal være fra {min} til {max} kr."
+          }
+        },
         "enHint": "Elementet kan først udgives, når det har en engelsk URL-slug. Tomme engelske tekstfelter viser den danske tekst.",
         "save": "Gem",
         "saveDraft": "Gem kladde",
@@ -403,6 +614,9 @@
         "too-large": "Filen er for stor.",
         "unsupported-type": "Filtypen understøttes ikke.",
         "not-found": "Det, du redigerer, findes ikke længere. Gå tilbage til kataloget.",
+        "offers-invalid": "Salget kunne ikke gemmes. Prisen skal være mellem {min} og {max} kr., og den digitale udgave kan ikke sælges endnu.",
+        "offers-not-allowed": "Kun elementer i en 3D-sektion kan sælges. Fjern salgsprisen, eller flyt elementet til en 3D-sektion.",
+        "item-has-offers": "Elementet har salgspriser. Fjern dem, før du flytter det til en sektion, der ikke er til 3D-figurer.",
         "forbidden": "Du har ikke adgang til at ændre kataloget.",
         "failed": "Ændringen kunne ikke gemmes. Prøv igen om lidt."
       }
@@ -761,6 +975,58 @@
         "window_expired": "Fortrydelsesfristen er udløbet.",
         "unavailable": "Vi kunne ikke tage imod din fortrydelse lige nu. Prøv igen om lidt."
       }
+    }
+  },
+  "Order": {
+    "home": "Til forsiden",
+    "thanks": {
+      "metaTitle": "Tak for din bestilling",
+      "title": "Tak for din bestilling",
+      "confirmation": "Vi sender en ordrebekræftelse til din e-mail. Den er også din faktura og viser ordrenummer, leveringsadresse og din fortrydelsesret."
+    },
+    "error": {
+      "metaTitle": "Betalingen kunne ikke startes",
+      "title": "Betalingen kunne ikke startes",
+      "generic": "Der skete en fejl, og du er ikke blevet opkrævet. Prøv igen om lidt.",
+      "busy": "Der er for mange forsøg, prøv igen om lidt. Du er ikke blevet opkrævet.",
+      "notPurchasable": "Varen kan ikke købes lige nu. Du er ikke blevet opkrævet."
+    },
+    "withdraw": {
+      "metaTitle": "Fortryd aftale",
+      "title": "Fortryd aftale",
+      "leadForm": "Udfyld oplysningerne fra din ordrebekræftelse. Du bekræfter fortrydelsen i næste trin.",
+      "leadLink": "Skriv dit navn. Du bekræfter fortrydelsen i næste trin.",
+      "orderNumber": "Ordrenummer",
+      "email": "E-mail brugt ved købet",
+      "name": "Dit navn",
+      "nameHint": "Dit fulde navn, højst 200 tegn.",
+      "nameMissing": "Skriv dit navn.",
+      "start": "Fortryd aftale her",
+      "confirmTitle": "Bekræft fortrydelse",
+      "summaryName": "Navn",
+      "summaryOrderNumber": "Ordrenummer",
+      "summaryEmail": "E-mail",
+      "summaryOrder": "Ordre",
+      "summaryOrderLink": "Fra dit personlige link",
+      "confirm": "Bekræft fortrydelse",
+      "back": "Tilbage",
+      "sending": "Sender …",
+      "returnHeading": "Returnering",
+      "noticeToggle": "Læs hele fortrydelsesvejledningen",
+      "receivedTitle": "Vi har modtaget din fortrydelse",
+      "receivedReceipt": "Du får en kvittering på ordrens e-mail.",
+      "receivedNotShipped": "Er varen ikke sendt endnu, sender vi den ikke, og du skal ikke returnere noget. Kvitteringen fortæller, hvad der gælder for din ordre.",
+      "refused": "Vi kunne ikke finde en ordre med de oplysninger. Tjek ordrenummer og e-mail i din ordrebekræftelse, eller skriv til os.",
+      "busy": "For mange forsøg lige nu. Vent et øjeblik, og prøv igen.",
+      "unavailable": "Online-fortrydelse er ikke tilgængelig lige nu. Prøv igen om lidt, eller giv os besked på e-mail.",
+      "retry": "Prøv igen"
+    },
+    "terms": {
+      "subscriptionModelFormLabel": "Standardfortrydelsesformular, abonnement",
+      "goodsModelFormLabel": "Standardfortrydelsesformular, 3D-figurer",
+      "noticeHeading": "Fortrydelsesvejledning",
+      "returnHeading": "Returadresse",
+      "withdrawLink": "Fortryd køb af varer"
     }
   }
 }

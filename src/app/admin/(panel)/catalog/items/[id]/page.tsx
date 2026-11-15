@@ -44,6 +44,7 @@ export default async function EditItemPage({ params }: EditItemPageProps) {
           altEn: image.altEn,
           position: index + 1,
         })),
+        offers: item.offers,
       }}
     />
   );

@@ -29,6 +29,15 @@ describe('AC-DS-21: Badge renders text for all tone values', () => {
   }
 });
 
+describe('AC-DS-21 (D1): green badges keep sufficient contrast on white and surface', () => {
+  it.each(['published', 'success'] as const)('tone="%s" uses the lighter 4% success tint', (tone) => {
+    render(<Badge tone={tone}>Offentlig</Badge>);
+    const badge = screen.getByText('Offentlig');
+    expect(badge).toHaveClass('bg-success/4', 'text-success');
+    expect(badge).not.toHaveClass('bg-success/8');
+  });
+});
+
 // ── ML-AC1: the MyLife login badge uses the accent tint ────────────────────
 
 describe('ML-AC1: Badge accent tone (MyLife login "Kun for godkendte brugere")', () => {

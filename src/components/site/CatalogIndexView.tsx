@@ -44,6 +44,7 @@ export default function CatalogIndexView({ locale, section }: CatalogIndexViewPr
           <li key={item.id}>
             <ItemCard
               item={item}
+              locale={locale}
               kind={section.kind}
               featuredLabel={t("featured")}
               priority={index < FIRST_ROW_SIZE}

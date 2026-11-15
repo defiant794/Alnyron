@@ -16,6 +16,7 @@ afterEach(cleanup);
 function renderCard(overrides: Partial<ItemCardProps> = {}) {
   const props: ItemCardProps = {
     item: catalogItem(),
+    locale: "da",
     kind: "services",
     featuredLabel: "Udvalgt",
     priority: false,

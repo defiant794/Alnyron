@@ -12,7 +12,7 @@
  *   - a function newly created by postgres in `private` is not executable by PUBLIC,
  *     anon, authenticated, or service_role (anon/authenticated hold USAGE on `private`,
  *     so a PUBLIC EXECUTE default would expose every future security-definer helper;
- *     service_role is similarly not granted EXECUTE by default — only the nine explicitly
+ *     service_role is similarly not granted EXECUTE by default — only the fourteen explicitly
  *     granted private helpers carry that privilege)
  *   - existing private functions: no PUBLIC EXECUTE; anon may run only the RLS visibility
  *     helpers, authenticated additionally is_owner(), is_mylife() (the mylife_* policies),
@@ -29,12 +29,14 @@
  *     authenticated (service_role retains schema default); the 1d Worker functions
  *     (payments_begin_withdrawal, payments_claim_withdrawal, payments_withdrawal_step,
  *     payments_pending_work, payments_record_checkout_consent, payments_mark_consent_info_sent)
- *     are EXECUTE-only for service_role and my_withdrawal_status() for authenticated; and of
- *     the private helpers, exactly the nine called by the public payments functions
+ *     are EXECUTE-only for service_role and my_withdrawal_status() for authenticated; the S2
+ *     goods writers (amendment A1 set, payments_order_mark_shipped gone) are EXECUTE-only for
+ *     service_role; and of the private helpers, exactly the fourteen called by the public payments functions
  *     (effective_monitor_limit, payments_valid_timestamptz, payments_apply_subscription,
- *     payments_pause_over_cap, and from 1d dk_easter_sunday, dk_non_working_day,
- *     withdrawal_deadline, payments_withdrawal_json, payments_consent_mail) have service_role
- *     EXECUTE
+ *     payments_pause_over_cap, from 1d dk_easter_sunday, dk_non_working_day,
+ *     withdrawal_deadline, payments_withdrawal_json, payments_consent_mail, and from S2
+ *     goods_transit_allowance, order_withdrawal_deadline, payments_order_json,
+ *     payments_order_withdrawal_json, item_is_public) have service_role EXECUTE
  *
  * Connection: postgres. The probe function is created inside a rolled-back transaction.
  * Journey: payments-slice1-foundation  PAY1-AC5h, PAY1-AC5j, PAY1-AC5k
@@ -333,7 +335,45 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
       });
     }, 12_000);
 
-    it("PAY1-AC5k-service_role: private functions with service_role EXECUTE are exactly the nine granted", async () => {
+    it("PAY1-AC5j-S2: the goods writers (A1 set) are service_role only: not PUBLIC, anon or authenticated", async () => {
+      await withTx(client, async (c) => {
+        // Amendment A1 (charge on dispatch): payments_order_mark_shipped is replaced by
+        // payments_order_begin_ship + payments_order_captured + payments_order_capture_failed, and
+        // payments_order_authorization_canceled records payment_intent.canceled. A notice by link or
+        // form carries no account: payments_begin_order_withdrawal takes no user id.
+        const goodsFunctions = [
+          "payments_approve_order_refund(p_order_id uuid, p_actor uuid, p_goods_state text, p_deduction_ore bigint, p_deduction_reason text)",
+          "payments_begin_order_withdrawal(p_order_id uuid, p_consumer_name text, p_channel text, p_statement_version text, p_locale text)",
+          "payments_claim_order_withdrawal(p_withdrawal_id uuid, p_lease_seconds integer)",
+          "payments_find_order(p_order_number bigint, p_email text)",
+          "payments_goods_offer(p_item_id uuid, p_locale text)",
+          "payments_order_authorization_canceled(p_event jsonb, p_payment_intent text)",
+          "payments_order_begin_ship(p_order_id uuid, p_actor uuid, p_tracking_ref text)",
+          "payments_order_capture_failed(p_order_id uuid, p_reason text)",
+          "payments_order_captured(p_order_id uuid, p_actor uuid)",
+          "payments_order_mail_sent(p_order_id uuid, p_kind text, p_email_id text)",
+          "payments_order_withdrawal_step(p_withdrawal_id uuid, p_step text, p_data jsonb)",
+          "payments_pending_order_work(p_limit integer, p_max_mail_attempts integer)",
+          "payments_record_order(p_event jsonb, p_order jsonb)",
+          "payments_sync_order_refund(p_event jsonb, p_payment_intent text, p_amount_refunded bigint)",
+        ].sort();
+        // Sorted in JS: the database collation may order "capture_failed" and "captured" either way.
+        const byFn = <T extends { fn: string }>(a: T, b: T) => (a.fn < b.fn ? -1 : a.fn > b.fn ? 1 : 0);
+        const where = `n.nspname = 'public' AND (p.proname LIKE 'payments\\_%order%' OR p.proname = 'payments_goods_offer')`;
+        expect((await execPrivileges(c, where)).sort(byFn)).toEqual(
+          goodsFunctions.map((fn) => ({ fn, public_exec: false, anon_exec: false, authenticated_exec: false })),
+        );
+        const { rows } = await c.query<{ fn: string; exec: boolean }>(
+          `SELECT p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS fn,
+                  has_function_privilege('service_role', p.oid, 'EXECUTE') AS exec
+             FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE ${where}`,
+        );
+        expect(rows.sort(byFn)).toEqual(goodsFunctions.map((fn) => ({ fn, exec: true })));
+      });
+    }, 12_000);
+
+    it("PAY1-AC5k-service_role: private functions with service_role EXECUTE are exactly the fourteen granted", async () => {
       await withTx(client, async (c) => {
         const { rows } = await c.query<{ fn: string }>(
           `SELECT p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS fn
@@ -344,13 +384,20 @@ describe.skipIf(!DB_AVAILABLE)("Function EXECUTE privileges", () => {
         );
         // Slice 1d (20261114000300) adds the five helpers its SECURITY INVOKER writers call:
         // dk_easter_sunday, dk_non_working_day, withdrawal_deadline, payments_withdrawal_json,
-        // payments_consent_mail.
+        // payments_consent_mail. Slice S2 (20261114000400) adds the five its goods writers call:
+        // goods_transit_allowance, order_withdrawal_deadline, payments_order_json,
+        // payments_order_withdrawal_json and the visibility helper item_is_public.
         expect(rows.map((r) => r.fn)).toEqual([
           "dk_easter_sunday(p_year integer)",
           "dk_non_working_day(p_day date)",
           "effective_monitor_limit(p_user_id uuid)",
+          "goods_transit_allowance()",
+          "item_is_public(p_id uuid)",
+          "order_withdrawal_deadline(p_shipped_at timestamp with time zone, p_confirmation_sent_at timestamp with time zone)",
           "payments_apply_subscription(p_event jsonb, p_subscription jsonb, OUT outcome text, OUT account_id uuid)",
           "payments_consent_mail(p_checkout_session_id text)",
+          "payments_order_json(p_order_id uuid)",
+          "payments_order_withdrawal_json(p_withdrawal_id uuid)",
           "payments_pause_over_cap(p_user_id uuid)",
           "payments_valid_timestamptz(p_value text)",
           "payments_withdrawal_json(p_withdrawal_id uuid)",

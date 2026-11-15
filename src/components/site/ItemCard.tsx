@@ -1,13 +1,17 @@
+import type { Locale } from "next-intl";
 import Image from "next/image";
 import NextLink from "next/link";
 import { cardClassName } from "@/components/ui/card-styles";
 import { KIND_GLYPH, type CatalogKind } from "@/config/catalog";
 import { cx } from "@/lib/cx";
 import type { PublicCatalogItem } from "@/services/content/catalog";
+import { formatOfferPrice } from "./offer-price";
 import PriceText from "./PriceText";
 
 export interface ItemCardProps {
   item: PublicCatalogItem;
+  /** The page's language (the offer price's format and note). */
+  locale: Locale;
   /** The section's kind: picks the {@link KIND_GLYPH} shown when the item has no image. */
   kind: CatalogKind;
   /** Text of the badge on a featured item ("Udvalgt"). */
@@ -22,10 +26,12 @@ export interface ItemCardProps {
  * badge on a featured item; then title, summary and price. The title is a
  * level-3 heading at the DESIGN.md h3 size (20/28), below the section page's
  * list heading; it links to the item page and the link covers the whole card.
- * Text shown from Danish on another locale carries `lang="da"`; a blank
- * summary or a missing price is left out.
+ * An item for sale shows its offer's price as its item page does
+ * (`formatOfferPrice`), never its display price. Text shown from Danish on
+ * another locale carries `lang="da"`; a blank summary or a missing price is
+ * left out.
  */
-export default function ItemCard({ item, kind, featuredLabel, priority }: ItemCardProps) {
+export default function ItemCard({ item, locale, kind, featuredLabel, priority }: ItemCardProps) {
   const langOf = (key: string) => (item.fallbackKeys.includes(key) ? "da" : undefined);
   const [image] = item.media;
 
@@ -69,7 +75,11 @@ export default function ItemCard({ item, kind, featuredLabel, priority }: ItemCa
             {item.summary}
           </p>
         )}
-        {item.price && <PriceText price={item.price} className="font-semibold" />}
+        {item.offer ? (
+          <PriceText price={formatOfferPrice(item.offer.priceOre, locale)} className="font-semibold" />
+        ) : (
+          item.price && <PriceText price={item.price} className="font-semibold" />
+        )}
       </div>
     </article>
   );

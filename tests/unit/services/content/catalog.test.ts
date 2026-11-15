@@ -91,6 +91,7 @@ const servicesCategoryRow = {
         { locale: "en", slug: "web-development", title: "Web Development", summary: "", body_md: "", seo_title: "", seo_description: "" },
       ],
       media: [],
+      item_offers: [],
     },
     {
       id: "item-nonfeatured-uuid", status: "published", sort_order: 10, featured: false,
@@ -101,6 +102,7 @@ const servicesCategoryRow = {
         { locale: "en", slug: "consulting", title: "Consulting", summary: "Architecture and code review.", body_md: "Architecture review.", seo_title: "", seo_description: "" },
       ],
       media: [],
+      item_offers: [],
     },
     {
       // Holds DA and EN rows (EN = URL slug): only its draft status keeps it out.
@@ -112,6 +114,7 @@ const servicesCategoryRow = {
         { locale: "en", slug: "draft-item", title: "Draft", summary: "", body_md: "", seo_title: "", seo_description: "" },
       ],
       media: [],
+      item_offers: [],
     },
   ],
 };
@@ -563,5 +566,99 @@ describe("AC-CATPUB-31: getCatalogSitemapEntries — hreflang alternates", () =>
       en: "/en/services/web-development",
       "x-default": "/services/web-development",
     });
+  });
+});
+
+// ── S2-CHK-1 / S2-T-IDV-OFR-04: public catalog offer mapping ────────────────
+//
+// Contract §3: PublicCatalogItem.offer = {priceOre} | null
+//   - Only an active physical offer is mapped; digital/inactive rows are ignored.
+//   - The select must include `item_offers(kind, price_ore, active)`.
+//
+// Test IDs: S2-T-IDV-OFR-04a..f
+
+/** Minimal item row with item_offers for offer-mapping tests. */
+function models3dItemRow(item_offers: { kind: string; price_ore: number; active: boolean }[]) {
+  return {
+    id: "item-dragon-uuid", status: "published", sort_order: 1, featured: false,
+    price_type: null, price_amount: null, price_currency: "DKK",
+    external_links: {}, published_at: "2026-11-14T12:00:00Z",
+    item_translations: [
+      { locale: "da", slug: "drage-12-cm", title: "Drage, 12 cm", summary: "3D-figur.", body_md: "", seo_title: "", seo_description: "" },
+      { locale: "en", slug: "dragon-12-cm", title: "Dragon, 12 cm", summary: "3D figure.", body_md: "", seo_title: "", seo_description: "" },
+    ],
+    media: [],
+    item_offers,
+  };
+}
+
+const models3dCategoryRow = {
+  id: "cat-models3d-uuid", kind: "models3d", status: "published", nav_order: 40, featured: false,
+  category_translations: [
+    { locale: "da", title: "3D-modeller", description: "Håndmalede figurer.", seo_title: "", seo_description: "" },
+    { locale: "en", title: "3D models", description: "", seo_title: "", seo_description: "" },
+  ],
+  match: [{ locale: "en", slug: "3d-models" }],
+  items: [models3dItemRow([{ kind: "physical", price_ore: 24995, active: true }])],
+};
+
+describe("S2-T-IDV-OFR-04a: getCatalogItem — select includes item_offers(kind, price_ore, active)", () => {
+  it("the Supabase select string includes item_offers(kind, price_ore, active)", async () => {
+    mockQuery(models3dCategoryRow);
+    await getCatalogItem("3d-models", "dragon-12-cm", "da", DA_LABELS);
+    expect(mockChainCall).toHaveBeenCalledWith(
+      "select",
+      expect.stringContaining("item_offers(kind, price_ore, active)"),
+    );
+  });
+});
+
+describe("S2-T-IDV-OFR-04b..f: getCatalogItem — offer field mapping", () => {
+  it("S2-T-IDV-OFR-04b: physical active 24995 → offer = {priceOre: 24995}", async () => {
+    mockQuery({
+      ...models3dCategoryRow,
+      items: [models3dItemRow([{ kind: "physical", price_ore: 24995, active: true }])],
+    });
+    const result = await getCatalogItem("3d-models", "dragon-12-cm", "da", DA_LABELS);
+    expect(result?.item.offer).toEqual({ priceOre: 24995 });
+  });
+
+  it("S2-T-IDV-OFR-04c: physical inactive → offer = null", async () => {
+    mockQuery({
+      ...models3dCategoryRow,
+      items: [models3dItemRow([{ kind: "physical", price_ore: 24995, active: false }])],
+    });
+    const result = await getCatalogItem("3d-models", "dragon-12-cm", "da", DA_LABELS);
+    expect(result?.item.offer).toBeNull();
+  });
+
+  it("S2-T-IDV-OFR-04d: digital inactive only → offer = null", async () => {
+    mockQuery({
+      ...models3dCategoryRow,
+      items: [models3dItemRow([{ kind: "digital", price_ore: 9900, active: false }])],
+    });
+    const result = await getCatalogItem("3d-models", "dragon-12-cm", "da", DA_LABELS);
+    expect(result?.item.offer).toBeNull();
+  });
+
+  it("S2-T-IDV-OFR-04e: digital inactive + physical active → physical offer returned", async () => {
+    mockQuery({
+      ...models3dCategoryRow,
+      items: [models3dItemRow([
+        { kind: "digital", price_ore: 9900, active: false },
+        { kind: "physical", price_ore: 24995, active: true },
+      ])],
+    });
+    const result = await getCatalogItem("3d-models", "dragon-12-cm", "da", DA_LABELS);
+    expect(result?.item.offer).toEqual({ priceOre: 24995 });
+  });
+
+  it("S2-T-IDV-OFR-04f: item_offers: [] → offer = null", async () => {
+    mockQuery({
+      ...models3dCategoryRow,
+      items: [models3dItemRow([])],
+    });
+    const result = await getCatalogItem("3d-models", "dragon-12-cm", "da", DA_LABELS);
+    expect(result?.item.offer).toBeNull();
   });
 });

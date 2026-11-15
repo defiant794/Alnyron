@@ -3,7 +3,7 @@
 # Keys here override the same-named wrangler.jsonc vars (which hold the production values).
 SUPABASE_URL=https://<e2e-project-ref>.supabase.co
 SUPABASE_SECRET_KEY=<e2e sb_secret_…>
-STRIPE_PAYMENTS_KEY=<sk_test_… or rk_test_… (Credit notes: Write)>
+STRIPE_PAYMENTS_KEY=<sk_test_… or rk_test_… (Credit notes: Write; goods: Checkout Sessions, Products and PaymentIntents: Write, Refunds)>
 STRIPE_WEBHOOK_SECRET=<whsec_… from stripe listen>
 STRIPE_LIVEMODE=false
 # Resend API key (re_…). Sends real email: every local recipient must be a Resend test address.
@@ -15,3 +15,11 @@ WITHDRAWAL_ALERT_TO=delivered+withdrawal-alert@resend.dev
 # The main site the emails link (/terms, the Monitor withdraw page). Must be https with a Monitor
 # host (monitorSiteOrigin): keep the production value locally, the links are only read.
 SITE_URL=https://alnyron.dk
+# Goods (slice S2). The HMAC key of the personal withdraw links: at least 32 characters, no
+# whitespace, a fresh random value per machine (e.g. `openssl rand -base64 48`). The e2e specs
+# (tests/e2e/payments-s2-*.spec.ts) read it from this file to build a link. Fill in after the "=".
+ORDER_LINK_SECRET=
+# The owner's order emails: locally Resend's test sink, never a real inbox.
+ORDER_NOTIFY_TO=delivered+orders@resend.dev
+# The TEST-mode 25 % inclusive Tax Rate (the config's var is the live one).
+STRIPE_TAX_RATE_ID=txr_1Ub3CpFIgZG2PjS18JkfB0FE

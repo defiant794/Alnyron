@@ -9,17 +9,17 @@ export type BadgeProps = ComponentPropsWithRef<"span"> & {
 };
 
 // Tinted pills as in the approved admin mock (published = success tint,
-// draft = error tint), in the small text style. 8% tints keep the text at
-// >= 4.66:1 (success), >= 5.2:1 (error) and 5.8:1 (accent, info) on white;
-// neutral is 5.4:1. The accent pill is the MyLife login mock's "Kun for
-// godkendte brugere" in that mock's 12px type; a 20px line keeps the pill at
-// the mock's ~24px height. Info is the same accent tint as a status tone in
+// draft = error tint), in the small text style. The lighter 4% success tint
+// keeps green labels readable on both white and surface backgrounds. The
+// error and accent tones retain their 8% tints. The accent pill is the MyLife
+// login mock's "Kun for godkendte brugere" in that mock's 12px type; a 20px
+// line keeps the pill at the mock's ~24px height. Info is the same accent tint as a status tone in
 // the small text style (e.g. "Afventer bekræftelse" in Admin › Monitor-brugere).
 const TONES: Record<BadgeTone, string> = {
   draft: "text-small bg-error/8 text-error",
-  published: "text-small bg-success/8 text-success",
+  published: "text-small bg-success/4 text-success",
   neutral: "text-small bg-surface text-muted ring-1 ring-inset ring-border",
-  success: "text-small bg-success/8 text-success",
+  success: "text-small bg-success/4 text-success",
   error: "text-small bg-error/8 text-error",
   accent: "text-xs leading-5 bg-accent/8 text-accent",
   info: "text-small bg-accent/8 text-accent",

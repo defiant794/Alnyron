@@ -3,11 +3,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { parseSiteEnv } from "@/config/env";
 import { isMonitorHost, MONITOR_HOME_PATH, monitorSiteOrigin } from "@/config/monitor";
 import { isMyLifeHost, MYLIFE_HOME_PATH } from "@/config/mylife";
+import { ORDER_LOCALE_HEADER, orderLocale } from "@/i18n/order-locale";
 import { routing } from "@/i18n/routing";
 import { areaOfPath } from "@/lib/safe-next";
 import { updateSession } from "@/lib/supabase/middleware";
 
 const handleI18n = createMiddleware(routing);
+
+/** The goods order pages (`/order/thanks`, `/order/error`, `/order/withdraw`; src/config/payments.ts). */
+const ORDER_PATH = "/order";
 
 /**
  * Four branches that never mix (architecture §3), decided before next-intl
@@ -37,7 +41,10 @@ const handleI18n = createMiddleware(routing);
  *   carries one day: a rollback is never stuck in a browser cache for longer.
  *   Admin, MyLife and auth routes on that host (outside `[locale]`) go
  *   through the Supabase session refresh and the unauthenticated-area
- *   redirect, the only place cookies are set.
+ *   redirect, the only place cookies are set. The goods order pages
+ *   (`/order`, `/order/*`, also outside `[locale]`) pass through untouched:
+ *   no next-intl rewrite, no session, no cookies; only the request header
+ *   `ORDER_LOCALE_HEADER` is set from `?lang=` for their layout.
  * - Public routes go through next-intl only (locale-prefix rewrites
  *   (`/contact` -> `/da/contact`), `/da/*` -> unprefixed redirect). With
  *   `localeCookie: false` and `localeDetection: false` that branch sets no
@@ -67,6 +74,14 @@ export default async function middleware(request: NextRequest) {
     const response = NextResponse.redirect(target, 308);
     response.headers.set("Cache-Control", "public, max-age=86400");
     return response;
+  }
+  if (pathname === ORDER_PATH || pathname.startsWith(`${ORDER_PATH}/`)) {
+    // Overwrites any client-sent value: the layout trusts only this one (and whitelists it again).
+    // A repeated `lang` is Danish, as on the pages (their searchParams value is then an array).
+    const lang = request.nextUrl.searchParams.getAll("lang");
+    const headers = new Headers(request.headers);
+    headers.set(ORDER_LOCALE_HEADER, orderLocale(lang.length === 1 ? lang[0] : undefined));
+    return NextResponse.next({ request: { headers } });
   }
   if (isAuthRoute || areaOfPath(pathname)) return updateSession(request);
 

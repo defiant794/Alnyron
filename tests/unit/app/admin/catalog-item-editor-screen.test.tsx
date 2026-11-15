@@ -2,7 +2,8 @@
 /**
  * Unit test — item editor screen (src/app/admin/(panel)/catalog/items/item-editor-screen.tsx)
  * Journeys: catalog-section-fix, english-slugs
- * Acceptance IDs: AC-CATSEC-3, AC-ENSLUG-07, AC-ENSLUG-07b, AC-ENSLUG-07c
+ * Acceptance IDs: AC-CATSEC-3, AC-ENSLUG-07, AC-ENSLUG-07b, AC-ENSLUG-07c; S2-T-IE-OFR-12
+ * (payments-s2-3d-purchase: the server's offers-invalid message names the price range from config)
  *
  * "+ Nyt element" of another section is the same route (`items/new`) with
  * another `?category`, so a client-side navigation between two of them
@@ -17,6 +18,7 @@
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import type * as NextNavigation from "next/navigation";
 import type { ItemEditorItem } from "@/components/admin/ItemEditor";
@@ -43,6 +45,7 @@ vi.mock("@/app/admin/(panel)/catalog/items/[id]/media-actions", () => ({
 }));
 
 import ItemEditorScreen from "@/app/admin/(panel)/catalog/items/item-editor-screen";
+import { saveItemAction } from "@/app/admin/(panel)/catalog/items/actions";
 
 const m = da.Admin.catalog;
 const APPS_ID = "550e8400-e29b-41d4-a716-446655440010";
@@ -67,6 +70,7 @@ const PUBLISHED_ITEM: ItemEditorItem = {
     en: { slug: "pulse", title: "Pulse", summary: "", body_md: "", seo_title: "", seo_description: "" },
   },
   media: [],
+  offers: [],
 };
 
 /** The item `/admin/catalog/items/new?category=<categoryId>` edits. */
@@ -80,6 +84,7 @@ function newItem(categoryId: string): ItemEditorItem {
     externalLinks: {},
     translations: { da: null, en: null },
     media: [],
+    offers: [],
   };
 }
 
@@ -124,5 +129,27 @@ describe("AC-ENSLUG-07/07b: URL-slug field hints reflect the English-slug contra
     const enField = screen.getByLabelText("URL-slug (EN)");
     expect(enField).toHaveAccessibleDescription(/offentlige adresse på begge sprog/);
     expect(enField).not.toHaveAccessibleDescription(/—/);
+  });
+});
+
+describe("S2-T-IE-OFR-12: the offers-invalid message names the price range of the config", () => {
+  it("S2-T-IE-OFR-12: a server refusal shows the range from OFFER_PRICE_MIN_ORE/MAX_ORE, no raw placeholder", async () => {
+    const user = userEvent.setup();
+    vi.mocked(saveItemAction).mockResolvedValue({ ok: false, error: "offers-invalid" });
+    const models3d: AdminCatalogSection = {
+      id: "550e8400-e29b-41d4-a716-446655440030",
+      kind: "models3d",
+      status: "published",
+      title: "3D-figurer",
+      slug: "3d-figures",
+      publishedCount: 0,
+      draftCount: 0,
+    };
+    render(await ItemEditorScreen({ item: newItem(models3d.id), sections: [...SECTIONS, models3d] }));
+    await user.type(screen.getByLabelText("Titel (DA)"), "Drage");
+    await user.click(screen.getByRole("button", { name: m.item.saveDraft }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Salget kunne ikke gemmes. Prisen skal være mellem 2,50 og 50.000 kr., og den digitale udgave kan ikke sælges endnu.",
+    );
   });
 });

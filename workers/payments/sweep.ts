@@ -1,6 +1,7 @@
 import {
   PAYMENTS_SWEEP_CONSENT_SUBREQUESTS,
   PAYMENTS_SWEEP_LIMIT,
+  PAYMENTS_SWEEP_ORDER_SUBREQUESTS,
   PAYMENTS_SWEEP_SUBREQUEST_BUDGET,
   PAYMENTS_SWEEP_WITHDRAWAL_SUBREQUESTS,
   WITHDRAWAL_MAX_MAIL_ATTEMPTS,
@@ -9,6 +10,9 @@ import {
 import { sendConsentConfirmation } from "./consent";
 import { createWorkerDeps } from "./deps";
 import type { PaymentsEnv } from "./env";
+import { createOrderDeps } from "./orders/deps";
+import { parseOrdersEnv } from "./orders/env";
+import { ORDER_SWEEP_LOG_MSG, runOrderPass } from "./orders/sweep";
 import { processWithdrawal } from "./withdrawal";
 
 const LOG_MSG = "payments sweep";
@@ -45,8 +49,13 @@ function countingFetch(): { fetch: typeof fetch; count: () => number } {
  * they then take what is left. A run so makes at most 45 subrequests, under
  * the 50 Workers Free allows (per Cloudflare's limits docs as of 2026-11):
  * what is left waits for the next hour. Logs ids, outcomes and counts only.
+ *
+ * Then the goods pass (orders/sweep.ts `runOrderPass`, slice S2) with what is
+ * left of the budget, at most PAYMENTS_SWEEP_ORDER_SUBREQUESTS (12), only with
+ * a valid orders env (`parseOrdersEnv` of the Worker's `env`; else skipped and
+ * logged `orders_env_unavailable`).
  */
-export async function runSweep(config: PaymentsEnv): Promise<void> {
+export async function runSweep(config: PaymentsEnv, env: unknown): Promise<void> {
   const counter = countingFetch();
   const deps = createWorkerDeps(config, counter.fetch);
   const log = (fields: Record<string, string | number | boolean | null>) =>
@@ -64,13 +73,28 @@ export async function runSweep(config: PaymentsEnv): Promise<void> {
       charged += Math.max(counter.count() - before, reserve);
     }
   };
+  // Goods (slice S2) last, so it never starves the passes above: within what they left, at most its
+  // own cap. Skipped (logged) without a valid orders env.
+  const orderPass = async (): Promise<void> => {
+    let ordersEnv;
+    try {
+      ordersEnv = parseOrdersEnv(env);
+    } catch {
+      deps.log(JSON.stringify({ msg: ORDER_SWEEP_LOG_MSG, outcome: "skipped", code: "orders_env_unavailable" }));
+      return;
+    }
+    await runOrderPass(createOrderDeps(config, ordersEnv, counter.fetch), {
+      limit: Math.min(PAYMENTS_SWEEP_ORDER_SUBREQUESTS, PAYMENTS_SWEEP_SUBREQUEST_BUDGET - charged),
+      count: counter.count,
+    });
+  };
 
   let work;
   try {
     work = await run(1, () => deps.rpc.paymentsPendingWork(PAYMENTS_SWEEP_LIMIT, WITHDRAWAL_MAX_MAIL_ATTEMPTS));
   } catch {
     log({ outcome: "error", code: "pending_work_failed" });
-    return;
+    return orderPass();
   }
 
   let withdrawals = 0;
@@ -104,4 +128,5 @@ export async function runSweep(config: PaymentsEnv): Promise<void> {
     }
   }
   log({ outcome: "done", withdrawals, consents, budgetStop, subrequests: counter.count() });
+  await orderPass();
 }

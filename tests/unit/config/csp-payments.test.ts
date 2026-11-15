@@ -74,13 +74,16 @@ async function policies(): Promise<{ global: string; billing: string }> {
 
 describe("PAY1B-AC45: CSP form-action is 'self' everywhere; Stripe is added on the Monitor billing page only (B13)", () => {
   it(
-    "PAY1B-AC45a: three rules set the CSP, in this order: the catch-all (every path, every host), " +
-      "/monitor/billing (every host), /billing on the Monitor host",
+    "PAY1B-AC45a: five rules set the CSP, in this order: the catch-all (every path, every host), " +
+      "/monitor/billing (every host), /billing on the Monitor host, then the two S2 item-page rules",
     async () => {
       const rules = await headerRules();
       const positions = rules.flatMap((rule, index) => (cspOf(rule) === undefined ? [] : [index]));
-      // The catch-all comes first, so the billing rules win on the shared header key.
-      expect(positions.map((index) => ({ source: rules[index]!.source, has: rules[index]!.has }))).toEqual([
+      // The catch-all comes first, so the billing rules win on the shared header key. The S2
+      // goods rules (`/:section/:item`, `/en/:section/:item`) follow and are pinned by
+      // csp-goods.test.ts; they never match a billing path (S2-T-CSP-05 there, AC45e here).
+      expect(positions).toHaveLength(5);
+      expect(positions.slice(0, 3).map((index) => ({ source: rules[index]!.source, has: rules[index]!.has }))).toEqual([
         { source: "/:path*", has: undefined },
         { source: "/monitor/billing", has: undefined },
         { source: "/billing", has: MONITOR_HOST_HAS },
@@ -98,7 +101,7 @@ describe("PAY1B-AC45: CSP form-action is 'self' everywhere; Stripe is added on t
     "PAY1B-AC45c: both billing rules send the same CSP, whose only form-action is exactly " +
       "'self' https://checkout.stripe.com https://billing.stripe.com, and set no other header",
     async () => {
-      const [, ...billingRules] = await cspRules();
+      const billingRules = (await cspRules()).slice(1, 3);
       expect(billingRules).toHaveLength(2);
       for (const rule of billingRules) {
         expect(rule.headers.map(({ key }) => key)).toEqual(["Content-Security-Policy"]);

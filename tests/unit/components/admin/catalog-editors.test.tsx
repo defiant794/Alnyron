@@ -91,6 +91,7 @@ const ITEM_LABELS: ItemEditorProps["labels"] = {
     moveDown: m.media.moveDown,
     counts: Array.from({ length: 9 }, (_, count) => `${count} af 8`),
   },
+  offers: m.item.offers,
 };
 
 const NEW_ITEM: ItemEditorProps["item"] = {
@@ -102,6 +103,7 @@ const NEW_ITEM: ItemEditorProps["item"] = {
   externalLinks: {},
   translations: { da: null, en: null },
   media: [],
+  offers: [],
 };
 
 const translation = (slug: string, title: string) => ({
@@ -132,7 +134,7 @@ function renderItem(item: ItemEditorProps["item"]) {
   return render(
     <ItemEditor
       item={item}
-      sections={[{ id: CAT_ID, title: "Apps" }]}
+      sections={[{ id: CAT_ID, title: "Apps", kind: "apps" }]}
       previewHref={null}
       sectionHref={`/admin/catalog/categories/${CAT_ID}`}
       save={save}
@@ -321,8 +323,8 @@ function renderItemMultiSection(item: ItemEditorProps["item"]) {
     <ItemEditor
       item={item}
       sections={[
-        { id: CAT_ID, title: "Apps" },
-        { id: CAT2_ID, title: "Hjemmesider" },
+        { id: CAT_ID, title: "Apps", kind: "apps" },
+        { id: CAT2_ID, title: "Hjemmesider", kind: "websites" },
       ]}
       previewHref={null}
       sectionHref={`/admin/catalog/categories/${CAT_ID}`}

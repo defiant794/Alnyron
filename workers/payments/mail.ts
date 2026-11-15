@@ -70,25 +70,37 @@ export type MailerConfig = {
   fetchImpl?: typeof fetch;
 };
 
+/**
+ * Sends `content` to `to` from `mailFrom` with the Resend key under
+ * `idempotencyKey`: the email's Resend id, {@link REPLAYED_EMAIL_ID} when
+ * Resend answers that the key was already used with another body, else a
+ * {@link MailError}. Shared by this mailer and the goods mailer (orders/mail.ts).
+ */
+export async function sendMail(
+  config: Pick<MailerConfig, "resendApiKey" | "mailFrom" | "fetchImpl">,
+  to: string,
+  content: EmailContent,
+  idempotencyKey: string,
+): Promise<{ id: string }> {
+  const result = await sendEmail(
+    config.resendApiKey,
+    { from: config.mailFrom, to, subject: content.subject, html: content.html, text: content.text },
+    idempotencyKey,
+    config.fetchImpl,
+  );
+  if (!result.ok) {
+    if (result.kind === "replayed") return { id: REPLAYED_EMAIL_ID };
+    throw new MailError(result.kind);
+  }
+  // Resend answered 2xx without an id: the stamp still needs one (1 to 200 characters).
+  return { id: result.id === "" ? "unknown" : result.id };
+}
+
 /** A {@link Mailer} sending from `mailFrom` with the Resend key. */
 export function createMailer(config: MailerConfig): Mailer {
   const siteOrigin = new URL(config.siteUrl).origin;
   const withdrawUrl = `${monitorSiteOrigin(config.siteUrl)}${MONITOR_WITHDRAW_PATH}`;
-
-  const send = async (to: string, content: EmailContent, idempotencyKey: string): Promise<{ id: string }> => {
-    const result = await sendEmail(
-      config.resendApiKey,
-      { from: config.mailFrom, to, subject: content.subject, html: content.html, text: content.text },
-      idempotencyKey,
-      config.fetchImpl,
-    );
-    if (!result.ok) {
-      if (result.kind === "replayed") return { id: REPLAYED_EMAIL_ID };
-      throw new MailError(result.kind);
-    }
-    // Resend answered 2xx without an id: the stamp still needs one (1 to 200 characters).
-    return { id: result.id === "" ? "unknown" : result.id };
-  };
+  const send = (to: string, content: EmailContent, idempotencyKey: string) => sendMail(config, to, content, idempotencyKey);
 
   return {
     sendConfirmationEmail({ to, mail, idempotencyKey }) {

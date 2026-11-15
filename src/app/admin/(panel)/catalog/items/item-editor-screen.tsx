@@ -12,9 +12,11 @@ import Badge from "@/components/ui/Badge";
 import { ADMIN_CATALOG_PATH, adminCategoryPath } from "@/config/admin";
 import { AUTH_LOCALE } from "@/config/auth-areas";
 import { MEDIA_MAX_PER_ITEM, URL_SLUG_LOCALE } from "@/config/catalog";
+import { OFFER_PRICE_MAX_ORE, OFFER_PRICE_MIN_ORE } from "@/config/payments";
 import { loadMessages } from "@/i18n/messages";
 import { getPathname } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
+import { formatKroner } from "@/lib/payments/money";
 import type { AdminCatalogSection } from "@/services/admin/catalog-read";
 
 export type ItemEditorScreenProps = {
@@ -37,6 +39,11 @@ export default async function ItemEditorScreen({ item, sections }: ItemEditorScr
   const itemTitle = item.translations.da?.title;
   const title = item.id && itemTitle ? itemTitle : t("item.newTitle");
   const urlSlug = item.translations[URL_SLUG_LOCALE]?.slug;
+  // The offer price range in the "Salg" hint and errors, from the item_offers.price_ore CHECK's mirror.
+  const offerRange = {
+    min: formatKroner(OFFER_PRICE_MIN_ORE, AUTH_LOCALE),
+    max: formatKroner(OFFER_PRICE_MAX_ORE, AUTH_LOCALE),
+  };
   // The public item page exists only while the item and its section are published; its
   // address uses the English slugs on every locale.
   const previewHref =
@@ -82,7 +89,11 @@ export default async function ItemEditorScreen({ item, sections }: ItemEditorScr
       <ItemEditor
         key={item.id ?? `new-${item.categoryId}`}
         item={item}
-        sections={sections.map((candidate) => ({ id: candidate.id, title: sectionTitle(candidate) }))}
+        sections={sections.map((candidate) => ({
+          id: candidate.id,
+          title: sectionTitle(candidate),
+          kind: candidate.kind,
+        }))}
         previewHref={previewHref}
         sectionHref={adminCategoryPath(item.categoryId)}
         save={saveItemAction}
@@ -131,7 +142,7 @@ export default async function ItemEditorScreen({ item, sections }: ItemEditorScr
           savedDraft: t("item.savedDraft"),
           published: t("item.published"),
           hidden: t("item.hidden"),
-          errors: messages.errors,
+          errors: { ...messages.errors, "offers-invalid": t("errors.offers-invalid", offerRange) },
           media: {
             heading: media.heading,
             saveFirst: media.saveFirst,
@@ -152,6 +163,11 @@ export default async function ItemEditorScreen({ item, sections }: ItemEditorScr
             counts: Array.from({ length: MEDIA_MAX_PER_ITEM + 1 }, (_, count) =>
               t("media.count", { count, max: MEDIA_MAX_PER_ITEM }),
             ),
+          },
+          offers: {
+            ...messages.item.offers,
+            priceHint: t("item.offers.priceHint", offerRange),
+            errors: { ...messages.item.offers.errors, "price-range": t("item.offers.errors.price-range", offerRange) },
           },
         }}
       />

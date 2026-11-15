@@ -61,6 +61,12 @@
       "title": "Interested?",
       "text": "Write to us, and we will get back to you with a no-obligation quote.",
       "button": "Contact us"
+    },
+    "offer": {
+      "label": "Buy as a 3D print",
+      "price": "{amount} kr.",
+      "buy": "Buy",
+      "buyPending": "Taking you to payment …"
     }
   },
   "Auth": {
@@ -375,6 +381,58 @@
         "window_expired": "The withdrawal period has expired.",
         "unavailable": "We couldn't take your withdrawal right now. Please try again shortly."
       }
+    }
+  },
+  "Order": {
+    "home": "Go to the front page",
+    "thanks": {
+      "metaTitle": "Thank you for your order",
+      "title": "Thank you for your order",
+      "confirmation": "We will send an order confirmation to your email. It is also your invoice and shows the order number, the delivery address and your right of withdrawal."
+    },
+    "error": {
+      "metaTitle": "Payment could not be started",
+      "title": "Payment could not be started",
+      "generic": "An error occurred, and you have not been charged. Please try again shortly.",
+      "busy": "There have been too many attempts, please try again shortly. You have not been charged.",
+      "notPurchasable": "The item cannot be bought right now. You have not been charged."
+    },
+    "withdraw": {
+      "metaTitle": "Withdraw purchase",
+      "title": "Withdraw purchase",
+      "leadForm": "Enter the details from your order confirmation. You confirm the withdrawal in the next step.",
+      "leadLink": "Enter your name. You confirm the withdrawal in the next step.",
+      "orderNumber": "Order number",
+      "email": "Email used for the purchase",
+      "name": "Your name",
+      "nameHint": "Your full name, at most 200 characters.",
+      "nameMissing": "Enter your name.",
+      "start": "Withdraw from the contract here",
+      "confirmTitle": "Confirm withdrawal",
+      "summaryName": "Name",
+      "summaryOrderNumber": "Order number",
+      "summaryEmail": "Email",
+      "summaryOrder": "Order",
+      "summaryOrderLink": "From your personal link",
+      "confirm": "Confirm withdrawal",
+      "back": "Back",
+      "sending": "Sending …",
+      "returnHeading": "Returns",
+      "noticeToggle": "Read the full withdrawal information",
+      "receivedTitle": "We have received your withdrawal",
+      "receivedReceipt": "You will receive a receipt at the order's email address.",
+      "receivedNotShipped": "If the goods have not been sent yet, we will not send them, and you do not need to return anything. The receipt tells you what applies to your order.",
+      "refused": "We could not find an order with those details. Check the order number and email in your order confirmation, or write to us.",
+      "busy": "Too many attempts right now. Wait a moment and try again.",
+      "unavailable": "Online withdrawal is not available right now. Please try again shortly, or tell us by email.",
+      "retry": "Try again"
+    },
+    "terms": {
+      "subscriptionModelFormLabel": "Model withdrawal form, subscription",
+      "goodsModelFormLabel": "Model withdrawal form, 3D figures",
+      "noticeHeading": "Withdrawal information",
+      "returnHeading": "Return address",
+      "withdrawLink": "Withdraw a purchase of goods"
     }
   }
 }

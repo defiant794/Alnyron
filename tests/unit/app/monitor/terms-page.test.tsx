@@ -100,7 +100,8 @@ describe("WD-J3-C04 (WD-T-TERMS-03): /terms page — body contains legal section
 
   it("WD-T-TERMS-03b: contains withdrawal notice text (fortrydelsesret)", async () => {
     await renderTerms("da");
-    expect(screen.getByRole("heading", { name: "Fortrydelsesret" })).toBeInTheDocument();
+    // The subscription notice's heading comes first; the goods part (S2) adds its own "Fortrydelsesret" clause later.
+    expect(screen.getAllByRole("heading", { name: "Fortrydelsesret" })[0]).toBeInTheDocument();
     expect(document.body.textContent ?? "").toContain(
       "Du har ret til at fortryde din aftale om Monitor-abonnement uden begrundelse inden for 14 dage.",
     );
@@ -108,7 +109,8 @@ describe("WD-J3-C04 (WD-T-TERMS-03): /terms page — body contains legal section
 
   it("WD-T-TERMS-03c: contains the model form heading (Standardfortrydelsesformular)", async () => {
     await renderTerms("da");
-    expect(screen.getByRole("heading", { name: "Standardfortrydelsesformular" })).toBeInTheDocument();
+    // The subscription's model form comes first; the goods part (S2) has its own one later.
+    expect(screen.getAllByRole("heading", { name: "Standardfortrydelsesformular" })[0]).toBeInTheDocument();
   });
 
   it(`WD-T-TERMS-03d: version footer line contains '${WITHDRAWAL_TEXT_VERSION}'`, async () => {

@@ -6,6 +6,7 @@ import {
   type ExternalLinkKey,
   type PriceType,
 } from "@/config/catalog";
+import { OFFER_KINDS, type OfferKind } from "@/config/payments";
 import type { Price } from "@/lib/format-price";
 import { createServerClient } from "@/lib/supabase/server";
 import { uuidSchema } from "@/lib/validation/catalog";
@@ -79,6 +80,13 @@ export interface AdminItemMedia {
   altEn: string;
 }
 
+/** One way the item is sold (`item_offers`): kind, price in øre incl. moms and delivery, and whether it can be bought. */
+export interface AdminItemOffer {
+  kind: OfferKind;
+  priceOre: number;
+  active: boolean;
+}
+
 /** An item loaded for the item editor. */
 export interface AdminItemDetail {
   id: string;
@@ -92,6 +100,8 @@ export interface AdminItemDetail {
   /** `null` for a locale without a row (an item always has a Danish one). */
   translations: Record<Locale, AdminItemTranslation | null>;
   media: AdminItemMedia[];
+  /** The item's offers, physical first; empty when it is not sold. */
+  offers: AdminItemOffer[];
 }
 
 /**
@@ -196,8 +206,8 @@ export async function getCategoryForEdit(id: string): Promise<AdminCategoryDetai
 }
 
 /**
- * An item with both locales and its images (by `sort_order`) for the item
- * editor, or `null` when `id` names no item.
+ * An item with both locales, its images (by `sort_order`) and its offers
+ * for the item editor, or `null` when `id` names no item.
  *
  * @throws when the query fails.
  */
@@ -210,7 +220,8 @@ export async function getItemForEdit(id: string): Promise<AdminItemDetail | null
     .select(
       `id, category_id, status, featured, price_type, price_amount, external_links,
        item_translations(locale, slug, title, summary, body_md, seo_title, seo_description),
-       media(id, storage_path, alt_da, alt_en, sort_order, created_at)`,
+       media(id, storage_path, alt_da, alt_en, sort_order, created_at),
+       item_offers(kind, price_ore, active)`,
     )
     .eq("id", id)
     .maybeSingle();
@@ -243,6 +254,11 @@ export async function getItemForEdit(id: string): Promise<AdminItemDetail | null
     media: data.media
       .toSorted((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at))
       .map((row) => ({ id: row.id, path: row.storage_path, altDa: row.alt_da, altEn: row.alt_en })),
+    offers: OFFER_KINDS.flatMap((kind) =>
+      data.item_offers
+        .filter((row) => row.kind === kind)
+        .map((row) => ({ kind, priceOre: row.price_ore, active: row.active })),
+    ),
   };
 }
 

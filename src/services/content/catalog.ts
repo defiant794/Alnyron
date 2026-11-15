@@ -51,6 +51,17 @@ export interface PublicCatalogItem {
   seo: CatalogSeo;
   /** Fields shown from the Danish row (`"title"`, `"summary"`, `"bodyMd"`): render with `lang="da"`. */
   fallbackKeys: string[];
+  /**
+   * The item's active physical offer (a 3D figure for sale, price in øre incl.
+   * moms and delivery): the item page shows that price and the Buy form instead
+   * of the display price. `null` when nothing is for sale.
+   */
+  offer: CatalogOffer | null;
+}
+
+/** What a catalog item sells for: its active physical offer (`item_offers`). */
+export interface CatalogOffer {
+  priceOre: number;
 }
 
 /** A public catalog section (category page), resolved for one locale. */
@@ -107,15 +118,16 @@ const SECTION_SELECT = `id, kind, status,
   category_translations(locale, title, description, seo_title, seo_description),
   items(id, status, sort_order, featured, price_type, price_amount, price_currency, external_links,
     item_translations(locale, slug, title, summary, body_md, seo_title, seo_description),
-    media(id, storage_path, alt_da, alt_en, width, height, sort_order)),
+    media(id, storage_path, alt_da, alt_en, width, height, sort_order),
+    item_offers(kind, price_ore, active)),
   match:routes!inner(locale, slug)`;
 
 /**
  * The category whose URL slug is `slug`, with its translations and items.
  * Anonymous RLS returns it only when it is published and holds a
- * published item, and embeds only published items and their media. The slug
- * is the same on every locale, so a request's pages (and their
- * `generateMetadata`) share one cached query.
+ * published item, and embeds only published items, their media and their
+ * active offers. The slug is the same on every locale, so a request's pages
+ * (and their `generateMetadata`) share one cached query.
  *
  * @throws when the query fails, so a broken read never caches a 404.
  */
@@ -357,7 +369,18 @@ function toItem(
       description: seo.description.trim() || text.value.summary,
     },
     fallbackKeys: text.fallbackKeys,
+    offer: toOffer(row.item_offers),
   };
+}
+
+/**
+ * The item's active physical offer, or `null`. Anonymous RLS embeds only
+ * active offers of public items; an inactive or digital row (digital is never
+ * sold yet: `item_offers_digital_not_live`) is ignored all the same.
+ */
+function toOffer(offers: ItemRow["item_offers"]): CatalogOffer | null {
+  const physical = offers.find((offer) => offer.kind === "physical" && offer.active);
+  return physical ? { priceOre: physical.price_ore } : null;
 }
 
 /**

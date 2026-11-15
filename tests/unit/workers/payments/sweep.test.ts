@@ -122,7 +122,7 @@ describe("WD-J7-C05 (WD-T-WK-18): the sweep counts real subrequests (A8)", () =>
   it("WD-T-WK-18b: reads pending work with the list limit and the mail attempt cap (one subrequest)", async () => {
     const requests = fakeNetwork({ withdrawals: [], consents: [] });
     passesMaking([0]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     expect(requests).toEqual([
       {
         method: "POST",
@@ -136,7 +136,7 @@ describe("WD-J7-C05 (WD-T-WK-18): the sweep counts real subrequests (A8)", () =>
   it("WD-T-WK-18c: every pass makes 13 → 3 passes, 40 subrequests", async () => {
     const requests = fakeNetwork({ withdrawals: ids(20), consents: [] });
     const started = passesMaking([13]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     // 1 + 13 + 13 + 13 = 40; a fourth needs 40 + 15 > 45.
     expect(started).toEqual(ids(3));
     expect(requests).toHaveLength(40);
@@ -149,7 +149,7 @@ describe("WD-J7-C05 (WD-T-WK-18): the sweep counts real subrequests (A8)", () =>
     const requests = fakeNetwork({ withdrawals: ids(20), consents: [] });
     // 1 + 14 + 15 = 30 charged, then a third pass fits (30 + 15 = 45) and makes 15; a fourth needs 60.
     const started = passesMaking([14, 15, 15]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     expect(started).toEqual(ids(3));
     expect(requests).toHaveLength(45);
     expect(doneLine(log)).toMatchObject({ withdrawals: 3, consents: 0, budgetStop: true, subrequests: 45 });
@@ -158,7 +158,7 @@ describe("WD-J7-C05 (WD-T-WK-18): the sweep counts real subrequests (A8)", () =>
   it("WD-T-WK-18e: a pass making fewer than its reserve is still charged 10: 3 passes of 2 calls each, then a stop", async () => {
     const requests = fakeNetwork({ withdrawals: ids(20), consents: [] });
     const started = passesMaking([2]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     // 1 → 11 → 21 → 31 charged; a fourth needs 31 + 15 > 45 (charged its real 2, it would start).
     expect(started).toEqual(ids(3));
     expect(requests).toHaveLength(1 + 3 * 2);
@@ -168,7 +168,7 @@ describe("WD-J7-C05 (WD-T-WK-18): the sweep counts real subrequests (A8)", () =>
   it("WD-T-WK-18f: every pass makes the worst case 15 → each is charged its real 15: 2 passes, 31 subrequests", async () => {
     const requests = fakeNetwork({ withdrawals: ids(20), consents: [] });
     const started = passesMaking([15]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     // 1 + 15 + 15 = 31; a third needs 31 + 15 > 45. Charged its reserve 10, a third would start at 21 and the run make 46.
     expect(started).toEqual(ids(2));
     expect(requests).toHaveLength(31);
@@ -182,7 +182,7 @@ describe("WD-J7-C03 (WD-T-WK-16b): a full withdrawal list never starves the orde
   it("WD-T-WK-16c: 20 withdrawals + 2 confirmations → passes leave room for a pass's worst case and a confirmation (15 + 4): 3 passes, then both confirmations", async () => {
     const requests = fakeNetwork({ withdrawals: ids(20), consents: [consentMail(1), consentMail(2)] });
     const started = passesMaking([10]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     // 1 + 3 × 10 = 31; a fourth pass needs 31 + 15 + 4 > 45; the confirmations fit (35, 39).
     expect(started).toEqual(ids(3));
     const confirmation = requests.slice(31, 34);
@@ -201,7 +201,7 @@ describe("WD-J7-C03 (WD-T-WK-16b): a full withdrawal list never starves the orde
     const requests = fakeNetwork({ withdrawals: ids(20), consents: [consentMail(1)] });
     // 1 → 11 → 26 (26 + 15 + 4 = 45: the third pass starts) → 41; a fourth needs 60; the confirmation 45.
     const started = passesMaking([10, 15, 15]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     expect(started).toEqual(ids(3));
     expect(requests.filter(({ url }) => url.endsWith("/rpc/payments_mark_consent_info_sent")).map(({ body }) => body)).toEqual([
       { p_checkout_session_id: "cs_test_sweep1", p_email_id: "email-43" },
@@ -214,7 +214,7 @@ describe("WD-J7-C03 (WD-T-WK-16b): a full withdrawal list never starves the orde
   it("WD-T-WK-16d: no confirmation waiting → passes of 11 run 3 times (1 + 33 = 34; a fourth needs 34 + 15 > 45)", async () => {
     const requests = fakeNetwork({ withdrawals: ids(20), consents: [] });
     const started = passesMaking([11]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     expect(started).toEqual(ids(3));
     expect(requests).toHaveLength(34);
     expect(doneLine(log)).toMatchObject({ withdrawals: 3, consents: 0, budgetStop: true, subrequests: 34 });
@@ -223,7 +223,7 @@ describe("WD-J7-C03 (WD-T-WK-16b): a full withdrawal list never starves the orde
   it("WD-T-WK-16e: the same passes with two confirmations waiting → 3 passes (34 + 15 + 4 > 45), then both confirmations", async () => {
     const requests = fakeNetwork({ withdrawals: ids(20), consents: [consentMail(1), consentMail(2)] });
     const started = passesMaking([11]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     expect(started).toEqual(ids(3));
     const stamps = requests.filter(({ url }) => url.endsWith("/rpc/payments_mark_consent_info_sent"));
     expect(stamps.map(({ body }) => body)).toEqual([
@@ -238,7 +238,7 @@ describe("WD-J7-C03 (WD-T-WK-16b): a full withdrawal list never starves the orde
   it("WD-T-WK-16g: passes of 13 with one confirmation waiting → 2 passes (27 + 15 + 4 > 45; with none waiting 3 run, WD-T-WK-18c), then the confirmation", async () => {
     const requests = fakeNetwork({ withdrawals: ids(20), consents: [consentMail(1)] });
     const started = passesMaking([13]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     // 1 + 13 + 13 = 27; the confirmation's lookup, send and stamp are subrequests 28, 29 and 30.
     expect(started).toEqual(ids(2));
     expect(requests.filter(({ url }) => url.endsWith("/rpc/payments_mark_consent_info_sent")).map(({ body }) => body)).toEqual([
@@ -257,7 +257,7 @@ describe("WD-J2-C03 (WD-T-WH-05b): a confirmation Resend answers as a replay of 
       () => new Response(JSON.stringify({ name: "invalid_idempotent_request" }), { status: 409 }),
     );
     passesMaking([0]);
-    await runSweep(CONFIG);
+    await runSweep(CONFIG, {});
     expect(requests.filter(({ url }) => url.endsWith("/rpc/payments_mark_consent_info_sent")).map(({ body }) => body)).toEqual([
       { p_checkout_session_id: "cs_test_sweep1", p_email_id: "idempotent_replay" },
     ]);

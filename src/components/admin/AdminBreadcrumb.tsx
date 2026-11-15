@@ -31,7 +31,7 @@ export default function AdminBreadcrumb({ label, items }: AdminBreadcrumbProps) 
             )}
             <li>
               {item.href ? (
-                <Link href={item.href} className="inline-flex min-h-11 items-center">
+                <Link href={item.href} className="inline-flex min-h-11 min-w-11 items-center">
                   {item.label}
                 </Link>
               ) : (

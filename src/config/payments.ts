@@ -182,3 +182,110 @@ export const WITHDRAWAL_PASS_MAX_SUBREQUESTS = 15;
 
 /** The subrequests a sweep reserves for one order confirmation (account email lookup, send, stamp, spare). */
 export const PAYMENTS_SWEEP_CONSENT_SUBREQUESTS = 4;
+
+// Goods (slice S2: one-time purchase of a physical 3D figure, Denmark only) ----------------------
+
+/**
+ * `metadata.kind` of every goods Checkout Session (and of its PaymentIntent);
+ * the webhook Worker routes a `mode=payment` session tagged with it to the
+ * goods branch.
+ */
+export const GOODS_ORDER_KIND = "goods_order";
+
+/** What an item may be sold as (`item_offers.kind`): a physical print, or (not live yet) a digital file. */
+export const OFFER_KINDS = ["physical", "digital"] as const;
+
+export type OfferKind = (typeof OFFER_KINDS)[number];
+
+/** The lowest offer price in øre (2,50 kr incl. moms), the `item_offers.price_ore` CHECK. */
+export const OFFER_PRICE_MIN_ORE = 250;
+
+/** The highest offer price in øre (50.000 kr incl. moms), the `item_offers.price_ore` CHECK. */
+export const OFFER_PRICE_MAX_ORE = 5_000_000;
+
+/**
+ * Days added to an order's `shipped_at` as the presumed delivery day when the
+ * goods withdrawal period is computed (`private.goods_transit_allowance()`;
+ * the period runs from receipt, which the shop does not record).
+ */
+export const GOODS_TRANSIT_ALLOWANCE_DAYS = 7;
+
+/**
+ * Hours before an unshipped order's card authorization lapses
+ * (`orders.authorization_expires_at`, Stripe's `capture_before`, 7 days after
+ * Checkout) when the owner is warned once to ship it or lose the payment
+ * (`payments_pending_order_work`'s `orders_capture_warning`, which hardcodes
+ * the same 48 hours).
+ */
+export const ORDER_CAPTURE_WARNING_HOURS = 48;
+
+/**
+ * A goods order's status (`orders.status`, amendment A1, charge on
+ * dispatch): `authorized` at Checkout (nothing charged yet) → `shipped`
+ * ("Markér afsendt" captured the payment) → `refunded` (after a withdrawal);
+ * or `canceled` before dispatch (the authorization was released or lapsed).
+ */
+export const ORDER_STATUSES = ["authorized", "shipped", "refunded", "canceled"] as const;
+
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+/**
+ * A goods withdrawal's status (`order_withdrawals.status`): `received` (the
+ * owner has to approve it), `approved` (the refund or release is under way),
+ * `completed`, or `needs_manual` (Stripe refused it, or the retries ran out).
+ */
+export const ORDER_WITHDRAWAL_STATUSES = ["received", "approved", "completed", "needs_manual"] as const;
+
+export type OrderWithdrawalStatus = (typeof ORDER_WITHDRAWAL_STATUSES)[number];
+
+/** Why an order was canceled (`orders.cancel_reason`): withdrawn before dispatch, its authorization lapsed, or by the shop. */
+export const ORDER_CANCEL_REASONS = ["withdrawn", "authorization_expired", "owner"] as const;
+
+export type OrderCancelReason = (typeof ORDER_CANCEL_REASONS)[number];
+
+/** What the owner confirms when approving a withdrawal (`order_withdrawals.goods_state`): the goods came back, or were never sent. */
+export const ORDER_GOODS_STATES = ["returned", "not_shipped"] as const;
+
+export type OrderGoodsState = (typeof ORDER_GOODS_STATES)[number];
+
+/** The subrequests a sweep's order pass (missing order mails, capture warnings, withdrawal mails, refunds and releases) may make at most. */
+export const PAYMENTS_SWEEP_ORDER_SUBREQUESTS = 12;
+
+/**
+ * The item page's Buy form action (`POST`, fields `item_id` and `locale`): the
+ * route handler that has the payments Worker start a goods Checkout.
+ */
+export const GOODS_CHECKOUT_ROUTE = "/api/checkout/item";
+
+/** Back from a completed goods Checkout (`success_url`, `?lang=`): "Tak for din bestilling". */
+export const ORDER_THANKS_PATH = "/order/thanks";
+
+/** The /order pages' robots value (thanks, error, withdraw): never indexed. */
+export const ORDER_ROBOTS = "noindex, nofollow";
+
+/** A goods Checkout could not be started (`?lang=&reason=`). */
+export const ORDER_ERROR_PATH = "/order/error";
+
+/**
+ * The `?reason=` values of {@link ORDER_ERROR_PATH}, the only ones the page
+ * reads (anything else shows the generic message): over the per-IP rate
+ * limit, the item has no active offer, the payments Worker could not start a
+ * Checkout.
+ */
+export const ORDER_ERROR_REASONS = ["busy", "not_purchasable", "unavailable"] as const;
+
+export type OrderErrorReason = (typeof ORDER_ERROR_REASONS)[number];
+
+/** The online withdrawal function for goods ("Fortryd aftale her"; `?o=&t=&lang=` from the personal link). */
+export const ORDER_WITHDRAW_PATH = "/order/withdraw";
+
+/**
+ * The `?state=` values of {@link ORDER_WITHDRAW_PATH} after "Bekræft
+ * fortrydelse": the notice was received; one generic refusal for every
+ * identification failure (no such order, wrong email, bad link, not
+ * withdrawable) and every invalid form; over the per-IP rate limit; the
+ * payments Worker could not be reached.
+ */
+export const ORDER_WITHDRAW_STATES = ["received", "refused", "busy", "unavailable"] as const;
+
+export type OrderWithdrawState = (typeof ORDER_WITHDRAW_STATES)[number];

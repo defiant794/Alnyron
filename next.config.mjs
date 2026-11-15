@@ -15,6 +15,14 @@ const MONITOR_BILLING_PATH = "/monitor/billing";
 // lowercased Host header without its port.
 const MONITOR_HOST = "monitor\\.(?:alnyron\\.dk|localhost)\\.?";
 
+// The MyLife host, the same way (`isMyLifeHost`, `config/mylife.ts`).
+const MYLIFE_HOST = "mylife\\.(?:alnyron\\.dk|localhost)\\.?";
+
+// A public catalog item page's section segment: any first segment except an
+// area (admin, auth, mylife, monitor), the API, the goods order pages and a
+// locale prefix, so `/:section/:item` never matches those paths.
+const ITEM_SECTION = ":section((?!(?:admin|auth|api|monitor|mylife|order|en|da)/)[^/]+)";
+
 // Points next-intl's server APIs at the per-request config (locale + messages).
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
@@ -51,12 +59,17 @@ const mediaUploadConnectSrc = process.env.NEXT_PUBLIC_SUPABASE_URL
 // The Monitor billing page's Server Actions answer a form POST with a redirect
 // to Stripe's hosted Checkout or Billing Portal, which browsers check against
 // the page's form-action. Only that page's policy adds the two Stripe origins;
-// every other page keeps form-action 'self'.
+// every other page keeps form-action 'self', except the public item pages,
+// which add Checkout alone (GOODS_FORM_ACTION).
 const STRIPE_FORM_ACTION = "https://checkout.stripe.com https://billing.stripe.com";
+
+// The item page's Buy form posts to /api/checkout/item, which answers with a
+// 303 to Stripe's hosted Checkout (never the Billing Portal).
+const GOODS_FORM_ACTION = "https://checkout.stripe.com";
 
 /**
  * The site's Content-Security-Policy with `formAction` as the form-action
- * source list. Both policies come from here, so they differ in nothing else.
+ * source list. Every policy comes from here, so they differ in nothing else.
  */
 function contentSecurityPolicy(formAction) {
   return [
@@ -76,6 +89,7 @@ function contentSecurityPolicy(formAction) {
 
 const csp = contentSecurityPolicy("'self'");
 const billingCsp = contentSecurityPolicy(`'self' ${STRIPE_FORM_ACTION}`);
+const goodsCsp = contentSecurityPolicy(`'self' ${GOODS_FORM_ACTION}`);
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {
@@ -108,6 +122,27 @@ const nextConfig = {
         has: [{ type: "host", value: MONITOR_HOST }],
         headers: [{ key: "Content-Security-Policy", value: billingCsp }],
       },
+      // The public catalog item pages on the main site (`/:section/:item`,
+      // `/en/:section/:item`; ITEM_SECTION never matches an area, the API,
+      // /order or a locale prefix): the same CSP with Stripe's Checkout in
+      // form-action for the Buy form. Not on the Monitor and MyLife hosts,
+      // which serve only their own area.
+      {
+        source: `/${ITEM_SECTION}/:item`,
+        missing: [
+          { type: "host", value: MONITOR_HOST },
+          { type: "host", value: MYLIFE_HOST },
+        ],
+        headers: [{ key: "Content-Security-Policy", value: goodsCsp }],
+      },
+      {
+        source: `/en/${ITEM_SECTION}/:item`,
+        missing: [
+          { type: "host", value: MONITOR_HOST },
+          { type: "host", value: MYLIFE_HOST },
+        ],
+        headers: [{ key: "Content-Security-Policy", value: goodsCsp }],
+      },
       {
         source: "/admin/:path*",
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
@@ -139,7 +174,7 @@ const nextConfig = {
       // matches `^value$` against the lowercased Host header without its port.
       {
         source: "/:path*",
-        has: [{ type: "host", value: "mylife\\.(?:alnyron\\.dk|localhost)\\.?" }],
+        has: [{ type: "host", value: MYLIFE_HOST }],
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
       // The Monitor host likewise, every page there (the public landing and

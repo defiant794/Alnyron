@@ -9,6 +9,7 @@ import {
   ADMIN_CATALOG_PATH,
   ADMIN_HOME_PATH,
   ADMIN_MONITOR_USERS_PATH,
+  ADMIN_ORDERS_PATH,
   ADMIN_PAGES_PATH,
   adminCatalogKindPath,
 } from "@/config/admin";
@@ -72,6 +73,7 @@ export default async function AdminShell({ user, children }: AdminShellProps) {
               },
               { href: ADMIN_PAGES_PATH, label: t("nav.pages") },
               { href: ADMIN_MONITOR_USERS_PATH, label: t("nav.monitorUsers") },
+              { href: ADMIN_ORDERS_PATH, label: t("nav.orders") },
             ]}
           />
           <AdminAccount user={user} variant="sidebar" labels={accountLabels} />

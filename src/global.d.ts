@@ -1,4 +1,5 @@
 import type { routing } from "@/i18n/routing";
+import type { OrderServiceInput } from "@/lib/payments/orders/service-contract";
 import type { WithdrawInput } from "@/lib/payments/withdrawal-contract";
 import type da from "../messages/da.json";
 
@@ -19,7 +20,8 @@ declare global {
   interface CloudflareEnv {
     /**
      * Workers Rate Limiting binding (wrangler.jsonc `ratelimits`): the
-     * per-user throttle on the Monitor billing actions
+     * per-user throttle on the Monitor billing actions and the per-IP
+     * throttle on the goods Buy route and withdrawal action
      * (src/lib/payments/rate-limit.ts). Typed by hand like
      * @cloudflare/workers-types' `RateLimit`, which this repo does not load.
      */
@@ -36,6 +38,21 @@ declare global {
      */
     PAYMENTS?: {
       withdraw(input: WithdrawInput): Promise<unknown>;
+    };
+    /**
+     * Service binding to the payments Worker's `OrderService` RPC entrypoint
+     * (wrangler.jsonc `services`, workers/payments/orders/service.ts): the
+     * only way the web app starts a goods Checkout, sends a goods withdrawal
+     * or ships/refunds an order (src/lib/payments/orders/binding.ts). Each
+     * answer is `unknown` until `parseOrderServiceResult` has checked it.
+     * Absent (no binding in this Worker or dev proxy) → the caller answers
+     * `unavailable`.
+     */
+    ORDERS?: {
+      startCheckout(input: OrderServiceInput<"startCheckout">): Promise<unknown>;
+      withdraw(input: OrderServiceInput<"withdraw">): Promise<unknown>;
+      markShipped(input: OrderServiceInput<"markShipped">): Promise<unknown>;
+      approveRefund(input: OrderServiceInput<"approveRefund">): Promise<unknown>;
     };
   }
 }

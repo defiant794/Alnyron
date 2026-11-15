@@ -1,7 +1,8 @@
 # alnyron-payments
 
-Stripe's webhook endpoint for Monitor subscriptions (payments slice 1c) and the right of
-withdrawal (fortrydelsesret, slice 1d): a Cloudflare Worker served on the custom domain
+Stripe's webhook endpoint for Monitor subscriptions (payments slice 1c), the right of
+withdrawal (fortrydelsesret, slice 1d) and goods orders (physical 3D figures, slice S2, see
+Ordrer): a Cloudflare Worker served on the custom domain
 `pay.alnyron.dk`. Stripe POSTs events to `https://pay.alnyron.dk/webhook`; the Worker checks the
 signature, retrieves the subscription's current state from Stripe and writes it through the two
 service-role-only functions of migration
@@ -14,10 +15,12 @@ Checkout consent (see Fortrydelse). All subscription rules (one effect per event
 and ended subscriptions left alone, the billing customer link, the lapse pause of monitors over
 the cap) live in those functions.
 
-Besides `fetch`, the Worker exports the named entrypoint `WithdrawalService`, which the web app
-calls over its service binding `PAYMENTS` (never over a route), and a `scheduled` handler, the
-hourly sweep (cron `0 * * * *`); see Fortrydelse. Their rules live in migration
-`supabase/migrations/20261114000300_payments_withdrawal.sql`.
+Besides `fetch`, the Worker exports the named entrypoints `WithdrawalService` and
+`OrderService`, which the web app calls over its service bindings `PAYMENTS` and `ORDERS` (never
+over a route), and a `scheduled` handler, the hourly sweep (cron `0 * * * *`); see Fortrydelse
+and Ordrer. Their rules live in migrations
+`supabase/migrations/20261114000300_payments_withdrawal.sql` and
+`supabase/migrations/20261114000400_payments_goods_orders.sql`.
 
 Separate from the OpenNext web Worker so the Supabase secret key, the Stripe key and the Resend
 key never ship in the public app. Always pass `--config workers/payments/wrangler.jsonc`:
@@ -25,22 +28,30 @@ without it, `wrangler deploy` hands the root project to OpenNext.
 
 | file | role |
 |---|---|
-| `wrangler.jsonc` | Worker config: vars (`SUPABASE_URL`, `STRIPE_LIVEMODE`, `MAIL_FROM`, `WITHDRAWAL_ALERT_TO`, `SITE_URL`), the hourly cron, no routes |
-| `index.ts` | `fetch()` entry: 404 off `/webhook`, 405 for any method but POST, env check, handler; `scheduled()`: the sweep; re-exports `WithdrawalService` |
+| `wrangler.jsonc` | Worker config: vars (`SUPABASE_URL`, `STRIPE_LIVEMODE`, `MAIL_FROM`, `WITHDRAWAL_ALERT_TO`, `SITE_URL`, `ORDER_NOTIFY_TO`, `STRIPE_TAX_RATE_ID`), the hourly cron, no routes |
+| `index.ts` | `fetch()` entry: 404 off `/webhook`, 405 for any method but POST, env check, handler; `scheduled()`: the sweep; re-exports `WithdrawalService` and `OrderService` |
 | `env.ts` | zod/mini schema of the Worker env (names failing keys, never values) |
 | `webhook.ts` | one delivery: size cap, signature, event shape, account, mode, the event's handler, the Checkout consent |
 | `withdrawal-service.ts` | `WithdrawalService.withdraw`: token → user, begin, one pass |
 | `withdrawal.ts` | `processWithdrawal`: one pass over a withdrawal (cancel, credit note, receipt, owner alert) |
 | `sweep.ts` | `runSweep`: the hourly sweep within its subrequest budget |
 | `consent.ts` | the order confirmation of a recorded consent (send + stamp), shared by webhook and sweep |
-| `mail.ts` | the three Resend emails (order confirmation, receipt, owner alert) |
+| `mail.ts` | the three Resend emails (order confirmation, receipt, owner alert) and `sendMail`, the Resend send both mailers share |
 | `deps.ts`, `refusal.ts`, `cloudflare-workers.d.ts` | the clients built from the env; the P0001 refusal check; the hand-typed `cloudflare:workers` module |
 | `stripe-api.ts` | the Stripe calls: the webhook's five (retrieve, mark as duplicate, cancel subscription, list invoice payments, refund) and the withdrawal's four (cancel, list invoices, list credit notes, create credit note) |
 | `rpc.ts` | the writers, the `subscriptions` read and the Supabase Auth lookups (account exists, account email, token user) over supabase-js |
+| `orders/env.ts` | goods (slice S2): `parseOrdersEnv` (`ORDER_LINK_SECRET`, `ORDER_NOTIFY_TO`, `STRIPE_TAX_RATE_ID`), apart from `env.ts` |
+| `orders/service.ts` | `OrderService` (startCheckout, withdraw, markShipped, approveRefund), see Ordrer |
+| `orders/webhook.ts` | the goods events: a goods Checkout completed, `charge.refunded`, `payment_intent.canceled` |
+| `orders/withdrawal.ts` | `processOrderRefund`: one pass over an approved goods withdrawal (refund or release, credit note email) |
+| `orders/sweep.ts` | `runOrderPass`: the sweep's goods pass |
+| `orders/stripe.ts`, `orders/rpc.ts`, `orders/mail.ts`, `orders/deliver.ts`, `orders/deps.ts` | the goods Stripe calls (Checkout, payment intent read, capture, cancel, refund), the goods writers and reads, the goods emails, send + stamp, the goods clients |
 
 The pure parts live in `src/lib/payments/` (`stripe-signature.ts`: the signature check,
 `webhook-mapping.ts`: Stripe objects to writer payloads, `stripe.ts`: the REST client shared with
-the web app's Checkout); constants in `src/config/payments.ts`.
+the web app's Checkout; `orders/`: the goods session normalizer, Checkout parameters, link token,
+refund math, emails and the OrderService contract); constants in `src/config/payments.ts`, goods
+texts in `src/config/legal/goods-texts.ts`.
 
 ## What a delivery does
 
@@ -85,6 +96,9 @@ never fails on it.
 | `customer.subscription.created` / `.updated` / `.deleted` | the subscription is synced |
 | `invoice.payment_failed` | the invoice's subscription (`parent.subscription_details.subscription`) is synced with Stripe's status, e.g. `past_due`; an invoice without one is ignored |
 | `invoice.paid` | the invoice is recorded (amounts in integer øre) with its subscription synced; an invoice without a subscription is ignored; when the subscription carries the duplicate mark, or gets it in that delivery, the invoice's paid payments are refunded (see Duplicate subscriptions). Both ids are checked first; the subscription is then retrieved before the rest of the invoice is checked, so an invoice or subscription the writers cannot take (rejected `invalid_invoice`, else `invalid_subscription`) still has its paid payments refunded when the subscription carries the mark |
+| `checkout.session.completed` / `checkout.session.async_payment_succeeded` of a goods session | a `mode: payment` session with `metadata.kind` `goods_order` goes to the goods branch (see Ordrer), never to a subscription writer; any other `async_payment_succeeded` is ignored (`not_goods_order`) |
+| `charge.refunded` | goods: the charge's cumulative `amount_refunded` is synced onto its order (`payments_sync_order_refund`, never lowered, bounded by the captured amount); a charge of no goods order (a subscription's) is ignored `unknown_order` |
+| `payment_intent.canceled` | goods: an authorized, uncaptured order is canceled (`payments_order_authorization_canceled`); a lapsed authorization emails the owner "send ikke varen" (see Ordrer); a payment intent of no goods order is ignored `unknown_order` |
 
 The user always comes from server-set metadata (`metadata.user_id`, written by the web app's
 Checkout), never from anything the customer typed; without it the database falls back to the
@@ -484,6 +498,217 @@ otherwise). The `refunded` and `no_refund_due` steps take a `needs_manual` withd
 Worker sends no second receipt (enable Stripe's credit note emails if the customer should get
 the credit note).
 
+## Ordrer
+
+Goods orders (slice S2, migration `20261114000400_payments_goods_orders.sql`): a one-time
+purchase of a physical 3D figure, delivered in Denmark only, **charged on dispatch** (contract
+amendments A1/A2). Checkout only authorizes the payment (`capture_method=manual`; no Stripe
+invoice or Customer), "Markér afsendt og træk betalingen" captures it, a withdrawal before
+dispatch releases the authorization (nothing is charged) and one after dispatch is refunded. The
+order confirmation email is the invoice ("Ordrebekræftelse og faktura nr. <n>", n = the order
+number, with the seller, the buyer and the moms); a refund or a release gets a credit note email
+("Kreditnota til faktura nr. <n>"). The goods code is separate from the subscriptions
+(`orders/`, its own tables and writers); shared are the signature check, `stripe_events`, the
+Stripe and Resend transports and the cron.
+
+**For the accountant: invoice numbers.** The order number, which is the invoice number, comes
+from a database sequence (`orders.order_number`, from 1001). `payments_record_order` looks for an
+order of the Checkout Session before it inserts one, so a repeated or late event for a session
+already recorded (`async_payment_succeeded` after `completed`, a replay under a new event id)
+takes no number. A number can still be skipped, a gap in the series: the database draws it when
+the order row is inserted and never hands it out again, even when that write is rolled back (a
+failure later in the same transaction, or two deliveries of one session at the same moment, where
+the second insert is skipped). A skipped number has no order, no invoice email and no payment
+behind it.
+
+### Environment
+
+| key | kind | what |
+|---|---|---|
+| `ORDER_LINK_SECRET` | secret: `npx wrangler secret put ORDER_LINK_SECRET --config workers/payments/wrangler.jsonc` | the HMAC key of the personal withdraw links (`/order/withdraw?o=&t=`): 32 to 256 characters without whitespace (`openssl rand -base64 48`). Only this Worker holds it, never the web app. Rotating it invalidates every link already sent (the order number + email form still works). |
+| `ORDER_NOTIFY_TO` | var | where the owner's order emails go (`info@alnyron.dk`) |
+| `STRIPE_TAX_RATE_ID` | var | the 25 % inclusive Tax Rate on the Checkout line: live `txr_1Ubdp4FBWtA5MNzbg2ZKznPw` (`wrangler.jsonc`), test `txr_1Ub3CpFIgZG2PjS18JkfB0FE` (`.dev.vars`) |
+
+`parseOrdersEnv` (`orders/env.ts`) reads them apart from the subscription env, which never needs
+them. Without a valid set: every `OrderService` call answers `unavailable` (log `invalid_env`);
+the webhook still records goods orders but logs `"code":"orders_env_unavailable"` and leaves
+their emails to the sweep; the sweep skips its goods pass
+(`{"msg":"payments order sweep","outcome":"skipped","code":"orders_env_unavailable"}`).
+
+### Webhook (goods)
+
+1. `checkout.session.completed` or `checkout.session.async_payment_succeeded` of a
+   `mode: payment` session with `metadata.kind` `goods_order`: `normalizeGoodsSession`
+   (`awaiting_payment`, `invalid_session` → ignored). With manual capture a completed session is
+   `unpaid`: the Worker reads `GET /v1/payment_intents/{pi}?expand[]=latest_charge`;
+   `requires_capture` → the order is recorded `authorized` with `authorization_expires_at` = the
+   card's `capture_before` (7 days after Checkout; null for Klarna or Amazon Pay); `succeeded` →
+   recorded as captured at Checkout (anomaly `captured_at_checkout`, "Markér afsendt" captures
+   nothing more); any other status → ignored `awaiting_payment`; a failed read → 500. A `paid`
+   session is recorded as captured at Checkout without the read.
+2. The buyer: `metadata.user_id` equal to `client_reference_id` (both set by the Worker for a
+   buyer whose access token Supabase Auth confirmed) and an account Supabase Auth still has → the
+   order's `user_id`; else a guest order (anomaly `user_unverified` when the two differ); a failed
+   Auth lookup → 500.
+3. `payments_record_order`: `duplicate` (a seen event, or the session's order exists) → no
+   emails; a 22023 refusal → rejected; any other failure → 500.
+4. Recorded: the order confirmation (the invoice, `order-confirm/<order id>`) to the order's email
+   and the new-order email (`order-owner/<order id>`) to `ORDER_NOTIFY_TO`, each stamped
+   (`payments_order_mail_sent`). A failed send counts in `mail_attempts` and the sweep resends it.
+
+`charge.refunded` → `payments_sync_order_refund` (no email: a refund made in the Dashboard shows on
+the admin page). `payment_intent.canceled` → `payments_order_authorization_canceled`: a lapsed
+authorization (`cancel_reason` `authorization_expired`) emails the owner "Betalingen for ordre <n>
+er udløbet; send ikke varen" (`order-expired/<order id>`, stamped `expired_alert` and resent by the
+sweep until stamped); the Worker's own release for a withdrawal (`withdrawn`) sends nothing. At
+most 7 subrequests a delivery. The webhook log line of a goods event adds `order` (the id) and per
+email `confirmation`, `owner` or `alert`: `sent`, `deferred` (no orders env) or the failure's
+code (`mail_transient`, `rpc_…`).
+
+### OrderService (service binding `ORDERS`)
+
+Inputs and answers follow `src/lib/payments/orders/service-contract.ts` (`invalid_input` for
+anything else). The web app sends the user's access token, never a user id; the writers check
+the owner/admin role.
+
+| method | what it does |
+|---|---|
+| `startCheckout({itemId, locale, accessToken?})` | the item's active physical offer (`payments_goods_offer`; none → `not_purchasable`), the token's user when Supabase Auth confirms it and it has an email (else a guest Checkout, never an error), then `POST /v1/checkout/sessions` with `STRIPE_PAYMENTS_KEY`: `{ok: true, url}` on checkout.stripe.com only |
+| `withdraw(link or form)` | the personal link's token (HMAC under `ORDER_LINK_SECRET`) or order number + the order's email (`payments_find_order`); every identification failure and a refunded or canceled order without a withdrawal is the same `refused`. A new notice sends the receipt to the order's email (`order-wd-ack/<withdrawal id>`) and the owner's alert (`order-wd-alert/<withdrawal id>`, "SEND IKKE VAREN" when not shipped, the late flag, the refund deadline); a repeated notice (also after the refund or the release) answers `received` and sends nothing |
+| `markShipped({accessToken, orderId, trackingRef?})` | `payments_order_begin_ship` (stores the tracking) → `POST /v1/payment_intents/{pi}/capture` (Idempotency-Key `ord-cap-<order id>`; skipped when captured at Checkout) → `payments_order_captured` → the shipped email (`order-shipped/<order id>`) → `shipped`. A refused capture (400 or 402) is decided by a re-read: `succeeded` (captured before) → shipped; `canceled` or `charge_expired_for_capture` → the order is canceled, the owner gets `order-expired/<order id>`, answer `conflict authorization_expired`; anything else (a decline) → the order stays reserved with the anomaly `capture_failed`, the owner gets "Ordre <n>: betalingen kunne ikke trækkes" (`order-capture-failed/<order id>`), answer `conflict capture_refused`. A failure a retry may fix (network, 401/403 a key permission, 404, 409, 429, 5xx) → `unavailable` with nothing marked shipped; clicking again captures once (same key) |
+| `approveRefund({accessToken, orderId, goodsState, deductionOre, deductionReason?})` | `payments_approve_order_refund` (`not_shipped` on an uncaptured order releases the authorization, otherwise refund of total − refunded − deduction; an order with no withdrawal yet gets one with channel `admin`: the owner records a notice that came by email or letter from the order's page; the buyer gets no withdrawal receipt and the owner no withdrawal alert for it, only the credit note once it completes) → one `processOrderRefund` pass → `completed`, `canceled` (released), `needs_manual` or `approved` (the sweep finishes it) |
+
+`processOrderRefund` (`orders/withdrawal.ts`): claim (a 120 s lease; counts the pass) → release
+(`POST /v1/payment_intents/{pi}/cancel`, `cancellation_reason=requested_by_customer`, key
+`ord-cancel-<withdrawal id>`; a refused cancel is done when the payment intent then shows
+`canceled`) and step `authorization_canceled`, or refund: first
+`GET /v1/refunds?payment_intent=<pi>&limit=100`, reusing a `succeeded` or `pending` refund with
+`metadata.order_withdrawal_id` equal to this withdrawal's id. Other withdrawals' refunds and
+failed/canceled refunds are ignored. Only if none matches, `POST /v1/refunds` of `refund_ore`,
+`metadata[order_withdrawal_id]` and `metadata[order_number]`, key `ord-re-<withdrawal id>`. Then
+step `refunded` (`refund_tax_ore` = the 25 % moms in it) → the credit note email
+(`order-refund/<withdrawal id>`, step `receipt_sent`). A failed, malformed or incomplete refund
+list is a transient error: no refund POST. Stripe refusing the refund or release (400 or 402,
+or a new refund it reports `failed` or `canceled`) → `needs_manual stripe_refused`; a failure a retry may fix
+(incl. 401/403) → `attempt_failed` (the sweep retries, at most 8 passes,
+`WITHDRAWAL_MAX_ATTEMPTS`, the last one going to `needs_manual retries_exhausted`). Both manual reasons send the owner
+"Ordre <n>: fortrydelsen kræver manuel behandling" (`order-wd-manual/<withdrawal id>`, step
+`manual_alert_sent`; a failed send is retried by the sweep). No credit notes or invoices in
+Stripe: the credit note is the email.
+
+### The sweep's goods pass
+
+After the subscription and withdrawal passes, with what they left of the 45 subrequests and at
+most 12 (`PAYMENTS_SWEEP_ORDER_SUBREQUESTS`): `payments_pending_order_work(20, 24)` lists missing
+order emails (the confirmation, the new order, the shipped email, the lapsed-reservation alert),
+capture warnings (an authorized order whose authorization lapses within 48 hours: the owner's
+"Ordre <n>: betalingen udløber …", `order-capture-warn/<order id>`), withdrawal emails (the
+receipt and the owner's alert, never for a channel `admin` notice the owner recorded; the credit
+note; from 4 days before the refund deadline the owner's reminder
+`order-wd-remind/<withdrawal id>`; the owner's manual-handling alert of a `needs_manual` one until
+stamped) and approved withdrawals (one
+`processOrderRefund` pass each). An item starts only when its worst case still fits: an email 2
+subrequests plus 1 for the read of its order or withdrawal, a refund pass 6. Logs
+`{"msg":"payments order sweep",…}` per email and pass, and a closing
+`{"outcome":"done","orders":n,"warnings":n,"withdrawals":n,"budgetStop":bool,"subrequests":n}`.
+
+### Logs (goods)
+
+- `{"msg":"payments order service","method":…,"outcome":"ok"|<error>,"code":…,"order":…}`: one
+  per `OrderService` call (code e.g. `invalid_env`, `auth_failed`, `link_not_matched`,
+  `not_withdrawable`, `stripe_http_402`, `alert_sent`, `mail_sent`).
+- `{"msg":"payments order refund","withdrawal":…,"step":…,"outcome":…,"code":…}`: one per step
+  of a `processOrderRefund` pass.
+- `{"msg":"payments order sweep",…}`: see above.
+
+## Ordrer: manuel behandling
+
+What the owner's goods emails mean:
+
+- **"Ordre <n>: betalingen udløber <tid>"**: an unshipped order's card reservation lapses
+  within 48 hours. Send it and click "Markér afsendt og træk betalingen" before then.
+- **"Ordre <n>: betalingen er udløbet"** ("send ikke varen"): the authorization lapsed and the
+  order is canceled; nothing was charged. Do not send the goods; write to the buyer (the email is
+  in the alert) to order again if the sale should go through. Nothing to record.
+- **"Ordre <n>: betalingen kunne ikke trækkes"** (A2-3): Stripe refused the capture for another
+  reason (e.g. a decline). The order stays reserved (`authorized`, anomaly `capture_failed`) and
+  is not marked shipped. Look at the payment in the Stripe Dashboard (Payments > the payment);
+  do not send the goods before it is resolved. Once the payment is captured (e.g. in the
+  Dashboard), "Markér afsendt" again: Stripe refuses the second capture, the Worker re-reads the
+  payment intent as `succeeded` and marks the order shipped.
+- **"Ordre <n>: fortrydelsen kræver manuel behandling"**: the Worker stopped automating a refund
+  or release. **Deadline: within 14 days of the notice** (`refund_due_at`). List them:
+
+```sql
+select w.id, o.order_number, w.action, w.manual_reason, w.last_error, w.refund_ore,
+       w.deduction_ore, w.requested_at, w.refund_due_at
+  from public.order_withdrawals w
+  join public.orders o on o.id = w.order_id
+ where w.status = 'needs_manual'
+ order by w.refund_due_at;
+```
+
+Per reason:
+
+- `stripe_refused`: Stripe answered the refund or the release with a 400 or 402 (e.g. the amount
+  exceeds what is left on the charge; a missing key permission, 401/403, is retried instead and
+  ends as `retries_exhausted`). For a refund, look at the payment's refunds in the Stripe Dashboard for one with
+  `metadata.order_withdrawal_id = <id>`: if there is one, record it (below) and refund nothing
+  more. For a release whose payment intent shows `succeeded` (the money was captured after all),
+  refund it in full in the Dashboard instead and record that refund.
+- `retries_exhausted`: 8 passes failed (`last_error` has the last code, e.g.
+  `stripe_http_503`, `stripe_network`). Fix the cause first (keys, Stripe or Supabase status).
+
+Let the Worker try again once the cause is fixed and nothing was done in Stripe by hand
+(SQL editor of production; service_role bypasses RLS):
+
+```sql
+begin;
+set local role service_role;
+update public.order_withdrawals
+   set status = 'approved', manual_reason = null, attempts = 0, lease_until = null,
+       manual_alert_sent_at = null, manual_alert_email_id = null, updated_at = now()
+ where id = '<withdrawal id>' and status = 'needs_manual';
+commit;
+```
+
+The next sweep (hourly) runs the pass; should it end in manual handling again, the owner is
+alerted again (under the same Idempotency-Key, so not within 24 hours of the first alert).
+The pass reuses a `succeeded` or `pending` refund with
+`metadata.order_withdrawal_id = <id>` even after Stripe's 24-hour Idempotency-Key window;
+failed/canceled refunds do not count. A refund made by hand without that metadata must be
+recorded below instead of retrying the pass. Recording it is one transaction, so no sweep can
+claim the row in between.
+
+Record a refund made by hand in the Dashboard (amount `refund_ore`; note the `re_…` id):
+
+```sql
+begin;
+set local role service_role;
+update public.order_withdrawals
+   set status = 'approved', manual_reason = null, updated_at = now()
+ where id = '<withdrawal id>' and status = 'needs_manual' and action = 'refund';
+select public.payments_order_withdrawal_step('<withdrawal id>', 'refunded',
+  '{"refund_id": "re_…", "refund_tax_ore": <refund_ore - round(refund_ore * 4 / 5)>}');
+commit;
+```
+
+The order is then `refunded` and the next sweep sends the buyer the credit note email. A release
+done by hand (Dashboard > the payment > Cancel) of an uncaptured order is recorded the same way,
+with `action = 'cancel_authorization'` in the update and step `authorization_canceled` with
+`'{}'`; the order becomes `canceled` and the sweep sends the cancellation credit note.
+
+Order emails the sweep gave up on (24 failed sends, `mail_attempts`): fix the cause (e.g.
+`mail_config`: the Resend key or domain), then let the sweep resend them:
+
+```sql
+select id, order_number, mail_attempts, confirmation_sent_at, owner_notified_at,
+       shipped_email_sent_at, expired_alert_sent_at, capture_warning_sent_at
+  from public.orders
+ where mail_attempts >= 24;
+update public.orders set mail_attempts = 0, updated_at = now() where id = '<order id>';
+```
+
 ## Build
 
 ```sh
@@ -503,6 +728,16 @@ the config's directory, so the bundle lands in `workers/payments/.wrangler/payme
    `WITHDRAWAL_ALERT_TO=delivered+withdrawal-alert@resend.dev` (`MAIL_FROM` and `SITE_URL` keep
    the production values; `.dev.vars` keys override the config's vars). Never point a local run
    at production or at live mode.
+
+   Goods (slice S2) need three more keys there, else the Worker answers every `OrderService`
+   call `unavailable` and leaves order emails to the sweep: `ORDER_LINK_SECRET` (a fresh random
+   value of at least 32 characters, e.g. `openssl rand -base64 48`; the e2e specs
+   `tests/e2e/payments-s2-*.spec.ts` read it from `.dev.vars` to build a personal withdraw link),
+   `ORDER_NOTIFY_TO=delivered+orders@resend.dev` (Resend's test sink) and the TEST-mode Tax Rate
+   `STRIPE_TAX_RATE_ID=txr_1Ub3CpFIgZG2PjS18JkfB0FE` (the config's var is the live one, unknown to
+   test mode). With a restricted test key, add Checkout Sessions, Products and PaymentIntents:
+   Write (a full `sk_test_` key has them). No script writes `.dev.vars`: it is filled by hand from
+   `.dev.vars.example`.
 2. Start the Worker, then forward test-mode events to it with the Stripe CLI, which prints the
    `whsec_…` to put into `.dev.vars` as `STRIPE_WEBHOOK_SECRET` (restart the Worker after):
 
@@ -698,6 +933,33 @@ would have its deliveries refused once 0300 requires `start_date`.
 7. Check: a test-mode or own live Checkout logs `"consent":"recorded","mail":"sent"` on its
    `checkout.session.completed` line, the order confirmation arrives, and the next full hour logs
    `{"msg":"payments sweep",…,"outcome":"done",…}`.
+
+### Slice S2 go-live (goods)
+
+Blocker first: the accountant confirms the documents (order confirmation = invoice, credit note
+emails, Stripe receipt; contract amendment A2-0). Then, in this order:
+
+1. Migration `20261114000400_payments_goods_orders.sql` on production (additive: the goods tables
+   and writers; `admin_save_item` behaves as before without the `offers` key). Until it is in, the
+   sweep's goods pass logs `pending_order_work_rpc_…` and a `charge.refunded` subscribed in step 4
+   would fail 500, so it goes first.
+2. `STRIPE_PAYMENTS_KEY` (the restricted live key): add **Checkout Sessions: Write**,
+   **Products: Write** (Checkout's inline `product_data` makes a Product per session) and
+   **PaymentIntents: Write** (read, capture, cancel); the refund permission and Credit notes: Write
+   (1d) stay. A missing one shows as 403: `startCheckout` and "Markér afsendt" answer
+   `unavailable`, a refund or release is retried and ends `needs_manual retries_exhausted`.
+3. `npx wrangler secret put ORDER_LINK_SECRET --config workers/payments/wrangler.jsonc` (32 to 256
+   characters, no whitespace); check the vars `ORDER_NOTIFY_TO` and `STRIPE_TAX_RATE_ID` (a live
+   25 % **inclusive** Tax Rate) in `wrangler.jsonc`; then `npm run deploy:payments`.
+4. Stripe Dashboard (live mode) > the `https://pay.alnyron.dk/webhook` endpoint: add the events
+   `checkout.session.async_payment_succeeded`, `charge.refunded` and `payment_intent.canceled`.
+5. Deploy the web Worker (`npm run deploy`): its `ORDERS` service binding names `alnyron-payments`
+   and the `OrderService` entrypoint, which must exist first.
+6. Check with an own purchase: its `checkout.session.completed` line logs
+   `"outcome":"recorded","confirmation":"sent","owner":"sent"`; "Markér afsendt" logs
+   `{"msg":"payments order service","method":"markShipped","outcome":"ok",…}` and the payment
+   shows captured in the Dashboard; the next full hour logs
+   `{"msg":"payments order sweep",…,"outcome":"done",…}`.
 
 Statements about Stripe, Supabase and Cloudflare dashboards, behaviour, permissions and plan
 features reflect their documentation as of 2026-11 and may have changed; check them at go-live.

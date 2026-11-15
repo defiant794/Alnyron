@@ -27,3 +27,13 @@ export function formatKroner(amountOre: number, locale: Locale): string {
   const { whole, fractional } = FORMATS[locale];
   return (amountOre % 100 === 0 ? whole : fractional).format(amountOre / 100);
 }
+
+/**
+ * An amount in øre as kroner in `locale` with the øre always shown ("179,00",
+ * "35,80", "1.234,56" in Danish), without the currency: the admin's order
+ * amounts, which line up like an invoice's. The caller adds "kr." through its
+ * message.
+ */
+export function formatKronerWithOre(amountOre: number, locale: Locale): string {
+  return FORMATS[locale].fractional.format(amountOre / 100);
+}

@@ -3,6 +3,7 @@
 import type { Locale } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, useTransition, type FormEvent } from "react";
+import ItemOffersFields, { readOffers, type ItemOffersLabels, type OfferErrors } from "@/components/admin/ItemOffersFields";
 import LocaleTabs, { localePanelId, localeTabId } from "@/components/admin/LocaleTabs";
 import MediaManager, {
   type MediaAttachInput,
@@ -24,6 +25,7 @@ import {
   EXTERNAL_LINK_MAX_LENGTH,
   ITEM_TEXT_LIMITS,
   SLUG_MAX_LENGTH,
+  type CatalogKind,
   type ExternalLinkKey,
   type PriceType,
 } from "@/config/catalog";
@@ -37,7 +39,7 @@ import type {
   CatalogFailure,
   CatalogSaveResult,
 } from "@/services/admin/catalog";
-import type { AdminItemTranslation, ContentStatus } from "@/services/admin/catalog-read";
+import type { AdminItemOffer, AdminItemTranslation, ContentStatus } from "@/services/admin/catalog-read";
 import type { MediaUploadResult } from "@/services/admin/media";
 
 /** The item as the editor starts: a saved item (with `id`) or a new one. */
@@ -52,6 +54,8 @@ export type ItemEditorItem = {
   externalLinks: Partial<Record<ExternalLinkKey, string>>;
   translations: Record<Locale, AdminItemTranslation | null>;
   media: MediaManagerImage[];
+  /** The item's offers ("Salg"; only a `models3d` section's items are sold). */
+  offers: AdminItemOffer[];
 };
 
 /** Field labels of one language tab ("Titel (DA)"). */
@@ -68,8 +72,11 @@ type PriceChoice = PriceType | "none";
 
 export type ItemEditorProps = {
   item: ItemEditorItem;
-  /** Every section, for the section select (changing it on a saved item moves the item there). */
-  sections: { id: string; title: string }[];
+  /**
+   * Every section, for the section select (changing it on a saved item moves the item there). An item in
+   * a `models3d` section shows "Salg".
+   */
+  sections: { id: string; title: string; kind: CatalogKind }[];
   /** The published item's public page (Danish); `null` while it is a draft. */
   previewHref: string | null;
   /** Where to go after a delete: the item's section editor (the new one once a move is saved). */
@@ -119,11 +126,15 @@ export type ItemEditorProps = {
     errors: Record<CatalogActionError, string>;
     /** MediaManager copy; `counts[n]` is the "n af 8" text. */
     media: Omit<MediaManagerProps["labels"], "countOf"> & { counts: string[] };
+    /** "Salg" copy (a `models3d` item's offers). */
+    offers: ItemOffersLabels;
   };
 };
 
 type SuccessNotice = "saved" | "savedDraft" | "published" | "hidden";
-type Result = { ok: true; notice: SuccessNotice } | CatalogFailure;
+/** A failed save; a client-side offer check names its price fields (`offerErrors`) instead of a form-level alert. */
+type Failure = CatalogFailure & { offerErrors?: OfferErrors };
+type Result = { ok: true; notice: SuccessNotice } | Failure;
 
 const PRICE_CHOICES: readonly PriceChoice[] = ["none", "fixed", "from", "contact"];
 
@@ -136,8 +147,10 @@ const SLUG_ERRORS: readonly CatalogActionError[] = ["slug-taken", "slug-invalid"
 /**
  * Item editor (approved item-editor mock). Left: Indhold with Dansk /
  * Engelsk tabs (Titel, URL-slug, Resumé, Brødtekst, SEO). Right: the section,
- * Pristype (Ingen pris / Fast / Fra / Kontakt) with the DKK amount, the https
- * links and "Udvalgt". Below: Billeder (MediaManager) and the actions.
+ * "Salg" for an item in a 3D section (`ItemOffersFields`: the physical
+ * offer's switch and price, the digital file's price), Pristype (Ingen pris /
+ * Fast / Fra / Kontakt) with the DKK amount, the https links and "Udvalgt".
+ * Below: Billeder (MediaManager) and the actions.
  *
  * Every save sends the selected section: a new item is created in it, and a
  * saved item moved to another section is placed last there (its public
@@ -149,7 +162,11 @@ const SLUG_ERRORS: readonly CatalogActionError[] = ["slug-taken", "slug-invalid"
  * a request; the server validates everything else: the title, slug, amount,
  * links and alt-text errors show at their fields (a slug error under the
  * URL-slug of the language the server names, switching to its tab), the
- * rest as an alert.
+ * rest as an alert. An item in a 3D section sends its offers with every save
+ * (prices typed in kroner; a price that is not kroner, out of range, or
+ * missing on a live offer is reported at its field without a request); any
+ * other item sends none, so a move out of a 3D section keeps them and is
+ * refused until they are cleared ("item-has-offers").
  *
  * Actions: a new item has "Gem kladde" (then the editor of the saved item
  * opens) and a disabled "Udgiv" (save first). A draft has "Gem kladde" and
@@ -174,6 +191,7 @@ export default function ItemEditor({
   const router = useRouter();
   const [locale, setLocale] = useState<Locale>(routing.defaultLocale);
   const [priceChoice, setPriceChoice] = useState<PriceChoice>(item.priceType ?? "none");
+  const [categoryId, setCategoryId] = useState(item.categoryId);
   const [result, setResult] = useState<Result | null>(null);
   const [pending, startTransition] = useTransition();
   const formRef = useFormResultFocus(result);
@@ -186,7 +204,9 @@ export default function ItemEditor({
   const sideHeadingId = `${baseId}-side`;
   const failure = result && !result.ok ? result : null;
   const slugLocale = failure && SLUG_ERRORS.includes(failure.error) ? failure.locale : undefined;
-  const formError = failure && !FIELD_ERRORS.includes(failure.error) && !slugLocale ? failure.error : null;
+  const formError =
+    failure && !failure.offerErrors && !FIELD_ERRORS.includes(failure.error) && !slugLocale ? failure.error : null;
+  const sellable = sections.find((section) => section.id === categoryId)?.kind === "models3d";
   const hasAmount = priceChoice === "fixed" || priceChoice === "from";
   const published = item.status === "published";
 
@@ -243,6 +263,11 @@ export default function ItemEditor({
         alt_en: text(`media.${id}.alt_en`),
         sort_order: (index + 1) * 10,
       }));
+    const offers = sellable ? readOffers(form) : null;
+    if (offers && !offers.ok) {
+      finish({ ok: false, error: "offers-invalid", offerErrors: offers.errors });
+      return;
+    }
 
     const input = {
       ...(item.id ? { id: item.id, media } : {}),
@@ -252,6 +277,7 @@ export default function ItemEditor({
       price_amount: amount !== null && Number.isFinite(amount) ? amount : null,
       external_links: externalLinks,
       translations: sendEn ? { da, en } : { da },
+      ...(offers ? { offers: offers.offers } : {}),
     };
 
     startTransition(async () => {
@@ -418,6 +444,7 @@ export default function ItemEditor({
                 {...control}
                 name="category_id"
                 defaultValue={item.categoryId}
+                onChange={(event) => setCategoryId(event.currentTarget.value)}
                 className={cx(control.className, "cursor-pointer")}
               >
                 {sections.map((section) => (
@@ -428,6 +455,10 @@ export default function ItemEditor({
               </select>
             )}
           </FieldFrame>
+
+          {sellable && (
+            <ItemOffersFields offers={item.offers} errors={failure?.offerErrors ?? {}} labels={labels.offers} />
+          )}
 
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-2 text-small font-semibold">{labels.priceType}</legend>

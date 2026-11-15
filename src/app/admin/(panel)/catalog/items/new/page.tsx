@@ -38,6 +38,7 @@ export default async function NewItemPage({ searchParams }: NewItemPageProps) {
         externalLinks: {},
         translations: { da: null, en: null },
         media: [],
+        offers: [],
       }}
     />
   );

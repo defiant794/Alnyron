@@ -10,6 +10,7 @@ import {
   DA_TITLE_REQUIRED,
   itemStatusSchema,
   LINKS_INVALID,
+  OFFERS_INVALID,
   PRICE_INVALID,
   reorderItemsSchema,
   saveCategorySchema,
@@ -39,6 +40,13 @@ import type { Database } from "@/types/database";
  *   ceiling (the upload pre-check).
  * - `too-large` / `unsupported-type`: an upload the media bucket would refuse.
  * - `not-found`: P0002 / 23503 / 22P02, the id names no row of that kind.
+ * - `offers-invalid`: an offer list the schema or `admin_save_item` refuses (22023
+ *   `offers_invalid`: not an array, a kind twice, an unknown kind, a price outside
+ *   the range or not whole øre, a live digital offer).
+ * - `offers-not-allowed`: P0001 `offers_not_allowed`, offers on an item outside a
+ *   `models3d` section.
+ * - `item-has-offers`: P0001 `item_has_offers`, the item still has offers and is
+ *   being moved to a section that is not `models3d` (clear them with `offers: []`).
  * - `forbidden`: 42501, the caller is not an admin (RLS / `is_admin()`).
  * - `failed`: anything else (logged by code).
  */
@@ -56,6 +64,9 @@ export type CatalogActionError =
   | "too-large"
   | "unsupported-type"
   | "not-found"
+  | "offers-invalid"
+  | "offers-not-allowed"
+  | "item-has-offers"
   | "forbidden"
   | "failed";
 
@@ -83,6 +94,7 @@ const ISSUE_ERRORS = [
   TOO_MANY_MEDIA,
   TOO_LARGE,
   UNSUPPORTED_TYPE,
+  OFFERS_INVALID,
 ] as const satisfies readonly CatalogActionError[];
 
 /**
@@ -237,13 +249,15 @@ export function catalogActionError({ code, message }: Pick<PostgrestError, "code
       if (message === "missing_slugs") return "missing-slugs";
       if (message === "missing_translations") return "missing-translations";
       if (message === "too_many_media") return "too-many-media";
+      if (message === "offers_not_allowed") return "offers-not-allowed";
+      if (message === "item_has_offers") return "item-has-offers";
       return "failed";
     case "23503":
     case "P0002":
     case "22P02":
       return "not-found";
     case "22023":
-      return "invalid";
+      return message === "offers_invalid" ? "offers-invalid" : "invalid";
     case "42501":
       return "forbidden";
     default:

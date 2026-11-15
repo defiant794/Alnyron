@@ -1,4 +1,5 @@
 import {
+  GOODS_ORDER_KIND,
   MONITOR_SUBSCRIPTION_KIND,
   PAYMENTS_MAX_DUPLICATE_CANDIDATES,
   PAYMENTS_WEBHOOK_MAX_BODY_BYTES,
@@ -31,6 +32,15 @@ import { withdrawalTextDigest } from "@/config/legal/withdrawal-texts";
 import { sendConsentConfirmation } from "./consent";
 import type { Mailer } from "./mail";
 import { PaymentsRpcError, type PaymentsRpc, type WriterOutcome, type WriterRefusal } from "./rpc";
+import {
+  onChargeRefunded,
+  onPaymentIntentCanceled,
+  onSessionPaid,
+  type GoodsHandled,
+  type GoodsLog,
+  type GoodsOutcome,
+  type OrderWebhookDeps,
+} from "./orders/webhook";
 import type { StripeApi } from "./stripe-api";
 
 /** A Checkout Session id (test or live). */
@@ -104,6 +114,15 @@ const CHECKOUT_SESSION_ID_REGEX = /^cs_(test|live)_[A-Za-z0-9]+$/;
  * (3), without the writer. A user with more other subscriptions is handled
  * over several deliveries: a canceled duplicate leaves the entitling set the
  * database lists.
+ *
+ * Goods (slice S2, orders/webhook.ts): a `checkout.session.completed` or
+ * `checkout.session.async_payment_succeeded` of a `mode=payment` session with
+ * `metadata.kind` `goods_order` goes to the goods branch (never a subscription
+ * writer); any other `async_payment_succeeded` is ignored `not_goods_order`.
+ * `charge.refunded` and `payment_intent.canceled` go to the goods writers,
+ * which answer `unknown_order` (ignored) for a payment of no goods order.
+ * Their log line adds the goods fields (`order`, and per email `sent`,
+ * `deferred` or a failure code). At most 7 subrequests (a session).
  */
 
 export type WebhookDeps = {
@@ -119,10 +138,16 @@ export type WebhookDeps = {
   now: () => number;
   /** Writes one log line. */
   log: (line: string) => void;
+  /**
+   * The goods events' clients (orders/webhook.ts). Absent only where a caller handles no goods
+   * event (the subscription tests): a goods event then fails with 500 (`orders_unavailable`).
+   */
+  orders?: OrderWebhookDeps;
 };
 
 type Outcome =
   | WriterOutcome["outcome"]
+  | GoodsOutcome
   | "ignored"
   | "rejected"
   | "duplicate_subscription_canceled"
@@ -142,8 +167,11 @@ type ConsentLog = {
   mail: "sent" | "not_needed" | "no_recipient" | "failed" | null;
 };
 
-/** What a handled event did: the log line's outcome, code and paused (and, for a Checkout, its consent). */
-type Handled = { outcome: Outcome; code: string | null; paused: number | null; consent?: ConsentLog };
+/**
+ * What a handled event did: the log line's outcome, code and paused (and, for a Checkout, its
+ * consent; for a goods event, its order and emails).
+ */
+type Handled = { outcome: Outcome; code: string | null; paused: number | null; consent?: ConsentLog; goods?: GoodsLog };
 
 /** A verified event: the fields the writers record, `data.object`, and whether a connected account (`account`) sent it. */
 type StripeEvent = StripeEventHeader & { object: Record<string, unknown>; connect: boolean };
@@ -187,6 +215,18 @@ const HANDLED = { received: true };
 
 function ignored(code: string): Handled {
   return { outcome: "ignored", code, paused: null };
+}
+
+/** The goods clients, or a failure a retry may fix when this Worker was built without them. */
+function ordersDeps(deps: WebhookDeps): OrderWebhookDeps {
+  if (deps.orders === undefined) throw new TransientFailure("orders_unavailable");
+  return deps.orders;
+}
+
+/** A goods handler's answer as the delivery's: `retry` fails it (500), else its log fields (200). */
+function goodsHandled(result: GoodsHandled): Handled {
+  if (result.retry) throw new TransientFailure(result.code);
+  return { outcome: result.outcome, code: result.code, paused: null, goods: result.goods };
 }
 
 function rejected(code: string): Handled {
@@ -310,6 +350,7 @@ export async function handleStripeWebhook(request: Request, deps: WebhookDeps): 
     code: string | null,
     paused: number | null,
     consent?: ConsentLog,
+    goods?: GoodsLog,
   ) =>
     deps.log(
       JSON.stringify({
@@ -320,6 +361,7 @@ export async function handleStripeWebhook(request: Request, deps: WebhookDeps): 
         code,
         paused,
         ...consent,
+        ...goods,
       }),
     );
   if (event === null) {
@@ -335,7 +377,7 @@ export async function handleStripeWebhook(request: Request, deps: WebhookDeps): 
     log("error", error.code, null);
     return Response.json({ error: "unavailable" }, { status: 500 });
   }
-  log(handled.outcome, handled.code, handled.paused, handled.consent);
+  log(handled.outcome, handled.code, handled.paused, handled.consent, handled.goods);
   return Response.json(HANDLED, { status: 200 });
 }
 
@@ -353,8 +395,14 @@ async function handleEvent(event: StripeEvent, deps: WebhookDeps): Promise<Handl
   };
 
   switch (event.type) {
-    case "checkout.session.completed": {
+    case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded": {
       const session = event.object;
+      // Goods (slice S2): a one-time payment for a physical figure, its own branch and writers.
+      if (session.mode === "payment" && asRecord(session.metadata)?.kind === GOODS_ORDER_KIND) {
+        return goodsHandled(await onSessionPaid(event, ordersDeps(deps)));
+      }
+      if (event.type !== "checkout.session.completed") return ignored("not_goods_order");
       if (session.mode !== "subscription" || asRecord(session.metadata)?.kind !== MONITOR_SUBSCRIPTION_KIND) {
         return ignored("not_monitor_subscription");
       }
@@ -401,6 +449,12 @@ async function handleEvent(event: StripeEvent, deps: WebhookDeps): Promise<Handl
       if (retrieved === null) return rejected("subscription_not_found");
       return invoicePaid(event, invoiceId, subscriptionId, retrieved.subscription, deps);
     }
+
+    case "charge.refunded":
+      return goodsHandled(await onChargeRefunded(event, ordersDeps(deps)));
+
+    case "payment_intent.canceled":
+      return goodsHandled(await onPaymentIntentCanceled(event, ordersDeps(deps)));
 
     default:
       return ignored("unhandled_type");

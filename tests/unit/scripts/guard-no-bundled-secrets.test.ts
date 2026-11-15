@@ -464,3 +464,41 @@ describe("WH-AC30d: STRIPE_PAYMENTS_KEY guard — exact description, .env.local 
     expect(run.status).toBe(0);
   });
 });
+
+// ── S2-T-CFG-08: ORDER_LINK_SECRET (payments Worker only) is guarded ─────────
+
+describe("S2-T-CFG-08: ORDER_LINK_SECRET guard — exact description, .env.local leak, process.env passthrough", () => {
+  const LINK_SECRET_DESCRIPTION =
+    "payments Worker secret: " +
+    "`wrangler secret put ORDER_LINK_SECRET --config workers/payments/wrangler.jsonc`, " +
+    "workers/payments/.dev.vars locally, never the app";
+
+  it("S2-T-CFG-08a: OpenNext env-file entry for ORDER_LINK_SECRET → guard exits 1, exact description line, no value", () => {
+    const files: Record<string, string> = {
+      "payments/cloudflare/next-env.mjs": `export const p = ${JSON.stringify({ ORDER_LINK_SECRET: FIXTURE_VALUE })};\n`,
+    };
+    const run = runGuard(outputDir(files));
+    expect(run.status).toBe(1);
+    expect(run.leaks).toEqual(["ORDER_LINK_SECRET payments/cloudflare/next-env.mjs"]);
+    expect(run.output.split(/\r?\n/)).toContain(`  ORDER_LINK_SECRET: ${LINK_SECRET_DESCRIPTION}`);
+    expect(run.output).not.toContain(FIXTURE_VALUE);
+  });
+
+  it("S2-T-CFG-08b: .env.local line for ORDER_LINK_SECRET → guard exits 1, reports the file", () => {
+    const files: Record<string, string> = {
+      "payments/.env.local": `ORDER_LINK_SECRET=${FIXTURE_VALUE}\n`,
+    };
+    const run = runGuard(outputDir(files));
+    expect(run.status).toBe(1);
+    expect(run.leaks).toEqual(["ORDER_LINK_SECRET payments/.env.local"]);
+    expect(run.output).not.toContain(FIXTURE_VALUE);
+  });
+
+  it("S2-T-CFG-08c: process.env.ORDER_LINK_SECRET read (route.js) → guard exits 0 (passthrough)", () => {
+    const files: Record<string, string> = {
+      "payments/route.js": `const s = process.env.ORDER_LINK_SECRET; if (!s) return null;`,
+    };
+    const run = runGuard(outputDir(files));
+    expect(run.status).toBe(0);
+  });
+});

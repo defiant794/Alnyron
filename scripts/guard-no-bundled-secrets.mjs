@@ -64,6 +64,10 @@ const SECRETS = new Map([
     "STRIPE_PAYMENTS_KEY",
     "payments Worker secret: `wrangler secret put STRIPE_PAYMENTS_KEY --config workers/payments/wrangler.jsonc`, workers/payments/.dev.vars locally, never the app",
   ],
+  [
+    "ORDER_LINK_SECRET",
+    "payments Worker secret: `wrangler secret put ORDER_LINK_SECRET --config workers/payments/wrangler.jsonc`, workers/payments/.dev.vars locally, never the app",
+  ],
 ]);
 
 const PROJECT = fileURLToPath(new URL("..", import.meta.url));

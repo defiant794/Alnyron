@@ -11,6 +11,7 @@ import { sanitizeMarkdown } from "@/lib/sanitize-markdown";
 import type { PublicCatalogItem, PublicCatalogSection } from "@/services/content/catalog";
 import ItemGallery from "./ItemGallery";
 import { MARKDOWN_BODY_CLASSES } from "./markdown-body";
+import ItemOfferBlock from "./ItemOfferBlock";
 import PriceText from "./PriceText";
 
 export interface ItemDetailViewProps {
@@ -33,10 +34,12 @@ const LINK_KEYS = EXTERNAL_LINK_KEYS.toSorted((a, b) => LINK_RANK[a] - LINK_RANK
 /**
  * Item page body (approved detail mock): breadcrumb back to the section,
  * gallery beside title, summary, price and link buttons, then the markdown
- * body and the contact call to action. Item text comes from the DB (Danish
- * fallback marked `lang="da"`, blank fields left out); the body is rendered
- * by `sanitizeMarkdown`, which never emits raw HTML or script URLs. Link
- * buttons open in the same tab.
+ * body and the contact call to action. An item with an active physical offer
+ * shows the purchase block (`ItemOfferBlock`, approved item-buy mock: the
+ * offer's price and the Buy form) instead of its display price. Item text
+ * comes from the DB (Danish fallback marked `lang="da"`, blank fields left
+ * out); the body is rendered by `sanitizeMarkdown`, which never emits raw
+ * HTML or script URLs. Link buttons open in the same tab.
  */
 export default function ItemDetailView({ locale, section, item }: ItemDetailViewProps) {
   const t = createTranslator({ locale, messages: loadMessages(locale), namespace: "Catalog" });
@@ -92,7 +95,11 @@ export default function ItemDetailView({ locale, section, item }: ItemDetailView
                 </p>
               )}
             </div>
-            {item.price && <PriceText price={item.price} className="text-h3 font-bold" />}
+            {item.offer ? (
+              <ItemOfferBlock offer={{ itemId: item.id, priceOre: item.offer.priceOre }} locale={locale} />
+            ) : (
+              item.price && <PriceText price={item.price} className="text-h3 font-bold" />
+            )}
             {links.length > 0 && (
               <ul aria-label={t("links.label")} className="flex flex-wrap gap-3">
                 {links.map(({ key, url }, index) => (

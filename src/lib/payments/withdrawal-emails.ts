@@ -97,8 +97,12 @@ function kroner(amountOre: number, locale: Locale): string {
   return `${formatKroner(amountOre, locale)} kr`;
 }
 
-/** One block of an email: a heading, paragraphs, a quote or plain lines. */
-type Block =
+/**
+ * One block of a payments email: a heading, a paragraph (a template with
+ * values, the `links` placeholders rendered as anchors), or a quote. Shared
+ * with the goods emails (orders/emails.ts).
+ */
+export type EmailBlock =
   | { kind: "heading"; text: string }
   | { kind: "paragraph"; template: string; values?: Readonly<Record<string, string>>; links?: readonly string[] }
   | { kind: "quote"; text: string };
@@ -120,8 +124,16 @@ const P = '<p style="margin:0 0 12px;">';
 const H2 = '<h2 style="margin:24px 0 8px;font-size:17px;line-height:1.3;color:#0b1d33;">';
 const QUOTE = '<blockquote style="margin:0 0 12px;padding:8px 16px;border-left:3px solid #c9d2e0;color:#33445a;">';
 
-/** Wraps blocks in the email layout (inline styles, `lang` of the email) plus a text part. */
-function render(locale: Locale, subject: string, blocks: readonly Block[], footer: string): EmailContent {
+/**
+ * Wraps blocks in the payments email layout (inline styles, `lang` of the
+ * email) plus a text part. Shared with the goods emails (orders/emails.ts).
+ */
+export function renderEmailBlocks(
+  locale: Locale,
+  subject: string,
+  blocks: readonly EmailBlock[],
+  footer: string,
+): EmailContent {
   const html = blocks
     .map((block) => {
       if (block.kind === "heading") return `${H2}${escapeHtml(block.text)}</h2>`;
@@ -165,15 +177,15 @@ ${html}
 }
 
 /** The withdrawal notice, the online-withdrawal paragraph and the model form, as blocks. */
-function noticeBlocks(texts: WithdrawalTexts, withdrawLine: Block): Block[] {
+function noticeBlocks(texts: WithdrawalTexts, withdrawLine: EmailBlock): EmailBlock[] {
   return [
     { kind: "heading", text: texts.notice.title },
-    ...texts.notice.paragraphs.map((paragraph): Block => ({ kind: "paragraph", template: paragraph })),
+    ...texts.notice.paragraphs.map((paragraph): EmailBlock => ({ kind: "paragraph", template: paragraph })),
     { kind: "paragraph", template: texts.onlineWithdrawal },
     withdrawLine,
     { kind: "heading", text: texts.modelForm.title },
     { kind: "paragraph", template: texts.modelForm.intro },
-    ...texts.modelForm.lines.map((line): Block => ({ kind: "paragraph", template: line })),
+    ...texts.modelForm.lines.map((line): EmailBlock => ({ kind: "paragraph", template: line })),
   ];
 }
 
@@ -208,13 +220,13 @@ export function buildConfirmationEmail(input: ConfirmationEmailInput): EmailCont
     intervalWord: mail.intervalWords[input.billingInterval],
     startDate: formatWithdrawalDate(input.startDate, locale),
   };
-  return render(
+  return renderEmailBlocks(
     locale,
     mail.subject,
     [
       { kind: "paragraph", template: mail.intro },
       { kind: "heading", text: mail.agreementHeading },
-      ...mail.agreementLines.map((line): Block => ({ kind: "paragraph", template: line, values: agreementValues })),
+      ...mail.agreementLines.map((line): EmailBlock => ({ kind: "paragraph", template: line, values: agreementValues })),
       { kind: "heading", text: mail.consentHeading },
       { kind: "paragraph", template: mail.consentIntro },
       { kind: "quote", text: texts.consent },
@@ -251,7 +263,7 @@ export type ReceiptEmailInput = {
 export function buildReceiptEmail(input: ReceiptEmailInput): EmailContent {
   const { locale } = input;
   const mail = WITHDRAWAL_TEXTS[locale].receiptEmail;
-  let status: Block;
+  let status: EmailBlock;
   if (input.status !== "completed") {
     status = { kind: "paragraph", template: mail.statusInProgress };
   } else if (input.paidOre === 0) {
@@ -267,7 +279,7 @@ export function buildReceiptEmail(input: ReceiptEmailInput): EmailContent {
       },
     };
   }
-  return render(
+  return renderEmailBlocks(
     locale,
     mail.subject,
     [
@@ -316,12 +328,12 @@ export function buildOwnerAlertEmail(input: OwnerAlertEmailInput): EmailContent 
     canceledYesNo: input.canceled ? texts.yes : texts.no,
     refundDeadline: formatCopenhagenDatePlusDays(input.requestedAt, REFUND_DUE_DAYS, "da"),
   };
-  return render(
+  return renderEmailBlocks(
     "da",
     fillTemplate(texts.subject, { reason: input.reason }),
     [
       { kind: "paragraph", template: texts.intro },
-      ...texts.lines.map((line): Block => ({ kind: "paragraph", template: line, values })),
+      ...texts.lines.map((line): EmailBlock => ({ kind: "paragraph", template: line, values })),
       { kind: "paragraph", template: input.receiptSent ? texts.receiptSent : texts.receiptNotSent },
       { kind: "paragraph", template: texts.refundDeadline, values },
       { kind: "paragraph", template: texts.runbook },

@@ -103,6 +103,44 @@ export type Database = {
           },
         ]
       }
+      item_offers: {
+        Row: {
+          active: boolean
+          created_at: string
+          item_id: string
+          kind: string
+          price_ore: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          item_id: string
+          kind: string
+          price_ore: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          item_id?: string
+          kind?: string
+          price_ore?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_offers_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       item_translations: {
         Row: {
           body_md: string
@@ -422,6 +460,338 @@ export type Database = {
           updated_at?: string
           url?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      order_items: {
+        Row: {
+          amount_tax_ore: number
+          amount_total_ore: number
+          item_id: string | null
+          line_no: number
+          offer_kind: string
+          order_id: string
+          quantity: number
+          title: string
+          unit_amount_ore: number
+          vat_rate_bp: number
+        }
+        Insert: {
+          amount_tax_ore: number
+          amount_total_ore: number
+          item_id?: string | null
+          line_no: number
+          offer_kind: string
+          order_id: string
+          quantity: number
+          title: string
+          unit_amount_ore: number
+          vat_rate_bp?: number
+        }
+        Update: {
+          amount_tax_ore?: number
+          amount_total_ore?: number
+          item_id?: string | null
+          line_no?: number
+          offer_kind?: string
+          order_id?: string
+          quantity?: number
+          title?: string
+          unit_amount_ore?: number
+          vat_rate_bp?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_withdrawals: {
+        Row: {
+          ack_email_id: string | null
+          ack_sent_at: string | null
+          action: string | null
+          approved_at: string | null
+          approved_by: string | null
+          attempts: number
+          authorization_canceled_at: string | null
+          channel: string
+          consumer_name: string
+          created_at: string
+          deadline_at: string | null
+          deduction_ore: number
+          deduction_reason: string | null
+          goods_state: string | null
+          id: string
+          last_error: string | null
+          late: boolean | null
+          lease_until: string | null
+          locale: Database["public"]["Enums"]["locale_code"]
+          mail_attempts: number
+          manual_alert_email_id: string | null
+          manual_alert_sent_at: string | null
+          manual_reason: string | null
+          order_id: string
+          owner_alert_email_id: string | null
+          owner_alerted_at: string | null
+          receipt_email_id: string | null
+          receipt_sent_at: string | null
+          refund_due_at: string
+          refund_ore: number | null
+          refund_tax_ore: number | null
+          refunded_at: string | null
+          reminder_sent_at: string | null
+          requested_at: string
+          shipped_before_notice: boolean
+          statement_version: string
+          status: string
+          stripe_refund_id: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          ack_email_id?: string | null
+          ack_sent_at?: string | null
+          action?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          attempts?: number
+          authorization_canceled_at?: string | null
+          channel: string
+          consumer_name: string
+          created_at?: string
+          deadline_at?: string | null
+          deduction_ore?: number
+          deduction_reason?: string | null
+          goods_state?: string | null
+          id?: string
+          last_error?: string | null
+          late?: boolean | null
+          lease_until?: string | null
+          locale: Database["public"]["Enums"]["locale_code"]
+          mail_attempts?: number
+          manual_alert_email_id?: string | null
+          manual_alert_sent_at?: string | null
+          manual_reason?: string | null
+          order_id: string
+          owner_alert_email_id?: string | null
+          owner_alerted_at?: string | null
+          receipt_email_id?: string | null
+          receipt_sent_at?: string | null
+          refund_due_at: string
+          refund_ore?: number | null
+          refund_tax_ore?: number | null
+          refunded_at?: string | null
+          reminder_sent_at?: string | null
+          requested_at?: string
+          shipped_before_notice: boolean
+          statement_version: string
+          status?: string
+          stripe_refund_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          ack_email_id?: string | null
+          ack_sent_at?: string | null
+          action?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          attempts?: number
+          authorization_canceled_at?: string | null
+          channel?: string
+          consumer_name?: string
+          created_at?: string
+          deadline_at?: string | null
+          deduction_ore?: number
+          deduction_reason?: string | null
+          goods_state?: string | null
+          id?: string
+          last_error?: string | null
+          late?: boolean | null
+          lease_until?: string | null
+          locale?: Database["public"]["Enums"]["locale_code"]
+          mail_attempts?: number
+          manual_alert_email_id?: string | null
+          manual_alert_sent_at?: string | null
+          manual_reason?: string | null
+          order_id?: string
+          owner_alert_email_id?: string | null
+          owner_alerted_at?: string | null
+          receipt_email_id?: string | null
+          receipt_sent_at?: string | null
+          refund_due_at?: string
+          refund_ore?: number | null
+          refund_tax_ore?: number | null
+          refunded_at?: string | null
+          reminder_sent_at?: string | null
+          requested_at?: string
+          shipped_before_notice?: boolean
+          statement_version?: string
+          status?: string
+          stripe_refund_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_withdrawals_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          amount_refunded_ore: number
+          amount_subtotal_ore: number
+          amount_tax_ore: number
+          amount_total_ore: number
+          anomaly: string | null
+          authorization_expires_at: string | null
+          cancel_reason: string | null
+          canceled_at: string | null
+          capture_warning_email_id: string | null
+          capture_warning_sent_at: string | null
+          captured_at: string | null
+          confirmation_email_id: string | null
+          confirmation_sent_at: string | null
+          created_at: string
+          currency: string
+          customer_name: string | null
+          email: string
+          expired_alert_email_id: string | null
+          expired_alert_sent_at: string | null
+          id: string
+          locale: Database["public"]["Enums"]["locale_code"]
+          mail_attempts: number
+          order_number: number
+          owner_email_id: string | null
+          owner_notified_at: string | null
+          paid_at: string
+          phone: string | null
+          shipped_at: string | null
+          shipped_by: string | null
+          shipped_email_id: string | null
+          shipped_email_sent_at: string | null
+          shipping_address: Json | null
+          shipping_name: string | null
+          status: string
+          stripe_checkout_session_id: string
+          stripe_consent: string | null
+          stripe_customer_id: string | null
+          stripe_invoice_id: string | null
+          stripe_payment_intent_id: string
+          terms_sha256: string | null
+          terms_version: string
+          tracking_ref: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          amount_refunded_ore?: number
+          amount_subtotal_ore: number
+          amount_tax_ore: number
+          amount_total_ore: number
+          anomaly?: string | null
+          authorization_expires_at?: string | null
+          cancel_reason?: string | null
+          canceled_at?: string | null
+          capture_warning_email_id?: string | null
+          capture_warning_sent_at?: string | null
+          captured_at?: string | null
+          confirmation_email_id?: string | null
+          confirmation_sent_at?: string | null
+          created_at?: string
+          currency: string
+          customer_name?: string | null
+          email: string
+          expired_alert_email_id?: string | null
+          expired_alert_sent_at?: string | null
+          id?: string
+          locale: Database["public"]["Enums"]["locale_code"]
+          mail_attempts?: number
+          order_number?: never
+          owner_email_id?: string | null
+          owner_notified_at?: string | null
+          paid_at: string
+          phone?: string | null
+          shipped_at?: string | null
+          shipped_by?: string | null
+          shipped_email_id?: string | null
+          shipped_email_sent_at?: string | null
+          shipping_address?: Json | null
+          shipping_name?: string | null
+          status?: string
+          stripe_checkout_session_id: string
+          stripe_consent?: string | null
+          stripe_customer_id?: string | null
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id: string
+          terms_sha256?: string | null
+          terms_version: string
+          tracking_ref?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          amount_refunded_ore?: number
+          amount_subtotal_ore?: number
+          amount_tax_ore?: number
+          amount_total_ore?: number
+          anomaly?: string | null
+          authorization_expires_at?: string | null
+          cancel_reason?: string | null
+          canceled_at?: string | null
+          capture_warning_email_id?: string | null
+          capture_warning_sent_at?: string | null
+          captured_at?: string | null
+          confirmation_email_id?: string | null
+          confirmation_sent_at?: string | null
+          created_at?: string
+          currency?: string
+          customer_name?: string | null
+          email?: string
+          expired_alert_email_id?: string | null
+          expired_alert_sent_at?: string | null
+          id?: string
+          locale?: Database["public"]["Enums"]["locale_code"]
+          mail_attempts?: number
+          order_number?: never
+          owner_email_id?: string | null
+          owner_notified_at?: string | null
+          paid_at?: string
+          phone?: string | null
+          shipped_at?: string | null
+          shipped_by?: string | null
+          shipped_email_id?: string | null
+          shipped_email_sent_at?: string | null
+          shipping_address?: Json | null
+          shipping_name?: string | null
+          status?: string
+          stripe_checkout_session_id?: string
+          stripe_consent?: string | null
+          stripe_customer_id?: string | null
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string
+          terms_sha256?: string | null
+          terms_version?: string
+          tracking_ref?: string | null
+          updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -1067,6 +1437,26 @@ export type Database = {
       }
       my_monitor_limit: { Args: never; Returns: number }
       my_withdrawal_status: { Args: never; Returns: Json }
+      payments_approve_order_refund: {
+        Args: {
+          p_actor: string
+          p_deduction_ore: number
+          p_deduction_reason?: string
+          p_goods_state: string
+          p_order_id: string
+        }
+        Returns: Json
+      }
+      payments_begin_order_withdrawal: {
+        Args: {
+          p_channel: string
+          p_consumer_name: string
+          p_locale: string
+          p_order_id: string
+          p_statement_version: string
+        }
+        Returns: Json
+      }
       payments_begin_withdrawal: {
         Args: {
           p_ack_email: string
@@ -1078,12 +1468,52 @@ export type Database = {
         }
         Returns: Json
       }
+      payments_claim_order_withdrawal: {
+        Args: { p_lease_seconds: number; p_withdrawal_id: string }
+        Returns: Json
+      }
       payments_claim_withdrawal: {
         Args: { p_lease_seconds: number; p_withdrawal_id: string }
         Returns: Json
       }
+      payments_find_order: {
+        Args: { p_email: string; p_order_number: number }
+        Returns: Json
+      }
+      payments_goods_offer: {
+        Args: { p_item_id: string; p_locale: string }
+        Returns: Json
+      }
       payments_mark_consent_info_sent: {
         Args: { p_checkout_session_id: string; p_email_id: string }
+        Returns: Json
+      }
+      payments_order_authorization_canceled: {
+        Args: { p_event: Json; p_payment_intent: string }
+        Returns: Json
+      }
+      payments_order_begin_ship: {
+        Args: { p_actor: string; p_order_id: string; p_tracking_ref?: string }
+        Returns: Json
+      }
+      payments_order_capture_failed: {
+        Args: { p_order_id: string; p_reason: string }
+        Returns: Json
+      }
+      payments_order_captured: {
+        Args: { p_actor: string; p_order_id: string }
+        Returns: Json
+      }
+      payments_order_mail_sent: {
+        Args: { p_email_id: string; p_kind: string; p_order_id: string }
+        Returns: Json
+      }
+      payments_order_withdrawal_step: {
+        Args: { p_data: Json; p_step: string; p_withdrawal_id: string }
+        Returns: Json
+      }
+      payments_pending_order_work: {
+        Args: { p_limit: number; p_max_mail_attempts: number }
         Returns: Json
       }
       payments_pending_work: {
@@ -1094,8 +1524,20 @@ export type Database = {
         Args: { p_consent: Json }
         Returns: Json
       }
+      payments_record_order: {
+        Args: { p_event: Json; p_order: Json }
+        Returns: Json
+      }
       payments_record_subscription_invoice: {
         Args: { p_event: Json; p_invoice: Json; p_subscription: Json }
+        Returns: Json
+      }
+      payments_sync_order_refund: {
+        Args: {
+          p_amount_refunded: number
+          p_event: Json
+          p_payment_intent: string
+        }
         Returns: Json
       }
       payments_sync_subscription: {

@@ -35,6 +35,7 @@ export function catalogItem(overrides: Partial<PublicCatalogItem> = {}): PublicC
     externalLinks: {},
     media: [],
     seo: { title: "Webudvikling hos Alnyron", description: "Moderne og hurtige websites." },
+    offer: null,
     fallbackKeys: [],
     ...overrides,
   };
