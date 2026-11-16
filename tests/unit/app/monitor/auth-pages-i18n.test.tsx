@@ -52,6 +52,10 @@ vi.mock("@/services/auth/require-role", () => ({
 vi.mock("@/components/site/SiteFooter", () => ({
   default: ({ locale }: { locale: string }) => <footer data-testid="site-footer" data-locale={locale} />,
 }));
+// Keep the landing's nested async nav out of React DOM, as in its other page tests.
+vi.mock("@/components/monitor/MonitorMainNav", () => ({ default: () => null }));
+// The shared SiteMenu needs a current path without an App Router/provider.
+vi.mock("@/i18n/current-route", () => ({ useCurrentPath: () => "/" }));
 
 vi.mock("next/image", () => ({
   default: ({ alt, className }: { alt: string; className?: string }) => (
@@ -74,6 +78,7 @@ import MonitorNoAccessPage from "@/app/monitor/(panel)/no-access/page";
 import MonitorLandingPage from "@/app/monitor/page";
 import {
   MONITOR_FORGOT_PASSWORD_PATH,
+  MONITOR_HOME_PATH,
   MONITOR_LOGIN_PATH,
   MONITOR_NO_ACCESS_PATH,
   MONITOR_SET_PASSWORD_PATH,
@@ -102,7 +107,7 @@ const PAGES = [
   {
     name: "landing",
     render: MonitorLandingPage,
-    path: "/",
+    path: MONITOR_HOME_PATH,
     title: en.Monitor.landing.title,
     daTitle: da.Monitor.landing.title,
     copy: en.Monitor.landing.note,

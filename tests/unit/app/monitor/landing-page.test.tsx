@@ -27,6 +27,10 @@ vi.mock("@/components/site/SiteFooter", () => ({
     <footer data-testid="site-footer" data-locale={locale} />
   ),
 }));
+// Nested async RSCs are covered separately; React DOM needs a sync nav stub.
+vi.mock("@/components/monitor/MonitorMainNav", () => ({ default: () => null }));
+// SiteMenu reads the current route, which has no App Router/provider here.
+vi.mock("@/i18n/current-route", () => ({ useCurrentPath: () => "/" }));
 
 vi.mock("next-intl/server", async () => {
   // Dynamic import required: vi.mock factories are hoisted above static imports by

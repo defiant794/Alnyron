@@ -45,13 +45,9 @@ vi.mock("next/link", () => ({
   default: ({
     href,
     children,
-    className,
-  }: {
-    href: string;
-    children: React.ReactNode;
-    className?: string;
-  }) => (
-    <a href={href} className={className ?? ""}>
+    ...props
+  }: React.ComponentProps<"a">) => (
+    <a href={href} {...props}>
       {children}
     </a>
   ),
@@ -183,6 +179,50 @@ describe("MPN-AC2c: MonitorMainNav leaves already-absolute hrefs unchanged", () 
       "href",
       "https://monitor.alnyron.dk/",
     );
+  });
+});
+
+describe("monitor-landing-top-nav AC1: MonitorMainNav marks only the current page", () => {
+  it("marks the Monitor landing item when its absolute URL matches currentHref", async () => {
+    mockGetNavItems.mockResolvedValue([RELATIVE_ITEM, RELATIVE_PAGE_ITEM, ABSOLUTE_ITEM]);
+    render(await MonitorMainNav({ locale: "da", currentHref: ABSOLUTE_ITEM.href }));
+
+    const currentLink = screen.getByRole("link", { name: "Monitor" });
+    expect(currentLink).toHaveAttribute("aria-current", "page");
+    expect(currentLink).toHaveClass(
+      "aria-[current]:font-semibold",
+      "aria-[current]:text-fg",
+      "aria-[current]:underline",
+      "aria-[current]:decoration-accent",
+      "aria-[current]:decoration-2",
+      "aria-[current]:underline-offset-8",
+    );
+    expect(screen.getByRole("link", { name: "Forside" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Kontakt" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("compares currentHref to the resolved absolute URL of a relative item", async () => {
+    mockGetNavItems.mockResolvedValue([RELATIVE_ITEM, RELATIVE_PAGE_ITEM]);
+    render(await MonitorMainNav({ locale: "da", currentHref: "http://localhost:3000/kontakt" }));
+
+    expect(screen.getByRole("link", { name: "Kontakt" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Forside" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("leaves every item unmarked when currentHref is omitted by MonitorShell", async () => {
+    mockGetNavItems.mockResolvedValue([RELATIVE_ITEM, ABSOLUTE_ITEM]);
+    render(await MonitorMainNav({ locale: "da" }));
+
+    for (const link of screen.getAllByRole("link")) {
+      expect(link).not.toHaveAttribute("aria-current");
+    }
+  });
+
+  it("does not mark the Monitor landing item on a different Monitor page", async () => {
+    mockGetNavItems.mockResolvedValue([ABSOLUTE_ITEM]);
+    render(await MonitorMainNav({ locale: "da", currentHref: "https://monitor.alnyron.dk/dashboard" }));
+
+    expect(screen.getByRole("link", { name: "Monitor" })).not.toHaveAttribute("aria-current");
   });
 });
 
