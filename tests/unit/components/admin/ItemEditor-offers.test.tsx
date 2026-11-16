@@ -412,3 +412,132 @@ describe("S2-T-IE-OFR-11: ItemEditor — offers-not-allowed / item-has-offers fr
     },
   );
 });
+
+describe("catalog-3d-price-field-cleanup: ItemEditor display pricing", () => {
+  it("AC1: shows Pristype and Beløb for a 3D item with selling off", () => {
+    renderItem(models3dItem({ offers: [{ kind: "physical", priceOre: 24900, active: false }] }));
+
+    expect(screen.getByRole("checkbox", { name: "Sælg som 3D-print" })).not.toBeChecked();
+    expect(screen.getByRole("group", { name: m.item.fields.priceType })).toBeVisible();
+    expect(screen.getByRole("radio", { name: m.item.fields.priceTypes.fixed })).toBeVisible();
+    expect(screen.getByLabelText(m.item.fields.amount)).toBeVisible();
+  });
+
+  it("AC2: hides Pristype and Beløb immediately when selling is toggled on without saving", async () => {
+    const user = userEvent.setup();
+    renderItem(models3dItem());
+
+    await user.click(screen.getByRole("checkbox", { name: "Sælg som 3D-print" }));
+
+    expect(screen.getByRole("checkbox", { name: "Sælg som 3D-print" })).toBeChecked();
+    expect(screen.queryByRole("group", { name: m.item.fields.priceType })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(m.item.fields.amount)).not.toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("AC2: hides Pristype and Beløb when opening a 3D item already selling", () => {
+    renderItem(models3dItem({
+      priceType: "fixed",
+      priceAmount: 100,
+      offers: [{ kind: "physical", priceOre: 24900, active: true }],
+    }));
+
+    expect(screen.getByRole("checkbox", { name: "Sælg som 3D-print" })).toBeChecked();
+    expect(screen.queryByRole("group", { name: m.item.fields.priceType })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(m.item.fields.amount)).not.toBeInTheDocument();
+  });
+
+  it("AC3: restores Pristype and Beløb when selling is toggled back off without saving", async () => {
+    const user = userEvent.setup();
+    renderItem(models3dItem());
+    const selling = screen.getByRole("checkbox", { name: "Sælg som 3D-print" });
+
+    await user.click(selling);
+    expect(screen.queryByRole("group", { name: m.item.fields.priceType })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(m.item.fields.amount)).not.toBeInTheDocument();
+    await user.click(selling);
+
+    expect(selling).not.toBeChecked();
+    expect(screen.getByRole("group", { name: m.item.fields.priceType })).toBeVisible();
+    expect(screen.getByLabelText(m.item.fields.amount)).toBeVisible();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("AC4: saves null display price type and amount after selecting Fast and enabling selling", async () => {
+    const user = userEvent.setup();
+    save.mockResolvedValue({ ok: true, id: ITEM_ID });
+    renderItem(models3dItem());
+    await user.type(screen.getByLabelText("Titel (DA)"), "Drage");
+    await user.click(screen.getByRole("radio", { name: m.item.fields.priceTypes.fixed }));
+    await user.type(screen.getByLabelText(m.item.fields.amount), "125");
+    await user.click(screen.getByRole("checkbox", { name: "Sælg som 3D-print" }));
+    await user.type(screen.getByLabelText("Pris inkl. moms og levering i DK (kr.)"), "249");
+
+    await user.click(screen.getByRole("button", { name: m.item.saveDraft }));
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      price_type: null,
+      price_amount: null,
+      offers: [{ kind: "physical", price_ore: 24900, active: true }],
+    }));
+  });
+
+  it("AC4: resets display price to Ingen after saving while selling, so a later save does not re-send a stale price", async () => {
+    const user = userEvent.setup();
+    save.mockResolvedValue({ ok: true, id: ITEM_ID });
+    renderItem(models3dItem({ id: ITEM_ID }));
+    await user.type(screen.getByLabelText("Titel (DA)"), "Drage");
+    await user.click(screen.getByRole("radio", { name: m.item.fields.priceTypes.fixed }));
+    await user.type(screen.getByLabelText(m.item.fields.amount), "125");
+    const selling = screen.getByRole("checkbox", { name: "Sælg som 3D-print" });
+
+    await user.click(selling);
+    await user.click(selling);
+    expect(screen.getByRole("radio", { name: m.item.fields.priceTypes.fixed })).toBeChecked();
+    expect(screen.getByLabelText(m.item.fields.amount)).toHaveValue(125);
+    await user.click(selling);
+    await user.type(screen.getByLabelText("Pris inkl. moms og levering i DK (kr.)"), "249");
+    await user.click(screen.getByRole("button", { name: m.item.saveDraft }));
+    expect(await screen.findByText(m.item.savedDraft)).toBeVisible();
+    expect(save).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      price_type: null,
+      price_amount: null,
+    }));
+
+    await user.click(selling);
+    expect(screen.getByRole("radio", { name: m.item.fields.priceTypes.none })).toBeChecked();
+    expect(screen.getByRole("radio", { name: m.item.fields.priceTypes.fixed })).not.toBeChecked();
+    expect(screen.getByLabelText(m.item.fields.amount)).toHaveValue(null);
+    await user.click(screen.getByRole("button", { name: m.item.saveDraft }));
+
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      price_type: null,
+      price_amount: null,
+    }));
+  });
+
+  it.each(["apps", "websites", "services"] as const)(
+    "AC5 / AC6: keeps Pristype, Beløb, and Fast available for %s without selling controls",
+    async (kind) => {
+      const user = userEvent.setup();
+      const section = { id: "other-id", title: kind, kind };
+      renderItem(models3dItem({ categoryId: section.id }), [section]);
+
+      expect(screen.getByRole("group", { name: m.item.fields.priceType })).toBeVisible();
+      expect(screen.getByLabelText(m.item.fields.amount)).toBeVisible();
+      const fixed = screen.getByRole("radio", { name: "Fast" });
+      expect(fixed).toBeVisible();
+      await user.click(fixed);
+      await user.type(screen.getByLabelText(m.item.fields.amount), "125");
+
+      expect(fixed).toBeChecked();
+      expect(screen.getByRole("group", { name: m.item.fields.priceType })).toBeVisible();
+      expect(screen.getByLabelText(m.item.fields.amount)).toBeVisible();
+      expect(screen.getByLabelText(m.item.fields.amount)).toHaveValue(125);
+      expect(screen.queryByRole("heading", { name: "Salg" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("checkbox", { name: "Sælg som 3D-print" })).not.toBeInTheDocument();
+    },
+  );
+});

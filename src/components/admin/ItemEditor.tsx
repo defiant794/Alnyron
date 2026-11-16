@@ -149,7 +149,9 @@ const SLUG_ERRORS: readonly CatalogActionError[] = ["slug-taken", "slug-invalid"
  * Engelsk tabs (Titel, URL-slug, Resumé, Brødtekst, SEO). Right: the section,
  * "Salg" for an item in a 3D section (`ItemOffersFields`: the physical
  * offer's switch and price, the digital file's price), Pristype (Ingen pris /
- * Fast / Fra / Kontakt) with the DKK amount, the https links and "Udvalgt".
+ * Fast / Fra / Kontakt) with the DKK amount (both hidden while the physical
+ * offer is live; saving then sends price_type and price_amount as null),
+ * the https links and "Udvalgt".
  * Below: Billeder (MediaManager) and the actions.
  *
  * Every save sends the selected section: a new item is created in it, and a
@@ -191,6 +193,10 @@ export default function ItemEditor({
   const router = useRouter();
   const [locale, setLocale] = useState<Locale>(routing.defaultLocale);
   const [priceChoice, setPriceChoice] = useState<PriceChoice>(item.priceType ?? "none");
+  const [priceAmount, setPriceAmount] = useState(item.priceAmount?.toString() ?? "");
+  const [physicalActive, setPhysicalActive] = useState(() =>
+    item.offers.some((offer) => offer.kind === "physical" && offer.active),
+  );
   const [categoryId, setCategoryId] = useState(item.categoryId);
   const [result, setResult] = useState<Result | null>(null);
   const [pending, startTransition] = useTransition();
@@ -207,6 +213,7 @@ export default function ItemEditor({
   const formError =
     failure && !failure.offerErrors && !FIELD_ERRORS.includes(failure.error) && !slugLocale ? failure.error : null;
   const sellable = sections.find((section) => section.id === categoryId)?.kind === "models3d";
+  const showDisplayPrice = !(sellable && physicalActive);
   const hasAmount = priceChoice === "fixed" || priceChoice === "from";
   const published = item.status === "published";
 
@@ -273,16 +280,21 @@ export default function ItemEditor({
       ...(item.id ? { id: item.id, media } : {}),
       category_id: text("category_id"),
       featured: form.get("featured") === "on",
-      price_type: priceChoice === "none" ? null : priceChoice,
-      price_amount: amount !== null && Number.isFinite(amount) ? amount : null,
+      price_type: showDisplayPrice && priceChoice !== "none" ? priceChoice : null,
+      price_amount: showDisplayPrice && amount !== null && Number.isFinite(amount) ? amount : null,
       external_links: externalLinks,
       translations: sendEn ? { da, en } : { da },
       ...(offers ? { offers: offers.offers } : {}),
     };
 
+    const clearDisplayPrice = !showDisplayPrice;
     startTransition(async () => {
       const saved = await save(input);
       if (!saved.ok) return finish(saved);
+      if (clearDisplayPrice) {
+        setPriceChoice("none");
+        setPriceAmount("");
+      }
       if (!item.id) {
         router.replace(adminItemPath(saved.id));
         return;
@@ -457,44 +469,55 @@ export default function ItemEditor({
           </FieldFrame>
 
           {sellable && (
-            <ItemOffersFields offers={item.offers} errors={failure?.offerErrors ?? {}} labels={labels.offers} />
+            <ItemOffersFields
+              offers={item.offers}
+              physicalActive={physicalActive}
+              onPhysicalActiveChange={setPhysicalActive}
+              errors={failure?.offerErrors ?? {}}
+              labels={labels.offers}
+            />
           )}
 
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-2 text-small font-semibold">{labels.priceType}</legend>
-            <div className="grid grid-cols-2 gap-2">
-              {PRICE_CHOICES.map((choice) => (
-                <label
-                  key={choice}
-                  className="flex min-h-11 cursor-pointer items-center gap-2 rounded-input border border-border-input px-3 text-small transition-[background-color,border-color] hover:border-muted has-checked:border-accent has-checked:bg-accent/5 has-checked:font-semibold has-checked:text-accent-hover"
-                >
-                  <input
-                    type="radio"
-                    name="price_type"
-                    value={choice}
-                    checked={priceChoice === choice}
-                    onChange={() => setPriceChoice(choice)}
-                    className="size-4 shrink-0 cursor-pointer accent-accent"
-                  />
-                  {labels.priceTypes[choice]}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          {showDisplayPrice && (
+            <>
+              <fieldset className="flex flex-col gap-2">
+                <legend className="mb-2 text-small font-semibold">{labels.priceType}</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {PRICE_CHOICES.map((choice) => (
+                    <label
+                      key={choice}
+                      className="flex min-h-11 cursor-pointer items-center gap-2 rounded-input border border-border-input px-3 text-small transition-[background-color,border-color] hover:border-muted has-checked:border-accent has-checked:bg-accent/5 has-checked:font-semibold has-checked:text-accent-hover"
+                    >
+                      <input
+                        type="radio"
+                        name="price_type"
+                        value={choice}
+                        checked={priceChoice === choice}
+                        onChange={() => setPriceChoice(choice)}
+                        className="size-4 shrink-0 cursor-pointer accent-accent"
+                      />
+                      {labels.priceTypes[choice]}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
-          <Field
-            label={labels.amount}
-            hint={labels.amountHint}
-            name="price_amount"
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step="0.01"
-            defaultValue={item.priceAmount ?? ""}
-            disabled={!hasAmount}
-            required={hasAmount}
-            error={failure?.error === "price-invalid" ? labels.errors[failure.error] : undefined}
-          />
+              <Field
+                label={labels.amount}
+                hint={labels.amountHint}
+                name="price_amount"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                value={priceAmount}
+                onChange={(event) => setPriceAmount(event.currentTarget.value)}
+                disabled={!hasAmount}
+                required={hasAmount}
+                error={failure?.error === "price-invalid" ? labels.errors[failure.error] : undefined}
+              />
+            </>
+          )}
 
           <fieldset className="flex flex-col gap-4">
             <legend className="mb-2 text-small font-semibold">{labels.links}</legend>

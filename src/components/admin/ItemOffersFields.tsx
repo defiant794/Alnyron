@@ -32,6 +32,9 @@ export type ItemOffersLabels = {
 export type ItemOffersFieldsProps = {
   /** The item's saved offers (none for a new item). */
   offers: AdminItemOffer[];
+  /** Controlled physical-offer switch, shared with the editor's display-price fields. */
+  physicalActive: boolean;
+  onPhysicalActiveChange: (active: boolean) => void;
   /** Price problems of the last save attempt, shown at their fields. */
   errors: OfferErrors;
   labels: ItemOffersLabels;
@@ -66,16 +69,21 @@ export function readOffers(form: FormData): { ok: true; offers: OfferInput[] } |
  * "Salg" in the item editor, for an item in a 3D section only: "Sælg som
  * 3D-print" (the physical offer's switch) with its price incl. moms and
  * delivery in Denmark, and the digital file's price, whose switch stays off
- * ("kan ikke købes endnu"). Prices are typed in kroner. Uncontrolled: the
- * editor reads the fields on save (`readOffers`).
+ * ("kan ikke købes endnu"). Prices are typed in kroner. The physical switch
+ * is controlled; the editor reads the fields on save (`readOffers`).
  */
-export default function ItemOffersFields({ offers, errors, labels }: ItemOffersFieldsProps) {
+export default function ItemOffersFields({
+  offers,
+  physicalActive,
+  onPhysicalActiveChange,
+  errors,
+  labels,
+}: ItemOffersFieldsProps) {
   const baseId = useId();
   const priceOf = (kind: OfferKind) => {
     const offer = offers.find((candidate) => candidate.kind === kind);
     return offer ? formatOreAsKroner(offer.priceOre) : "";
   };
-  const physicalActive = offers.some((offer) => offer.kind === "physical" && offer.active);
 
   return (
     <section aria-labelledby={`${baseId}-heading`} className="flex flex-col gap-4 border-t border-border pt-6">
@@ -88,7 +96,8 @@ export default function ItemOffersFields({ offers, errors, labels }: ItemOffersF
         <input
           type="checkbox"
           name="offers.physical.active"
-          defaultChecked={physicalActive}
+          checked={physicalActive}
+          onChange={(event) => onPhysicalActiveChange(event.currentTarget.checked)}
           className={SWITCH_CLASS}
         />
       </label>
