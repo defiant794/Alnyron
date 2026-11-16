@@ -38,10 +38,11 @@ const LANDING_PATH = "/";
  * footer closes the page, both with the main site's absolute URL
  * (`siteHomeUrl`, `siteOrigin`, from `NEXT_PUBLIC_SITE_URL`): on the Monitor
  * host a path would stay there.
- * The header offers the admin-controlled main-site nav and `DA | EN`
- * switcher inside `SiteMenu`, collapsed below 768px, while "Log ind" and
- * "Opret gratis" stay visible outside the menu. The page follows the visitor's
- * Monitor language. The hero states the promise and free cap
+ * The two-row header mirrors `MonitorShell`: the first row offers the
+ * admin-controlled main-site nav and `DA | EN` switcher inside `SiteMenu`,
+ * collapsed below 768px. "Log ind" and "Opret gratis" stay visible in their
+ * own right-aligned row below it. The page follows the visitor's Monitor
+ * language. The hero states the promise and free cap
  * (`MONITOR_FREE_LIMIT`, the database default) and takes a URL straight away:
  * it opens the add form with the URL
  * filled in (signed-out visitors pass the login page first, which keeps it
@@ -57,19 +58,21 @@ export default async function MonitorLandingPage() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-border">
-        <div className="relative z-10 mx-auto flex w-full max-w-content flex-wrap items-center justify-between gap-x-4 gap-y-2 px-6 py-4">
+        <div className="relative z-10 mx-auto flex w-full max-w-content flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-3">
           <MonitorBrand href={siteHomeUrl(locale)} />
-          <div className="flex items-center gap-3 sm:gap-4">
+          <SiteMenu toggleLabel={tNav("menu")}>
+            <MonitorMainNav locale={locale} currentHref={new URL(LANDING_PATH, monitorSiteOrigin(siteOrigin())).href} />
+            <MonitorLocaleSwitcher locale={locale} currentPath={MONITOR_HOME_PATH} />
+          </SiteMenu>
+        </div>
+        <div className="border-t border-border">
+          <div className="mx-auto flex w-full max-w-content items-center justify-end px-6 py-2">
             <nav aria-label={t("shell.navLabel")} className="flex items-center gap-4">
               <Link href={MONITOR_LOGIN_PATH} className="inline-flex min-h-11 items-center whitespace-nowrap">
                 {t("landing.ctaLogin")}
               </Link>
               <LinkButton href={MONITOR_SIGNUP_PATH} className="whitespace-nowrap">{t("landing.ctaSignup")}</LinkButton>
             </nav>
-            <SiteMenu toggleLabel={tNav("menu")}>
-              <MonitorMainNav locale={locale} currentHref={new URL(LANDING_PATH, monitorSiteOrigin(siteOrigin())).href} />
-              <MonitorLocaleSwitcher locale={locale} currentPath={MONITOR_HOME_PATH} />
-            </SiteMenu>
           </div>
         </div>
       </header>

@@ -119,6 +119,31 @@ describe("monitor-landing-top-nav", () => {
     expect(switcher.getByRole("button", { name: /^EN/ })).toBeInTheDocument();
   });
 
+  it.each(["da", "en"] as const)("AC2/AC3: keeps auth CTAs in a separate right-aligned row after the %s site menu", async (locale) => {
+    const header = await renderLanding(locale);
+    const messages = loadMessages(locale);
+    const banner = screen.getByRole("banner");
+    const topBar = banner.firstElementChild;
+    const authBar = topBar?.nextElementSibling ?? null;
+    const toggle = header.getByRole("button", { name: messages.Nav.menu });
+    const panel = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
+    const authNav = header.getByRole("navigation", { name: messages.Monitor.shell.navLabel });
+    expect(banner.children).toHaveLength(2);
+    expect(topBar).toHaveClass("relative", "z-10");
+    expect(topBar).toContainElement(header.getByRole("link", { name: "Alnyron" }));
+    expect(topBar).toContainElement(toggle);
+    expect(topBar).toContainElement(panel);
+    expect(topBar).toContainElement(header.getByRole("navigation", { name: messages.LanguageSwitcher.label }));
+    expect(topBar).not.toContainElement(authNav);
+    expect(authBar).toHaveClass("border-t", "border-border");
+    expect(authBar?.firstElementChild).toHaveClass("flex", "justify-end");
+    expect(authBar?.firstElementChild?.firstElementChild).toBe(authNav);
+    expect(authNav).toContainElement(header.getByRole("link", { name: messages.Monitor.landing.ctaLogin }));
+    expect(authNav).toContainElement(header.getByRole("link", { name: messages.Monitor.landing.ctaSignup }));
+    expect(authBar).not.toContainElement(toggle);
+    expect(authBar).not.toContainElement(panel);
+  });
+
   it.each(["da", "en"] as const)("AC2: returns to the Monitor landing when switching from %s", async (locale) => {
     const header = await renderLanding(locale);
     const switcher = header.getByRole("navigation", { name: loadMessages(locale).LanguageSwitcher.label });
